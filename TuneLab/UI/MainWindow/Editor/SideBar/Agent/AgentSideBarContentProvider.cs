@@ -5,10 +5,12 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TuneLab.Agent;
+using TuneLab.Agent.Models;
 using TuneLab.Configs;
 using TuneLab.Data;
 using TuneLab.Extensions;
@@ -93,6 +95,7 @@ internal sealed class AgentSideBarContentProvider
         foreach (var kv in values)
             mSettings.SetValue(kv.Key, kv.Value);
         mSettings.Commit();
+        mLastInnerProviderId = mSettings.GetValue("provider_id", PropertyValue.Create(AgentProviderCatalog.DefaultProvider.Id)).ToString() ?? string.Empty;
     }
 
     // 工程切换时由 Editor 调用（OnProjectChanged）：只把工具重绑到新工程；对话历史是会话的属性、与工程正交，不清空。
@@ -215,6 +218,28 @@ internal sealed class AgentSideBarContentProvider
         mStopButton.Clicked += () => mActive?.Cts?.Cancel(); // 停止键只取消当前可见会话的在飞请求
         DockPanel.SetDock(mStopButton, Dock.Right);
         inputRow.Children.Add(mStopButton);
+        mThinkingLevelBox = new Avalonia.Controls.ComboBox()
+        {
+            Width = 74,
+            Height = 28,
+            Margin = new(0, 0, 4, 0),
+            FontSize = 11,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            ItemsSource = new Avalonia.Controls.ComboBoxItem[]
+            {
+                new Avalonia.Controls.ComboBoxItem { Content = "Auto".Tr(this), Tag = AgentThinkingLevel.Auto },
+                new Avalonia.Controls.ComboBoxItem { Content = "Min".Tr(this), Tag = AgentThinkingLevel.Minimal },
+                new Avalonia.Controls.ComboBoxItem { Content = "Low".Tr(this), Tag = AgentThinkingLevel.Low },
+                new Avalonia.Controls.ComboBoxItem { Content = "Med".Tr(this), Tag = AgentThinkingLevel.Medium },
+                new Avalonia.Controls.ComboBoxItem { Content = "High".Tr(this), Tag = AgentThinkingLevel.High },
+            },
+            SelectedIndex = 0,
+            IsVisible = false,
+        };
+        ToolTip.SetTip(mThinkingLevelBox, "Thinking level".Tr(this));
+        mThinkingLevelBox.SelectionChanged += (_, _) => ApplyThinkingLevelToSession();
+        DockPanel.SetDock(mThinkingLevelBox, Dock.Right);
+        inputRow.Children.Add(mThinkingLevelBox);
         // 图片附件按钮：左侧，仅当前连接的会话声明支持图片输入时可见（见 RefreshAttachAvailability）。
         mAttachButton = IconButton(Assets.Image, Style.LIGHT_WHITE.Opacity(0.6), Colors.White);
         mAttachButton.IsVisible = false;
@@ -629,6 +654,30 @@ internal sealed class AgentSideBarContentProvider
     {
         mSendButton.IsVisible = !mActive.Busy;
         mStopButton.IsVisible = mActive.Busy;
+        RefreshThinkingLevelControl();
+    }
+
+    void RefreshThinkingLevelControl()
+    {
+        if (mThinkingLevelBox == null)
+            return;
+        var configurable = mSession as IAgentThinkingLevelSession;
+        mThinkingLevelBox.IsVisible = configurable?.SupportsThinkingLevel == true;
+        ApplyThinkingLevelToSession();
+    }
+
+    void ApplyThinkingLevelToSession()
+    {
+        if (mSession is not IAgentThinkingLevelSession configurable || !configurable.SupportsThinkingLevel)
+            return;
+        configurable.ThinkingLevel = SelectedThinkingLevel();
+    }
+
+    AgentThinkingLevel SelectedThinkingLevel()
+    {
+        if (mThinkingLevelBox?.SelectedItem is Avalonia.Controls.ComboBoxItem item && item.Tag is AgentThinkingLevel level)
+            return level;
+        return AgentThinkingLevel.Auto;
     }
 
     // 加载已存会话：已打开（可能正在后台跑）则直接激活其活管线，否则新建上下文还原气泡 + 备好 runner 续聊历史
@@ -1057,6 +1106,7 @@ internal sealed class AgentSideBarContentProvider
             AppendMessage(ctx, "system", "No project is open.".Tr(this));
             return;
         }
+        ApplyThinkingLevelToSession();
 
         mInput.Text = string.Empty;
         mPendingImages.Clear();
@@ -1762,9 +1812,18 @@ internal sealed class AgentSideBarContentProvider
 
         var content = new StackPanel() { Orientation = Orientation.Vertical };
         // 授权已移到对话页 header 胶囊（即时生效）；本面板只剩「连接类设置」，全部统一为「确认才生效」，dirty 追踪无一例外。
-        // Model Provider 选择 + 引擎属性面板都用 PropertyObjectController（同 INTERFACE 块、同 label/margin 样式），连成统一面板。
-        content.Children.Add(mProviderController);
+        // 内置 Agent 目前只有一个模型引擎，真正的厂商选择在属性面板内完成；外层 provider 控件保留数据逻辑但不占 UI。
         content.Children.Add(mPropertiesController);
+        var tools = new DockPanel() { Margin = new(24, 8, 24, 0), LastChildFill = true };
+        mApiKeyButton = SmallTextButton("Get API Key".Tr(this), 0, 28, Style.BUTTON_NORMAL, Style.BUTTON_NORMAL_HOVER);
+        mApiKeyButton.Clicked += OpenProviderApiKeyPage;
+        DockPanel.SetDock(mApiKeyButton, Dock.Left);
+        tools.Children.Add(mApiKeyButton);
+        mRefreshModelsButton = SmallTextButton("Refresh Models".Tr(this), 0, 28, Style.BUTTON_NORMAL, Style.BUTTON_NORMAL_HOVER);
+        mRefreshModelsButton.Margin = new(8, 0, 0, 0);
+        mRefreshModelsButton.Clicked += async () => await RefreshModelsAsync();
+        tools.Children.Add(mRefreshModelsButton);
+        content.Children.Add(tools);
         mSubmitButton = SmallTextButton("Submit".Tr(this), 0, 32, Style.BUTTON_PRIMARY, Style.BUTTON_PRIMARY_HOVER);
         mSubmitButton.Margin = new(24, 16, 24, 8);
         mSubmitButton.Clicked += OnSubmit;
@@ -2005,6 +2064,7 @@ internal sealed class AgentSideBarContentProvider
     {
         if (mSuppressDirty || mSettingsSnapshot == null)
             return;
+        ApplySelectedProviderDefaults();
         bool dirty = CurrentEngineType() != mProviderSnapshot || !mSettings.GetInfo().Equals(mSettingsSnapshot);
         if (dirty == mSettingsDirty)
             return;
@@ -2086,7 +2146,126 @@ internal sealed class AgentSideBarContentProvider
         }
         mPropertiesController.SetConfig(engine.GetPropertyConfig(new PropertyContext(mSettings.GetInfo())), mSettings);
         mStatusLabel.Content = string.Empty;
+        RefreshProviderActionButtons();
     }
+
+    void ApplySelectedProviderDefaults()
+    {
+        if (mApplyingProviderDefaults)
+            return;
+
+        var providerId = mSettings.GetValue("provider_id", PropertyValue.Create(AgentProviderCatalog.DefaultProvider.Id)).ToString() ?? string.Empty;
+        if (string.IsNullOrEmpty(providerId) || providerId == mLastInnerProviderId)
+            return;
+
+        var provider = AgentProviderCatalog.Resolve(providerId);
+        mApplyingProviderDefaults = true;
+        try
+        {
+            mSettings.SetValue("endpoint_family", PropertyValue.Create(AgentProviderCatalog.FamilyId(provider.Family)));
+            mSettings.SetValue("base_url", PropertyValue.Create(provider.BaseUrl));
+            mSettings.SetValue("model", PropertyValue.Create(DefaultModelFor(provider.Family)));
+            mSettings.Commit();
+            mLastInnerProviderId = provider.Id;
+            RefreshEnginePropertyPanel(CurrentEngineType());
+        }
+        finally
+        {
+            mApplyingProviderDefaults = false;
+        }
+    }
+
+    async Task RefreshModelsAsync()
+    {
+        var providerId = mSettings.GetValue("provider_id", PropertyValue.Create(AgentProviderCatalog.DefaultProvider.Id)).ToString() ?? AgentProviderCatalog.DefaultProvider.Id;
+        var provider = AgentProviderCatalog.Resolve(providerId);
+        var family = AgentProviderCatalog.ParseFamily(mSettings.GetValue("endpoint_family", PropertyValue.Create(AgentProviderCatalog.FamilyId(provider.Family))).ToString());
+        var baseUrl = mSettings.GetValue("base_url", PropertyValue.Create(provider.BaseUrl)).ToString() ?? provider.BaseUrl;
+        var apiKey = mSettings.GetValue("api_key", PropertyValue.Create(string.Empty)).ToString() ?? string.Empty;
+
+        try
+        {
+            mStatusLabel.Foreground = Style.LIGHT_WHITE.Opacity(0.85).ToBrush();
+            mStatusLabel.Content = "Refreshing models...".Tr(this);
+            var models = await AgentModelDiscoveryService.DiscoverAsync(provider.Id, baseUrl, apiKey, family, CancellationToken.None);
+            if (models.Count > 0)
+            {
+                var current = mSettings.GetValue("model", PropertyValue.Create(string.Empty)).ToString();
+                if (string.IsNullOrEmpty(current) || !models.Any(m => m.Id == current))
+                {
+                    mSettings.SetValue("model", PropertyValue.Create(models[0].Id));
+                    mSettings.Commit();
+                }
+            }
+            RefreshEnginePropertyPanel(CurrentEngineType());
+            mStatusLabel.Foreground = Style.LIGHT_WHITE.Opacity(0.85).ToBrush();
+            mStatusLabel.Content = string.Format("Loaded {0} models.".Tr(this), models.Count);
+        }
+        catch (Exception ex)
+        {
+            mStatusLabel.Foreground = Colors.IndianRed.ToBrush();
+            mStatusLabel.Content = "Refresh models failed: " + ex.Message;
+        }
+    }
+
+    void OpenProviderApiKeyPage()
+    {
+        var providerId = mSettings.GetValue("provider_id", PropertyValue.Create(AgentProviderCatalog.DefaultProvider.Id)).ToString();
+        var provider = AgentProviderCatalog.Resolve(providerId);
+        var url = ProviderApiKeyUrl(provider);
+        if (string.IsNullOrEmpty(url))
+        {
+            mStatusLabel.Foreground = Colors.IndianRed.ToBrush();
+            mStatusLabel.Content = "This provider has no API key page configured.".Tr(this);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            mStatusLabel.Foreground = Colors.IndianRed.ToBrush();
+            mStatusLabel.Content = "Open API key page failed: " + ex.Message;
+        }
+    }
+
+    void RefreshProviderActionButtons()
+    {
+        if (mApiKeyButton == null)
+            return;
+        var providerId = mSettings.GetValue("provider_id", PropertyValue.Create(AgentProviderCatalog.DefaultProvider.Id)).ToString();
+        var provider = AgentProviderCatalog.Resolve(providerId);
+        mApiKeyButton.IsVisible = !provider.NoApiKeyRequired && !string.IsNullOrEmpty(ProviderApiKeyUrl(provider));
+    }
+
+    static string? ProviderApiKeyUrl(AgentProviderDefinition provider)
+    {
+        if (!string.IsNullOrEmpty(provider.ApiKeyUrl))
+            return provider.ApiKeyUrl;
+        if (provider.Id == AgentProviderCatalog.CustomProviderId || provider.NoApiKeyRequired)
+            return null;
+        return ProviderHomeUrl(provider.BaseUrl);
+    }
+
+    static string? ProviderHomeUrl(string baseUrl)
+    {
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.Host))
+            return null;
+        var host = uri.Host;
+        if (host.StartsWith("api.", StringComparison.OrdinalIgnoreCase))
+            host = host["api.".Length..];
+        return uri.Scheme + "://" + host;
+    }
+
+    static string DefaultModelFor(AgentEndpointFamily family) => family switch
+    {
+        AgentEndpointFamily.AnthropicMessages => "claude-3-5-sonnet-latest",
+        AgentEndpointFamily.GeminiGenerateContent => "gemini-1.5-flash",
+        AgentEndpointFamily.Ollama => "llama3.2",
+        _ => "gpt-4o-mini",
+    };
 
     void OnSubmit()
     {
@@ -2131,6 +2310,7 @@ internal sealed class AgentSideBarContentProvider
                 c.Runner = null;
             }
             RefreshAttachAvailability(); // 新连接的会话可能支持/不支持图片 → 启停📎
+            RefreshThinkingLevelControl();
             return true;
         }
         catch (Exception ex)
@@ -2183,6 +2363,7 @@ internal sealed class AgentSideBarContentProvider
         // 进入面板：快照当前 provider + 全部字段值（还原基准 + 脏态比对基准）、清 dirty/*（此后编辑与快照不同才算脏）。
         mProviderSnapshot = CurrentEngineType();
         mSettingsSnapshot = mSettings.GetInfo();
+        mLastInnerProviderId = mSettings.GetValue("provider_id", PropertyValue.Create(AgentProviderCatalog.DefaultProvider.Id)).ToString() ?? string.Empty;
         mSettingsDirty = false;
         RefreshSettingsDirtyMark();
         mRoot.Children.Clear();
@@ -2267,10 +2448,15 @@ internal sealed class AgentSideBarContentProvider
     bool mSuppressDirty;         // 程序化写入（还原快照）期间不置脏
     string mProviderSnapshot = string.Empty; // 进入面板时的 provider（× 忽略时的还原基准 + 脏态比对基准）
     PropertyObject? mSettingsSnapshot;       // 进入面板时的全部字段值（脏态与快照【值比对】：改回原值即不脏）
+    string mLastInnerProviderId = string.Empty;
+    bool mApplyingProviderDefaults;
     readonly Label mStatusLabel = new() { FontSize = 11, Margin = new(24, 0, 24, 12), Foreground = Colors.IndianRed.ToBrush() };
     TuneLab.GUI.Components.Button mSendButton = null!;
     TuneLab.GUI.Components.Button mStopButton = null!;
+    Avalonia.Controls.ComboBox mThinkingLevelBox = null!;
     TuneLab.GUI.Components.Button mSubmitButton = null!;
+    TuneLab.GUI.Components.Button mApiKeyButton = null!;
+    TuneLab.GUI.Components.Button mRefreshModelsButton = null!;
     TuneLab.GUI.Components.Button? mMenuButton;
     Flyout mMenuFlyout = null!;
     bool mMenuJustClosed;

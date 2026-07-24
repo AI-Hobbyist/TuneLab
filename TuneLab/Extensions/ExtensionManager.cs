@@ -46,6 +46,21 @@ internal static class ExtensionManager
         return string.IsNullOrEmpty(packageId) ? "Legacy" : packageId;
     }
 
+    public static bool TryGetPackageDirectory(string packageId, out string directoryPath)
+    {
+        foreach (var r in mLoadResults)
+        {
+            if (r.Id == packageId)
+            {
+                directoryPath = r.DirectoryPath;
+                return true;
+            }
+        }
+
+        directoryPath = string.Empty;
+        return false;
+    }
+
     // Compat.Legacy 接入点：设置后接管 Legacy 包加载，返回 true 表示已处理。
     // 第三参 typeSink 由 hook 在注册成功时回填真实类别（"format"/"voice"），供 sidebar
     // 展示精确类型而非笼统 "Legacy"——hook 在 Compat 内部才知道老插件实际实现了哪些接口。

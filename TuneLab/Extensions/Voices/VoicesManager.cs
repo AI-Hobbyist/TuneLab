@@ -60,6 +60,19 @@ internal static class VoicesManager
         return status != null && !string.IsNullOrEmpty(status.DisplayName) ? status.DisplayName : type;
     }
 
+    public static bool TryGetActivePackageId(string type, out string packageId)
+    {
+        var status = ActiveStatus(type);
+        if (status != null)
+        {
+            packageId = status.PackageId;
+            return true;
+        }
+
+        packageId = string.Empty;
+        return false;
+    }
+
     // 取某【特定包】该 voice 的扩展设置接口（未实现 IExtensionSettings 则 null）；不触发 Init——设置须在 Init 前可编辑。
     // 走 RawEngine（非 Engine：后者在 Init 前返回 null），因 schema/设置须先于 Init 可达。
     public static IExtensionSettings? GetExtensionSettings(string packageId, string type)

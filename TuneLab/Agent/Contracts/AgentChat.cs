@@ -25,6 +25,15 @@ public enum AgentModality
     Audio = 4,
 }
 
+public enum AgentThinkingLevel
+{
+    Auto,
+    Minimal,
+    Low,
+    Medium,
+    High,
+}
+
 // 一条消息的一个内容分片的类型。
 public enum AgentContentKind
 {

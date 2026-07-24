@@ -527,6 +527,54 @@ internal partial class SettingsWindow : Window
             listView.Content.Children.Add(panel);
         }
 
+        // Piano Key Labels
+        {
+            var panel = new DockPanel() { Margin = new(24, 12) };
+            {
+                var checkBox = new GUI.Components.CheckBox();
+                checkBox.Bind(Settings.ShowAllPianoKeyLabels, false, s);
+                panel.AddDock(checkBox, Dock.Right);
+            }
+            {
+                var name = new TextBlock() { Text = "Show All Piano Key Labels".Tr(this) + ": ", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+                panel.AddDock(name);
+            }
+            listView.Content.Children.Add(panel);
+        }
+
+        {
+            var panel = new DockPanel() { Margin = new(24, 12) };
+            {
+                var comboBox = new ComboBoxController() { Width = 180 };
+                comboBox.SetConfig(ComboBoxConfig.Create([
+                    new ComboBoxItem(PropertyValue.Create("PitchName"), "CDEFGAB"),
+                    new ComboBoxItem(PropertyValue.Create("Numbered"), "1234567"),
+                ]));
+                comboBox.Bind(Settings.PianoKeyLabelStyle, false, s);
+                panel.AddDock(comboBox, Dock.Right);
+            }
+            {
+                var name = new TextBlock() { Text = "Piano Key Label Style".Tr(this) + ": ", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+                panel.AddDock(name);
+            }
+            listView.Content.Children.Add(panel);
+        }
+
+        {
+            var panel = new DockPanel() { Margin = new(24, 12) };
+            {
+                var comboBox = new ComboBoxController() { Width = 180 };
+                comboBox.SetConfig(ComboBoxConfig.Create(PianoKeyTonicOptions.Select(o => (ComboBoxItem)o).ToList()));
+                comboBox.Bind(Settings.NumberedPianoKeyTonic, false, s);
+                panel.AddDock(comboBox, Dock.Right);
+            }
+            {
+                var name = new TextBlock() { Text = "Numbered Piano Key Tonic (1 =)".Tr(this) + ": ", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+                panel.AddDock(name);
+            }
+            listView.Content.Children.Add(panel);
+        }
+
         return listView;
     }
 
@@ -769,4 +817,5 @@ internal partial class SettingsWindow : Window
     private readonly DisposableManager s = new();
     // 当前「扩展」页各 extension 的实时编辑（切走/关窗时统一落盘后清空）。
     private readonly List<ExtensionPage> mExtensionPages = new();
+    private static readonly string[] PianoKeyTonicOptions = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 }

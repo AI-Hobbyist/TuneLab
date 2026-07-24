@@ -21,6 +21,9 @@ internal static class Settings
     public static NotifiableProperty<double> BackgroundImageOpacity { get; } = DefaultSettings.BackgroundImageOpacity;
     public static NotifiableProperty<double> ParameterBoundaryExtension { get; } = DefaultSettings.ParameterBoundaryExtension;
     public static NotifiableProperty<bool> ParameterSyncMode { get; } = new(DefaultSettings.ParameterSyncMode);
+    public static NotifiableProperty<bool> ShowAllPianoKeyLabels { get; } = new(DefaultSettings.ShowAllPianoKeyLabels);
+    public static NotifiableProperty<string> PianoKeyLabelStyle { get; } = DefaultSettings.PianoKeyLabelStyle;
+    public static NotifiableProperty<string> NumberedPianoKeyTonic { get; } = DefaultSettings.NumberedPianoKeyTonic;
     public static NotifiableProperty<string> PianoKeySamplesPath { get; } = DefaultSettings.PianoKeySamplesPath;
     public static NotifiableProperty<int> AutoSaveInterval { get; } = DefaultSettings.AutoSaveInterval;
     public static NotifiableProperty<int> AutoSaveMaxCount { get; } = DefaultSettings.AutoSaveMaxCount;
@@ -60,6 +63,9 @@ internal static class Settings
         BackgroundImageOpacity.Value = settingsFile.BackgroundImageOpacity;
         ParameterBoundaryExtension.Value = settingsFile.ParameterBoundaryExtension;
         ParameterSyncMode.Value = settingsFile.ParameterSyncMode;
+        ShowAllPianoKeyLabels.Value = settingsFile.ShowAllPianoKeyLabels;
+        PianoKeyLabelStyle.Value = settingsFile.PianoKeyLabelStyle;
+        NumberedPianoKeyTonic.Value = settingsFile.NumberedPianoKeyTonic;
         PianoKeySamplesPath.Value = settingsFile.PianoKeySamplesPath;
         AutoSaveInterval.Value = settingsFile.AutoSaveInterval;
         AutoSaveMaxCount.Value = settingsFile.AutoSaveMaxCount;
@@ -88,6 +94,9 @@ internal static class Settings
                 BackgroundImageOpacity = BackgroundImageOpacity,
                 ParameterBoundaryExtension = ParameterBoundaryExtension,
                 ParameterSyncMode = ParameterSyncMode.Value,
+                ShowAllPianoKeyLabels = ShowAllPianoKeyLabels.Value,
+                PianoKeyLabelStyle = PianoKeyLabelStyle.Value,
+                NumberedPianoKeyTonic = NumberedPianoKeyTonic.Value,
                 PianoKeySamplesPath = PianoKeySamplesPath,
                 AutoSaveInterval = AutoSaveInterval,
                 AutoSaveMaxCount = AutoSaveMaxCount,

@@ -17,6 +17,9 @@ internal class SettingsFile
     public double BackgroundImageOpacity { get; set; } = 0.5;
     public double ParameterBoundaryExtension { get; set; } = 5;
     public bool ParameterSyncMode { get; set; } = false;
+    public bool ShowAllPianoKeyLabels { get; set; } = false;
+    public string PianoKeyLabelStyle { get; set; } = "PitchName";
+    public string NumberedPianoKeyTonic { get; set; } = "C";
     public string PianoKeySamplesPath { get; set; } = string.Empty;
     public int AutoSaveInterval { get; set; } = 10;
     public int AutoSaveMaxCount { get; set; } = 5;

@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TuneLab.Audio;
+using TuneLab.Configs;
 using TuneLab.Foundation;
 using TuneLab.SDK;
 using TuneLab.Data;
@@ -153,6 +154,15 @@ internal class FunctionBar : LayerPanel
                 quantizationComboBox.SetConfig(ComboBoxConfig.Create(options.Select(option => (ComboBoxItem)option.option).ToList()).WithDefault(options[3].option));
                 quantizationComboBox.ValueCommitted.Subscribe(() => { var index = quantizationComboBox.Index; if ((uint)index >= options.Length) return; mQuantizationChanged.Invoke(options[index].quantizationBase, options[index].quantizationDivision); });
                 quantizationPanel.Children.Add(quantizationComboBox);
+
+                var numberedTonicLabel = new TextBlock() { Text = "1=", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Foreground = Style.TEXT_NORMAL.ToBrush() };
+                quantizationPanel.Children.Add(numberedTonicLabel);
+
+                var numberedTonicComboBox = new ComboBoxController() { Width = 72 };
+                numberedTonicComboBox.SetConfig(ComboBoxConfig.Create(NumberedTonicOptions.Select(o => (ComboBoxItem)o).ToList()).WithDefault(Settings.DefaultSettings.NumberedPianoKeyTonic));
+                numberedTonicComboBox.Bind(Settings.NumberedPianoKeyTonic, false, s);
+                numberedTonicComboBox.SetupToolTip("Numbered Piano Key Tonic".Tr(this), PlacementMode.Top, verticalOffset: -8);
+                quantizationPanel.Children.Add(numberedTonicComboBox);
             }
             dockPanel.AddDock(quantizationPanel, Dock.Right);
 
@@ -212,6 +222,7 @@ internal class FunctionBar : LayerPanel
     }
 
     readonly ActionEvent<QuantizationBase, QuantizationDivision> mQuantizationChanged = new();
+    static readonly string[] NumberedTonicOptions = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
     readonly DisposableManager s = new();
 
