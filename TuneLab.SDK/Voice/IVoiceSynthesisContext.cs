@@ -62,6 +62,11 @@ public interface IVoiceSynthesisContext
     // sampleRate = 该段 native 采样率（插件传入，宿主据此解释/重采样；可逐段不同）。
     IAudioSegment CreateAudioSegment(long sampleOffset, int sampleCount, int sampleRate);
 
+    // Replaces the editable piecewise automation segment in the global-second range [startTime, endTime].
+    // The call is data-thread-only and is committed as one undoable edit; an empty point list clears the range.
+    void ReplacePiecewiseAutomationSegment(string key, double startTime, double endTime,
+        System.Collections.Generic.IReadOnlyList<Point> points);
+
     // 逻辑编辑收口信号：每个逻辑编辑（一个 command，含单条编辑）的全部变更通知发完后触发一次
     //（单条编辑也补发——故插件无需区分"在不在批量中"）。它不是宿主缓冲，而是让插件延迟昂贵状态修正的
     // 收口点——每条变更通知里廉价记录/标脏，Committed 一次性做重活（如重分片）；批量编辑（移调几百个 note）

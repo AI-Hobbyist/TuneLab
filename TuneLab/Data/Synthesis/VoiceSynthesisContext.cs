@@ -89,6 +89,34 @@ internal sealed class VoiceSynthesisContext : IVoiceSynthesisContext, ISynthesis
         return segment;
     }
 
+    // Generated parameter curves are written back only on the synthesis data thread. The SDK uses global
+    // seconds; the data model stores piecewise anchors as ticks relative to the part.
+    public void ReplacePiecewiseAutomationSegment(string key, double startTime, double endTime, IReadOnlyList<Point> points)
+    {
+        AssertDataThread();
+        if (mDisposed || startTime > endTime || !mPart.IsEffectivePiecewiseAutomation(key))
+            return;
+
+        double start = mTiming.ToTick(startTime) - mPart.Pos.Value;
+        double end = mTiming.ToTick(endTime) - mPart.Pos.Value;
+        var automation = mPart.AddPiecewiseAutomation(key);
+        if (automation == null)
+            return;
+
+        var line = new List<Point>(points.Count);
+        foreach (var point in points)
+            if (point.X >= startTime && point.X <= endTime)
+                line.Add(new Point(mTiming.ToTick(point.X) - mPart.Pos.Value, point.Y));
+        line.Sort((a, b) => a.X.CompareTo(b.X));
+
+        mPart.BeginMergeDirty();
+        automation.Clear(start, end);
+        if (line.Count > 0)
+            automation.AddLine(line, 0);
+        mPart.EndMergeDirty();
+        mPart.Commit();
+    }
+
     // 宿主侧读取面（IAudioSegmentHost，供 EffectGraph 消费）：已交付音频的段供 effect 链按段过。
     public IReadOnlyList<AudioSegment> AudioSegments => mAudioSegments;
 
