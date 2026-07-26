@@ -32,7 +32,6 @@ TuneLab.SDK.IVoiceSynthesisSession.SynthesizedPhonemes.get -> TuneLab.Foundation
 TuneLab.SDK.VoiceSynthesisNoteSnapshot.Id.get -> string!
 TuneLab.SDK.VoiceSynthesisNoteSnapshot.Id.init -> void
 TuneLab.SDK.IVoiceSynthesisContext.GetSnapshot(System.Collections.Generic.IReadOnlyList<TuneLab.SDK.IVoiceSynthesisNote!>! notes) -> TuneLab.SDK.VoiceSynthesisSnapshot!
-TuneLab.SDK.IVoiceSynthesisContext.ReplacePiecewiseAutomationSegment(string! key, double startTime, double endTime, System.Collections.Generic.IReadOnlyList<TuneLab.Foundation.Point>! points) -> void
 TuneLab.SDK.IInstrumentSynthesisContext.GetSnapshot(System.Collections.Generic.IReadOnlyList<TuneLab.SDK.IInstrumentSynthesisNote!>! notes) -> TuneLab.SDK.InstrumentSynthesisSnapshot!
 TuneLab.SDK.PiecewiseAutomationInfo
 TuneLab.SDK.PiecewiseAutomationInfo.PiecewiseAutomationInfo() -> void
