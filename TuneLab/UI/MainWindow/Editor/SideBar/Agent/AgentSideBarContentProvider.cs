@@ -2,11 +2,14 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TuneLab.Agent;
@@ -194,6 +197,19 @@ internal sealed class AgentSideBarContentProvider
         settingsButton.Clicked += ShowSettings;
         DockPanel.SetDock(settingsButton, Dock.Right);
         header.Children.Add(settingsButton);
+
+        // 当前会话操作：清空直接开始一个新会话；导出以 Markdown 留存用户可读的问答记录。
+        var clearHistoryButton = IconButton(Assets.Reset, Style.LIGHT_WHITE.Opacity(0.6), Colors.White);
+        ToolTip.SetTip(clearHistoryButton, "Clear conversation".Tr(this));
+        clearHistoryButton.Clicked += () => _ = ConfirmAndClearActiveConversation();
+        DockPanel.SetDock(clearHistoryButton, Dock.Right);
+        header.Children.Add(clearHistoryButton);
+
+        var exportConversationButton = IconButton(Assets.Export, Style.LIGHT_WHITE.Opacity(0.6), Colors.White);
+        ToolTip.SetTip(exportConversationButton, "Export conversation".Tr(this));
+        exportConversationButton.Clicked += () => _ = ExportActiveConversationAsync();
+        DockPanel.SetDock(exportConversationButton, Dock.Right);
+        header.Children.Add(exportConversationButton);
 
         // agent 写授权胶囊：显示当前档位短名 + ▾，点开三选一、即时生效。放 ⚙ 左侧（右侧后加的 dock item 更靠左）。
         var caret = new TextBlock() { Text = "▾", FontSize = 9, Margin = new(4, 0, 0, 0), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Foreground = Style.LIGHT_WHITE.Opacity(0.5).ToBrush() };
@@ -489,6 +505,7 @@ internal sealed class AgentSideBarContentProvider
     {
         var stack = new StackPanel() { Orientation = Orientation.Vertical, MinWidth = 220 };
         stack.Children.Add(BuildMenuRow("New Chat".Tr(this), null, NewChat, null));
+        stack.Children.Add(BuildMenuRow("Clear all history".Tr(this), null, () => _ = ConfirmAndClearAllConversationHistory(), null));
 
         var entries = new List<MenuEntry>();
 
@@ -639,6 +656,129 @@ internal sealed class AgentSideBarContentProvider
         SwitchTo(ctx);
         if (mSession != null) // 空白新对话顶端提示当前连到哪个模型
             AppendMessage(ctx, "system", ConnectedNotice());
+    }
+
+    // 一键清空当前会话的历史：取消仍在生成的请求、删除已落盘的记录，然后立即换到空白会话。
+    void ClearActiveConversation()
+    {
+        DeleteContext(mActive);
+    }
+
+    async Task ConfirmAndClearActiveConversation()
+    {
+        if (await ConfirmClearConversation(allHistory: false))
+            ClearActiveConversation();
+    }
+
+    // 会话列表的“一键清空”：同时覆盖已打开和仅落盘的历史；在飞请求先取消，避免它们继续占用资源。
+    void ClearAllConversationHistory()
+    {
+        foreach (var context in mContexts)
+        {
+            context.Cts?.Cancel();
+            if (context.Session != null)
+                AgentSessionStore.Delete(context.Session.Id);
+        }
+        // 还未加载到内存的历史也一并删除。
+        foreach (var session in AgentSessionStore.List())
+            AgentSessionStore.Delete(session.Id);
+
+        mContexts.Clear();
+        NewChat();
+    }
+
+    async Task ConfirmAndClearAllConversationHistory()
+    {
+        if (await ConfirmClearConversation(allHistory: true))
+            ClearAllConversationHistory();
+    }
+
+    async Task<bool> ConfirmClearConversation(bool allHistory)
+    {
+        var dialog = new TuneLab.GUI.Dialog();
+        dialog.SetTitle("Tips".Tr(this));
+        dialog.SetMessage(allHistory
+            ? "Clear all conversation history? This cannot be undone.".Tr(this)
+            : "Clear this conversation? This cannot be undone.".Tr(this));
+        bool confirmed = false;
+        dialog.AddButton("Cancel".Tr(this), TuneLab.GUI.Dialog.ButtonType.Normal);
+        var clear = dialog.AddButton("Clear".Tr(this), TuneLab.GUI.Dialog.ButtonType.Primary);
+        clear.Pressed += () => confirmed = true;
+        dialog.Topmost = true;
+        await dialog.ShowDialog(mRoot.Window());
+        return confirmed;
+    }
+
+    async Task ExportActiveConversationAsync()
+    {
+        var topLevel = TopLevel.GetTopLevel(mRoot);
+        if (topLevel == null)
+            return;
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export conversation".Tr(this),
+            DefaultExtension = ".md",
+            SuggestedFileName = "TuneLab-Agent-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"),
+            ShowOverwritePrompt = true,
+            FileTypeChoices = [new("Markdown".Tr(this)) { Patterns = ["*.md"] }],
+        });
+        var path = file?.TryGetLocalPath();
+        if (path == null)
+            return;
+
+        try
+        {
+            await File.WriteAllTextAsync(path, BuildConversationExport(mActive));
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failed to export agent conversation: " + ex);
+        }
+    }
+
+    static string BuildConversationExport(SessionContext context)
+    {
+        var session = context.Session;
+        var builder = new StringBuilder();
+        builder.AppendLine("# " + (string.IsNullOrWhiteSpace(context.Title) ? "TuneLab Agent" : context.Title));
+        builder.AppendLine();
+        builder.AppendLine("Exported: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+
+        if (session == null || session.Messages.Count == 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("(No messages)");
+            return builder.ToString();
+        }
+
+        foreach (var message in session.Messages)
+        {
+            switch (message.Role)
+            {
+                case "user":
+                    builder.AppendLine();
+                    builder.AppendLine("## User");
+                    builder.AppendLine();
+                    builder.AppendLine(message.Text);
+                    break;
+                case "assistant":
+                    builder.AppendLine();
+                    builder.AppendLine("## Assistant");
+                    builder.AppendLine();
+                    builder.AppendLine(message.Text);
+                    break;
+                case "tool":
+                    builder.AppendLine();
+                    builder.AppendLine("### Tool result" + (message.IsError ? " (error)" : string.Empty));
+                    builder.AppendLine();
+                    builder.AppendLine("```");
+                    builder.AppendLine(message.Text);
+                    builder.AppendLine("```");
+                    break;
+            }
+        }
+        return builder.ToString();
     }
 
     // 创建一个新会话上下文（独立视图 + 独立管线），登记到 mContexts；不切换、不填充内容。
