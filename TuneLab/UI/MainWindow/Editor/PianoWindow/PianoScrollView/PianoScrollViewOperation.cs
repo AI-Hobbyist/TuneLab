@@ -305,6 +305,7 @@ internal partial class PianoScrollView
                 switch (mDependency.PianoTool.Value)
                 {
                     case PianoTool.Note:
+                    case PianoTool.Pencil:
                         switch (e.MouseButtonType)
                         {
                             case MouseButtonType.PrimaryButton:
@@ -354,20 +355,25 @@ internal partial class PianoScrollView
                                     }
                                     else
                                     {
-                                        // 空白处单击即创建音符。起点仍可按 Alt 临时取消吸附，
-                                        // 但时值始终严格使用工具栏当前的量化选择（Base × Division），
-                                        // 不受视图缩放时显示网格粗细的影响。
-                                        var pitch = (int)PitchAxis.Y2Pitch(e.Position.Y);
-                                        var pos = TickAxis.X2Tick(e.Position.X);
-                                        if (!alt) pos = GetQuantizedTick(pos);
-                                        var note = Part.CreateNote(new NoteInfo()
+                                        if (mDependency.PianoTool.Value == PianoTool.Pencil)
                                         {
-                                            Pos = pos - Part.Pos.Value,
-                                            Dur = Quantization.TicksPerCell(),
-                                            Pitch = pitch,
-                                            Lyric = Part.SoundSource.DefaultLyric,
-                                        });
-                                        Part.InsertNote(note);
+                                            // 笔工具在空白处单击输入；时值严格遵循当前量化选择。
+                                            var pitch = (int)PitchAxis.Y2Pitch(e.Position.Y);
+                                            var pos = TickAxis.X2Tick(e.Position.X);
+                                            if (!alt) pos = GetQuantizedTick(pos);
+                                            var note = Part.CreateNote(new NoteInfo()
+                                            {
+                                                Pos = pos - Part.Pos.Value,
+                                                Dur = Quantization.TicksPerCell(),
+                                                Pitch = pitch,
+                                                Lyric = Part.SoundSource.DefaultLyric,
+                                            });
+                                            Part.InsertNote(note);
+                                        }
+                                        else
+                                        {
+                                            mNoteSelectOperation.Down(e.Position, ctrl);
+                                        }
                                     }
                                 }
                                 break;
@@ -904,6 +910,7 @@ internal partial class PianoScrollView
                     switch (mDependency.PianoTool.Value)
                     {
                         case PianoTool.Note:
+                        case PianoTool.Pencil:
                             if (item is NoteStartResizeItem || item is NoteEndResizeItem)
                             {
                                 Cursor = new Cursor(StandardCursorType.SizeWestEast);
@@ -1180,6 +1187,7 @@ internal partial class PianoScrollView
         switch (mDependency.PianoTool.Value)
         {
             case PianoTool.Note:
+            case PianoTool.Pencil:
                 foreach (var note in Part.Notes)
                 {
                     if (note.GlobalEndPos() < startPos)

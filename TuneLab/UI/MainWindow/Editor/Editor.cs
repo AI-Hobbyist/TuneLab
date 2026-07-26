@@ -187,7 +187,7 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         ProjectHolder.When(project => project.Tracks.ItemAdded).Subscribe(track => { if (mDetachedEditingPart != null && track.Parts.Contains(mDetachedEditingPart)) { SwitchEditingPart(mDetachedEditingPart); mDetachedEditingPart = null; } mExportSideBarContentProvider.RefreshTrackList(); });
         ProjectHolder.When(project => project.Tracks.WhenAny(track => track.Name.Modified)).Subscribe(() => mExportSideBarContentProvider.RefreshTrackList());
         mPianoWindow.PartHolder.Modified.Subscribe(() => { mPianoWindow.IsVisible = mPianoWindow.Part != null; mNotePropertySideBarContentProvider.SetPart(mPianoWindow.Part); UpdatePartPanelTarget(); }, s);
-        // instrument 音源无颤音系统：编辑 part 切换 / 音源就地换种类时，颤音工具自动退回音符工具（工具栏按钮同步置灰，见 FunctionBar）。
+        // instrument 音源无颤音系统：编辑 part 切换 / 音源就地换种类时，颤音工具自动退回选择工具（工具栏按钮同步置灰，见 FunctionBar）。
         void EnsurePianoToolAvailable() { if (PianoTool.Value == UI.PianoTool.Vibrato && mPianoWindow.Part?.SoundSource.Kind == SourceKind.Instrument) PianoTool.Value = UI.PianoTool.Note; }
         mPianoWindow.PartHolder.Modified.Subscribe(EnsurePianoToolAvailable, s);
         mPianoWindow.PartHolder.When(part => part.SoundSource.Modified).Subscribe(EnsurePianoToolAvailable);
@@ -360,11 +360,12 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         Keymap.Register(new() { Id = "view.toggleParameterPanel", DisplayName = () => "Toggle Parameter Panel".Tr(TC.Menu), Scope = KeyScope.Editor, DefaultGesture = new(Key.P, KeyBinding.PrimaryModifier), Execute = () => mPianoWindow.ToggleParameterPanel() });
 
         // 显示名沿用工具栏（FunctionBar）既有措辞，复用其翻译、与工具栏保持一致。
-        RegisterToolCommand("tool.note", "Note Tool", Key.D1, UI.PianoTool.Note);
-        RegisterToolCommand("tool.pitch", "Pitch Pen", Key.D2, UI.PianoTool.Pitch);
-        RegisterToolCommand("tool.anchor", "Anchor Tool", Key.D3, UI.PianoTool.Anchor);
-        RegisterToolCommand("tool.lock", "Pitch Locking Brush", Key.D4, UI.PianoTool.Lock);
-        RegisterToolCommand("tool.vibrato", "Vibrato Tool", Key.D5, UI.PianoTool.Vibrato);
+        RegisterToolCommand("tool.note", "Select Tool", Key.D1, UI.PianoTool.Note);
+        RegisterToolCommand("tool.pencil", "Pencil Tool", Key.D2, UI.PianoTool.Pencil);
+        RegisterToolCommand("tool.pitch", "Pitch Pen", Key.D3, UI.PianoTool.Pitch);
+        RegisterToolCommand("tool.anchor", "Anchor Tool", Key.D4, UI.PianoTool.Anchor);
+        RegisterToolCommand("tool.lock", "Pitch Locking Brush", Key.D5, UI.PianoTool.Lock);
+        RegisterToolCommand("tool.vibrato", "Vibrato Tool", Key.D6, UI.PianoTool.Vibrato);
     }
 
     void RegisterToolCommand(string id, string name, Key key, PianoTool tool)

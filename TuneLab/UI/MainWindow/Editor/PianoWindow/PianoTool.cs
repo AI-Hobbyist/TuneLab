@@ -9,6 +9,7 @@ namespace TuneLab.UI;
 internal enum PianoTool
 {
     Note,
+    Pencil,
     Pitch,
     Anchor,
     Lock,

@@ -649,7 +649,8 @@ internal partial class PianoScrollView : View, IPianoScrollView
             goto FinishDrawPitch;
         }
 
-        Color pitchColor = Colors.White.Opacity(pitchOpacity * (mDependency.PianoTool.Value == PianoTool.Note ? 0.3 : 1));
+        bool noteEditTool = mDependency.PianoTool.Value is PianoTool.Note or PianoTool.Pencil;
+        Color pitchColor = Colors.White.Opacity(pitchOpacity * (noteEditTool ? 0.3 : 1));
 
         DrawSynthesizedPitch(context, pitchColor);
 
@@ -658,13 +659,13 @@ internal partial class PianoScrollView : View, IPianoScrollView
 
         DrawVibratos(context);
 
-        if (mDependency.PianoTool.Value is PianoTool.Note or PianoTool.Pitch or PianoTool.Lock or PianoTool.Vibrato)
+        if (mDependency.PianoTool.Value is PianoTool.Note or PianoTool.Pencil or PianoTool.Pitch or PianoTool.Lock or PianoTool.Vibrato)
         {
             // 颤音覆盖区、未绘制 pitch 处：在音符基线上叠加偏差画虚线波——颤音落笔即现波、不依赖合成完成；
             // 切到 note 工具也能在"画了颤音的位置"看到预期音高。
             DrawPitch(context, 0, Bounds.Width, Part.GetVibratoFallbackPitch, pitchColor.Opacity(0.7), 1, VibratoPreviewDashStyle);
         }
-        DrawPitch(context, 0, Bounds.Width, Part.GetFinalPitch, pitchColor, mDependency.PianoTool.Value == PianoTool.Note ? 1 : 2);
+        DrawPitch(context, 0, Bounds.Width, Part.GetFinalPitch, pitchColor, noteEditTool ? 1 : 2);
     FinishDrawPitch:
 
         // draw select
