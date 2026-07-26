@@ -14,6 +14,8 @@ internal class EditorStateFile
     public double MainWindowHeight { get; set; } = 0;
     public bool MainWindowMaximized { get; set; } = false;
     public double TrackWindowHeight { get; set; } = 240;
+    public double DetachedPianoWindowWidth { get; set; } = 960;
+    public double DetachedPianoWindowHeight { get; set; } = 640;
     public double ParameterPanelHeight { get; set; } = 200;
     public double ParameterPanelHeightNormal { get; set; } = 200;
     public double ParameterPanelHeightMaximized { get; set; } = 200;

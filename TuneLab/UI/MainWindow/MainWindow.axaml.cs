@@ -233,6 +233,9 @@ public partial class MainWindow : Window
 
     private async void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        // 关闭主窗口始终先结束分离模式；若稍后用户取消保存确认，应用留在已回嵌的正常布局。
+        mEditor.AttachPianoWindowForMainWindowClose();
+
         if (!isCloseConfirm && !mEditor.Document.IsSaved)
         {
             e.Cancel = true;
@@ -249,6 +252,7 @@ public partial class MainWindow : Window
         }
 
         // 正常退出
+        mEditor.CloseDetachedPianoWindow();
         EditorState.MainWindowMaximized.Value = WindowState == WindowState.Maximized;
         SaveCurrentWindowBounds();
         Settings.Save(PathManager.SettingsFilePath);
