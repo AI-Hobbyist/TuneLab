@@ -188,7 +188,7 @@ internal class FunctionBar : LayerPanel
                     return toggle;
                 }
                 AddButton(PianoTool.Note, Assets.Pointer, "Select Tool".Tr(this));
-                AddButton(PianoTool.Pencil, Assets.Brush, "Pencil Tool".Tr(this));
+                AddButton(PianoTool.Pencil, Assets.Pencil, "Pencil Tool".Tr(this));
                 AddButton(PianoTool.Pitch, Assets.Pitch, "Pitch Pen".Tr(this));
                 AddButton(PianoTool.Anchor, Assets.Anchor, "Anchor Tool".Tr(this));
                 AddButton(PianoTool.Lock, Assets.Brush, "Pitch Locking Brush".Tr(this));

@@ -1580,6 +1580,7 @@ internal partial class PianoScrollView : View, IPianoScrollView
         switch (mDependency.PianoTool.Value)
         {
             case PianoTool.Note:
+            case PianoTool.Pencil:
                 mNoteClipboard = Part.CopyNotes();
                 break;
             case PianoTool.Vibrato:
@@ -1647,6 +1648,7 @@ internal partial class PianoScrollView : View, IPianoScrollView
         switch (mDependency.PianoTool.Value)
         {
             case PianoTool.Note:
+            case PianoTool.Pencil:
                 Part.DeleteAllSelectedNotes();
                 Part.Commit();
                 break;

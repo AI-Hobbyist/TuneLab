@@ -369,6 +369,8 @@ internal partial class PianoScrollView
                                                 Lyric = Part.SoundSource.DefaultLyric,
                                             });
                                             Part.InsertNote(note);
+                                            // 按住后直接接管新音符的右边缘：不松手即可按当前位置改时值。
+                                            mNoteEndResizeOperation.Down(TickAxis.Tick2X(note.GlobalEndPos()), note);
                                         }
                                         else
                                         {
