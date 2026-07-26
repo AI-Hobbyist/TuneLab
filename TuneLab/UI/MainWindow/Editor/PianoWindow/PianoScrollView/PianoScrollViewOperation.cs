@@ -354,19 +354,20 @@ internal partial class PianoScrollView
                                     }
                                     else
                                     {
-                                        if (e.IsDoubleClick)
+                                        // 空白处单击即创建音符。起点仍可按 Alt 临时取消吸附，
+                                        // 但时值始终严格使用工具栏当前的量化选择（Base × Division），
+                                        // 不受视图缩放时显示网格粗细的影响。
+                                        var pitch = (int)PitchAxis.Y2Pitch(e.Position.Y);
+                                        var pos = TickAxis.X2Tick(e.Position.X);
+                                        if (!alt) pos = GetQuantizedTick(pos);
+                                        var note = Part.CreateNote(new NoteInfo()
                                         {
-                                            var pitch = (int)PitchAxis.Y2Pitch(e.Position.Y);
-                                            var pos = TickAxis.X2Tick(e.Position.X);
-                                            if (!alt) pos = GetQuantizedTick(pos);
-                                            var note = Part.CreateNote(new NoteInfo() { Pos = pos - Part.Pos.Value, Dur = QuantizedCellTicks(), Pitch = pitch, Lyric = Part.SoundSource.DefaultLyric });
-                                            Part.InsertNote(note);
-                                            mNoteEndResizeOperation.Down(TickAxis.Tick2X(note.GlobalEndPos()), note);
-                                        }
-                                        else
-                                        {
-                                            mNoteSelectOperation.Down(e.Position, ctrl);
-                                        }
+                                            Pos = pos - Part.Pos.Value,
+                                            Dur = Quantization.TicksPerCell(),
+                                            Pitch = pitch,
+                                            Lyric = Part.SoundSource.DefaultLyric,
+                                        });
+                                        Part.InsertNote(note);
                                     }
                                 }
                                 break;
