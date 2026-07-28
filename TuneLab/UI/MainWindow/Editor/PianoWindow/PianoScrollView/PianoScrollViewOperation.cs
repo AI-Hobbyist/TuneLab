@@ -140,7 +140,7 @@ internal partial class PianoScrollView
             return false;
 
         menu.Items.Add(new MenuItem()
-            .SetName("舒适音域: " + ComfortRangeText(range) + " | 可用音域: " + AvailableRangeText(range))
+            .SetName("可用音域: " + AvailableRangeText(range))
             .SetAction(() => ShowComfortRangeDetails(range)));
         return true;
     }
