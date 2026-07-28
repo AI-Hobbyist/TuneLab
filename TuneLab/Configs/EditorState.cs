@@ -18,6 +18,8 @@ internal static class EditorState
     public static NotifiableProperty<double> MainWindowHeight { get; } = new(Defaults.MainWindowHeight);
     public static NotifiableProperty<bool> MainWindowMaximized { get; } = new(Defaults.MainWindowMaximized);
     public static NotifiableProperty<double> TrackWindowHeight { get; } = new(Defaults.TrackWindowHeight);
+    public static NotifiableProperty<double> DetachedPianoWindowWidth { get; } = new(Defaults.DetachedPianoWindowWidth);
+    public static NotifiableProperty<double> DetachedPianoWindowHeight { get; } = new(Defaults.DetachedPianoWindowHeight);
     public static NotifiableProperty<double> ParameterPanelHeight { get; } = new(Defaults.ParameterPanelHeight);
     public static NotifiableProperty<double> ParameterPanelHeightNormal { get; } = new(Defaults.ParameterPanelHeightNormal);
     public static NotifiableProperty<double> ParameterPanelHeightMaximized { get; } = new(Defaults.ParameterPanelHeightMaximized);
@@ -46,6 +48,8 @@ internal static class EditorState
         MainWindowHeight.Value = stateFile.MainWindowHeight;
         MainWindowMaximized.Value = stateFile.MainWindowMaximized;
         TrackWindowHeight.Value = stateFile.TrackWindowHeight;
+        DetachedPianoWindowWidth.Value = stateFile.DetachedPianoWindowWidth;
+        DetachedPianoWindowHeight.Value = stateFile.DetachedPianoWindowHeight;
         ParameterPanelHeight.Value = stateFile.ParameterPanelHeight;
         ParameterPanelHeightNormal.Value = stateFile.ParameterPanelHeightNormal;
         ParameterPanelHeightMaximized.Value = stateFile.ParameterPanelHeightMaximized;
@@ -71,6 +75,8 @@ internal static class EditorState
                 MainWindowHeight = MainWindowHeight,
                 MainWindowMaximized = MainWindowMaximized.Value,
                 TrackWindowHeight = TrackWindowHeight,
+                DetachedPianoWindowWidth = DetachedPianoWindowWidth,
+                DetachedPianoWindowHeight = DetachedPianoWindowHeight,
                 ParameterPanelHeight = ParameterPanelHeight,
                 ParameterPanelHeightNormal = ParameterPanelHeightNormal,
                 ParameterPanelHeightMaximized = ParameterPanelHeightMaximized,

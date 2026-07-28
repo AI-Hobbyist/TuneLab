@@ -7,6 +7,7 @@ using TuneLab.GUI.Input;
 using TuneLab.Data;
 using TuneLab.Data.Synthesis;
 using TuneLab.SDK;
+using TuneLab.Extensions;
 using Rect = Avalonia.Rect;
 using ContextMenu = Avalonia.Controls.ContextMenu;
 using MenuItem = Avalonia.Controls.MenuItem;
@@ -86,11 +87,14 @@ internal partial class PianoScrollView
         // 复制/删除针对选区本身 → 仅当右键落在选区带内才给；带外（多半是粘贴目标）或无选区 → 只给粘贴族。
         bool insideRegion = HasRegionSelection && IsInRegion(mouseX);
         var menu = new ContextMenu();
+        bool hasComfortRangeItem = AddComfortRangeMenuItem(menu);
 
         // 选区操作（复制/剪切/删除，针对选区本身）：仅右键落在带内才给。各保留 "X Selection"（整段全类型）在一级、并标快捷键
         //（有选区时 Ctrl+C/X、Delete 正作用于全部，与之对应），低频的单类型收进 "X Only" 二级菜单。各族间用分隔线隔开。
         if (insideRegion)
         {
+            if (hasComfortRangeItem)
+                menu.Items.Add(new Avalonia.Controls.Separator());
             menu.Items.Add(new MenuItem().SetName("Copy Selection".Tr(TC.Menu)).SetAction(() => CopyRegion(null)).SetInputGesture(Key.C, ModifierKeys.Ctrl));
             menu.Items.Add(RegionKindSubmenu("Copy Only", CopyRegion));
             menu.Items.Add(new Avalonia.Controls.Separator());
@@ -129,6 +133,69 @@ internal partial class PianoScrollView
     }
 
     // "X Only" 二级菜单：单类型（Notes/Pitch/Vibratos/Automations）→ action(该类)。供 Copy/Cut/Delete Only 复用。
+    bool AddComfortRangeMenuItem(ContextMenu menu)
+    {
+        var range = SoundSourceComfortRange.Resolve(Part?.SoundSource);
+        if (range == null)
+            return false;
+
+        menu.Items.Add(new MenuItem()
+            .SetName("舒适音域: " + ComfortRangeText(range) + " | 可用音域: " + AvailableRangeText(range))
+            .SetAction(() => ShowComfortRangeDetails(range)));
+        return true;
+    }
+
+    void ShowComfortRangeDetails(SoundSourceComfortRange range)
+    {
+        var source = Part?.SoundSource;
+        if (source == null)
+            return;
+
+        string message =
+            "声库名: " + source.Name + "\n" +
+            "舒适音域: " + ComfortRangeText(range) + "\n" +
+            "可用音域: " + AvailableRangeText(range) + "\n" +
+            "弱点音域: " + WeakRangeText(range);
+        _ = this.ShowMessage("舒适音域", message);
+    }
+
+    static string ComfortRangeText(SoundSourceComfortRange range)
+        => MusicTheory.PitchName(range.MinPitch) + "-" + MusicTheory.PitchName(range.MaxPitch);
+
+    static string AvailableRangeText(SoundSourceComfortRange range)
+        => PitchRangesText(range.AvailablePitches);
+
+    static string WeakRangeText(SoundSourceComfortRange range)
+        => PitchRangesText(range.WeakPitches);
+
+    static string PitchRangesText(IEnumerable<int> pitchSet)
+    {
+        var pitches = pitchSet.OrderBy(pitch => pitch).ToArray();
+        if (pitches.Length == 0)
+            return "无";
+
+        List<string> parts = [];
+        int start = pitches[0];
+        int end = start;
+        for (int i = 1; i < pitches.Length; i++)
+        {
+            if (pitches[i] == end + 1)
+            {
+                end = pitches[i];
+                continue;
+            }
+
+            parts.Add(PitchRangeText(start, end));
+            start = pitches[i];
+            end = start;
+        }
+        parts.Add(PitchRangeText(start, end));
+        return string.Join(", ", parts);
+    }
+
+    static string PitchRangeText(int start, int end)
+        => start == end ? MusicTheory.PitchName(start) : MusicTheory.PitchName(start) + "-" + MusicTheory.PitchName(end);
+
     MenuItem RegionKindSubmenu(string headerKey, Action<RegionDataKind?> action)
     {
         var sub = new MenuItem().SetName(headerKey.Tr(TC.Menu));
@@ -238,6 +305,7 @@ internal partial class PianoScrollView
                 switch (mDependency.PianoTool.Value)
                 {
                     case PianoTool.Note:
+                    case PianoTool.Pencil:
                         switch (e.MouseButtonType)
                         {
                             case MouseButtonType.PrimaryButton:
@@ -287,13 +355,21 @@ internal partial class PianoScrollView
                                     }
                                     else
                                     {
-                                        if (e.IsDoubleClick)
+                                        if (mDependency.PianoTool.Value == PianoTool.Pencil)
                                         {
+                                            // 笔工具在空白处单击输入；时值严格遵循当前量化选择。
                                             var pitch = (int)PitchAxis.Y2Pitch(e.Position.Y);
                                             var pos = TickAxis.X2Tick(e.Position.X);
                                             if (!alt) pos = GetQuantizedTick(pos);
-                                            var note = Part.CreateNote(new NoteInfo() { Pos = pos - Part.Pos.Value, Dur = QuantizedCellTicks(), Pitch = pitch, Lyric = Part.SoundSource.DefaultLyric });
+                                            var note = Part.CreateNote(new NoteInfo()
+                                            {
+                                                Pos = pos - Part.Pos.Value,
+                                                Dur = Quantization.TicksPerCell(),
+                                                Pitch = pitch,
+                                                Lyric = Part.SoundSource.DefaultLyric,
+                                            });
                                             Part.InsertNote(note);
+                                            // 按住后直接接管新音符的右边缘：不松手即可按当前位置改时值。
                                             mNoteEndResizeOperation.Down(TickAxis.Tick2X(note.GlobalEndPos()), note);
                                         }
                                         else
@@ -504,8 +580,11 @@ internal partial class PianoScrollView
                                     }
                                     else
                                     {
+                                        bool hasComfortRangeItem = AddComfortRangeMenuItem(menu);
                                         if (CanPaste)
                                         {
+                                            if (hasComfortRangeItem)
+                                                menu.Items.Add(new Avalonia.Controls.Separator());
                                             {
                                                 var position = e.Position;
                                                 var pos = GetQuantizedTick(TickAxis.X2Tick(position.X)) - Part.Pos.Value;
@@ -699,8 +778,11 @@ internal partial class PianoScrollView
                                     }
                                     else
                                     {
+                                        bool hasComfortRangeItem = AddComfortRangeMenuItem(menu);
                                         if (CanPaste)
                                         {
+                                            if (hasComfortRangeItem)
+                                                menu.Items.Add(new Avalonia.Controls.Separator());
                                             {
                                                 var position = e.Position;
                                                 var pos = GetQuantizedTick(TickAxis.X2Tick(position.X)) - Part.Pos.Value;
@@ -830,6 +912,7 @@ internal partial class PianoScrollView
                     switch (mDependency.PianoTool.Value)
                     {
                         case PianoTool.Note:
+                        case PianoTool.Pencil:
                             if (item is NoteStartResizeItem || item is NoteEndResizeItem)
                             {
                                 Cursor = new Cursor(StandardCursorType.SizeWestEast);
@@ -1106,6 +1189,7 @@ internal partial class PianoScrollView
         switch (mDependency.PianoTool.Value)
         {
             case PianoTool.Note:
+            case PianoTool.Pencil:
                 foreach (var note in Part.Notes)
                 {
                     if (note.GlobalEndPos() < startPos)

@@ -18,6 +18,7 @@ using TuneLab.GUI.Input;
 using TuneLab.Data;
 using TuneLab.Data.Synthesis;
 using TuneLab.SDK;
+using TuneLab.Extensions;
 using TuneLab.Extensions.Voices;
 using TuneLab.Extensions.Instruments;
 using TuneLab.Utils;
@@ -447,6 +448,8 @@ internal partial class PianoScrollView : View, IPianoScrollView
         if (Part == null)
             return;
 
+        DrawComfortRangeDimming(context, SoundSourceComfortRange.Resolve(Part.SoundSource));
+
         var timeSignatureManager = Part.TimeSignatureManager;
 
         double minVisibleTick = TickAxis.MinVisibleTick;
@@ -646,7 +649,8 @@ internal partial class PianoScrollView : View, IPianoScrollView
             goto FinishDrawPitch;
         }
 
-        Color pitchColor = Colors.White.Opacity(pitchOpacity * (mDependency.PianoTool.Value == PianoTool.Note ? 0.3 : 1));
+        bool noteEditTool = mDependency.PianoTool.Value is PianoTool.Note or PianoTool.Pencil;
+        Color pitchColor = Colors.White.Opacity(pitchOpacity * (noteEditTool ? 0.3 : 1));
 
         DrawSynthesizedPitch(context, pitchColor);
 
@@ -655,13 +659,13 @@ internal partial class PianoScrollView : View, IPianoScrollView
 
         DrawVibratos(context);
 
-        if (mDependency.PianoTool.Value is PianoTool.Note or PianoTool.Pitch or PianoTool.Lock or PianoTool.Vibrato)
+        if (mDependency.PianoTool.Value is PianoTool.Note or PianoTool.Pencil or PianoTool.Pitch or PianoTool.Lock or PianoTool.Vibrato)
         {
             // 颤音覆盖区、未绘制 pitch 处：在音符基线上叠加偏差画虚线波——颤音落笔即现波、不依赖合成完成；
             // 切到 note 工具也能在"画了颤音的位置"看到预期音高。
             DrawPitch(context, 0, Bounds.Width, Part.GetVibratoFallbackPitch, pitchColor.Opacity(0.7), 1, VibratoPreviewDashStyle);
         }
-        DrawPitch(context, 0, Bounds.Width, Part.GetFinalPitch, pitchColor, mDependency.PianoTool.Value == PianoTool.Note ? 1 : 2);
+        DrawPitch(context, 0, Bounds.Width, Part.GetFinalPitch, pitchColor, noteEditTool ? 1 : 2);
     FinishDrawPitch:
 
         // draw select
@@ -745,6 +749,37 @@ internal partial class PianoScrollView : View, IPianoScrollView
             // 状态条恒显（像 note 一样不随缩放隐去）；稳定性靠 SynthesisStatusStrip 内部像素对齐保证。
             SynthesisStatusStrip.Draw(context, synthesisStatus, tempoManager, TickAxis, SynthesisStripTop, SynthesisStripHeight, SynthesisStripRadius, shimmerPhase);
             DrawSynthesisStatusOverlay(context, synthesisStatus, tempoManager);
+        }
+    }
+
+    void DrawComfortRangeDimming(DrawingContext context, SoundSourceComfortRange? range)
+    {
+        if (range == null)
+            return;
+
+        double noteAreaBottom = mDependency.IsWaveformVisible ? WaveformTop : WaveformBottom;
+        noteAreaBottom = noteAreaBottom.Limit(0, Bounds.Height);
+        if (noteAreaBottom <= 0)
+            return;
+
+        int minPitch = (int)Math.Floor(PitchAxis.MinVisiblePitch);
+        int maxPitch = (int)Math.Ceiling(PitchAxis.MaxVisiblePitch);
+        for (int pitch = minPitch; pitch < maxPitch; pitch++)
+        {
+            double opacity = range.LevelOf(pitch) switch
+            {
+                ComfortPitchLevel.Available => 0.08,
+                ComfortPitchLevel.Weak => 0.16,
+                ComfortPitchLevel.Outside => 0.32,
+                _ => 0,
+            };
+            if (opacity <= 0)
+                continue;
+
+            double top = Math.Max(0, PitchAxis.Pitch2Y(pitch + 1));
+            double bottom = Math.Min(noteAreaBottom, PitchAxis.Pitch2Y(pitch));
+            if (bottom > top)
+                context.FillRectangle(Colors.Black.Opacity(opacity).ToBrush(), new Rect(0, top, Bounds.Width, bottom - top));
         }
     }
 
@@ -1545,6 +1580,7 @@ internal partial class PianoScrollView : View, IPianoScrollView
         switch (mDependency.PianoTool.Value)
         {
             case PianoTool.Note:
+            case PianoTool.Pencil:
                 mNoteClipboard = Part.CopyNotes();
                 break;
             case PianoTool.Vibrato:
@@ -1612,6 +1648,7 @@ internal partial class PianoScrollView : View, IPianoScrollView
         switch (mDependency.PianoTool.Value)
         {
             case PianoTool.Note:
+            case PianoTool.Pencil:
                 Part.DeleteAllSelectedNotes();
                 Part.Commit();
                 break;

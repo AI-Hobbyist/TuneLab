@@ -134,6 +134,15 @@ internal static class SettingsRegistry
         "Parameter Boundary Extension (tick)", SliderConfig.Integer(D.ParameterBoundaryExtension, 1, 60), D.ParameterBoundaryExtension);
     public static readonly SettingItem<bool> ParameterSyncMode = Bool("ParameterSyncMode", SettingTab.Editing,
         "Parameter Sync Mode", CheckBoxConfig.Create(D.ParameterSyncMode), D.ParameterSyncMode);
+    public static readonly SettingItem<bool> ShowAllPianoKeyLabels = Bool("ShowAllPianoKeyLabels", SettingTab.Editing,
+        "Show All Piano Key Labels", CheckBoxConfig.Create(D.ShowAllPianoKeyLabels), D.ShowAllPianoKeyLabels);
+    public static readonly SettingItem<string> PianoKeyLabelStyle = Str("PianoKeyLabelStyle", SettingTab.Editing,
+        "Piano Key Label Style", ComboBoxConfig.Create([
+            new ComboBoxItem(PropertyValue.Create("PitchName"), "CDEFGAB"),
+            new ComboBoxItem(PropertyValue.Create("Numbered"), "1234567"),
+        ]), D.PianoKeyLabelStyle);
+    public static readonly SettingItem<string> NumberedPianoKeyTonic = Str("NumberedPianoKeyTonic", SettingTab.Editing,
+        "Numbered Piano Key Tonic (1 =)", ComboBoxConfig.Create(["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]), D.NumberedPianoKeyTonic);
 
     // ── 仅存储（无设置窗行；由别处设定，但仍随本注册表读写磁盘、可被 agent 枚举） ──
     // 三者的【活值都由别处的 UI 拥有】（视图菜单 / agent 侧栏），只单向落盘：agent 写文件既不即时生效、又会被那处 UI
@@ -160,7 +169,7 @@ internal static class SettingsRegistry
         // Appearance
         InterfaceFontFamily, BackgroundImagePath, BackgroundImageOpacity, TrackHueChangeRate,
         // Editing
-        ParameterBoundaryExtension, ParameterSyncMode,
+        ParameterBoundaryExtension, ParameterSyncMode, ShowAllPianoKeyLabels, PianoKeyLabelStyle, NumberedPianoKeyTonic,
         // 仅存储（无设置窗行）
         AutoScrollTarget, AgentModelProvider, AgentAuthorization,
     ];

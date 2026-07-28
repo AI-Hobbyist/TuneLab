@@ -290,6 +290,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         switch (PianoTool.Value)
         {
             case UI.PianoTool.Note:
+            case UI.PianoTool.Pencil:
                 Part?.Notes.SelectAllItems();
                 break;
             case UI.PianoTool.Vibrato:

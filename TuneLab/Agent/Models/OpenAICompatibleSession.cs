@@ -14,21 +14,24 @@ using TuneLab.SDK;
 namespace TuneLab.Agent.Models;
 
 // 一次到某个 OpenAI 兼容端点的会话。把宿主中立的 AgentModelRequest/Reply 翻译成 /chat/completions 协议。
-internal sealed class OpenAICompatibleSession : IAgentModelSession
+internal sealed class OpenAICompatibleSession : IAgentModelSession, IAgentThinkingLevelSession
 {
-    public OpenAICompatibleSession(string baseUrl, string apiKey, string model, double temperature, int maxTokens)
+    public OpenAICompatibleSession(string baseUrl, string apiKey, string model, double temperature, int maxTokens, AgentModality supportedInput)
     {
         mEndpoint = baseUrl.TrimEnd('/') + "/chat/completions";
         mModel = model;
         mTemperature = temperature;
         mMaxTokens = maxTokens;
+        mSupportedInput = supportedInput;
+        mSupportsThinkingLevel = IsReasoningEffortModel(model);
         mHttp = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         if (!string.IsNullOrEmpty(apiKey))
             mHttp.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
     }
 
-    // OpenAI 视觉模型支持图片输入（具体某个 model 是否真支持由用户选型负责）；文本恒支持。
-    public AgentModality SupportedInput => AgentModality.Text | AgentModality.Image;
+    public AgentModality SupportedInput => mSupportedInput;
+    public bool SupportsThinkingLevel => mSupportsThinkingLevel;
+    public AgentThinkingLevel ThinkingLevel { get; set; } = AgentThinkingLevel.Auto;
 
     public async Task<AgentModelReply> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
     {
@@ -213,6 +216,8 @@ internal sealed class OpenAICompatibleSession : IAgentModelSession
 
         if (mMaxTokens > 0)
             body["max_tokens"] = mMaxTokens;
+        if (mSupportsThinkingLevel && ThinkingLevel != AgentThinkingLevel.Auto)
+            body["reasoning_effort"] = ThinkingLevelId(ThinkingLevel);
 
         if (request.Tools.Count > 0)
         {
@@ -351,6 +356,28 @@ internal sealed class OpenAICompatibleSession : IAgentModelSession
     static int GetInt(JsonElement obj, string name)
         => obj.TryGetProperty(name, out var e) && e.ValueKind == JsonValueKind.Number ? e.GetInt32() : 0;
 
+    static bool IsReasoningEffortModel(string model)
+    {
+        var id = model.ToLowerInvariant();
+        return id.StartsWith("gpt-5")
+            || id.StartsWith("o1")
+            || id.StartsWith("o3")
+            || id.StartsWith("o4")
+            || id.StartsWith("gpt-oss")
+            || id.Contains("reasoning")
+            || id.Contains("thinking")
+            || id.Contains("qwq");
+    }
+
+    static string ThinkingLevelId(AgentThinkingLevel level) => level switch
+    {
+        AgentThinkingLevel.Minimal => "minimal",
+        AgentThinkingLevel.Low => "low",
+        AgentThinkingLevel.Medium => "medium",
+        AgentThinkingLevel.High => "high",
+        _ => "medium",
+    };
+
     public void Dispose() => mHttp.Dispose();
 
     readonly System.Net.Http.HttpClient mHttp;
@@ -358,4 +385,6 @@ internal sealed class OpenAICompatibleSession : IAgentModelSession
     readonly string mModel;
     readonly double mTemperature;
     readonly int mMaxTokens;
+    readonly AgentModality mSupportedInput;
+    readonly bool mSupportsThinkingLevel;
 }
