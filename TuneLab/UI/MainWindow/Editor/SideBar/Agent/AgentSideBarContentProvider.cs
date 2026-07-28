@@ -14,6 +14,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using TuneLab.Agent;
+using TuneLab.Agent.Models;
 using TuneLab.Configs;
 using TuneLab.Data;
 using TuneLab.Extensions;
@@ -2151,6 +2152,12 @@ internal sealed class AgentSideBarContentProvider
         // Model Provider 选择 + 引擎属性面板都用 PropertyObjectController（同 INTERFACE 块、同 label/margin 样式），连成统一面板。
         content.Children.Add(mProviderController);
         content.Children.Add(mPropertiesController);
+        var tools = new DockPanel() { Margin = new(24, 8, 24, 0), LastChildFill = true };
+        mRefreshModelsButton = SmallTextButton("Refresh Models".Tr(this), 0, 28, Style.BUTTON_NORMAL, Style.BUTTON_NORMAL_HOVER);
+        mRefreshModelsButton.Clicked += async () => await RefreshModelsAsync();
+        DockPanel.SetDock(mRefreshModelsButton, Dock.Left);
+        tools.Children.Add(mRefreshModelsButton);
+        content.Children.Add(tools);
         mSubmitButton = SmallTextButton("Submit".Tr(this), 0, 32, Style.BUTTON_PRIMARY, Style.BUTTON_PRIMARY_HOVER);
         mSubmitButton.Margin = new(24, 16, 24, 8);
         mSubmitButton.Clicked += OnSubmit;
@@ -2947,6 +2954,43 @@ internal sealed class AgentSideBarContentProvider
     }
 
     // 用当前设置建立会话（不做界面跳转/提示）。供 Submit 与启动自动接入复用。
+    async Task RefreshModelsAsync()
+    {
+        var providerId = mSettings.GetValue("provider_id", PropertyValue.Create(AgentProviderCatalog.DefaultProvider.Id)).ToString() ?? AgentProviderCatalog.DefaultProvider.Id;
+        var provider = AgentProviderCatalog.Resolve(providerId);
+        var family = AgentProviderCatalog.ParseFamily(mSettings.GetValue("endpoint_family", PropertyValue.Create(AgentProviderCatalog.FamilyId(provider.Family))).ToString());
+        var baseUrl = mSettings.GetValue("base_url", PropertyValue.Create(provider.BaseUrl)).ToString() ?? provider.BaseUrl;
+        var apiKey = mSettings.GetValue("api_key", PropertyValue.Create(string.Empty)).ToString() ?? string.Empty;
+
+        try
+        {
+            mRefreshModelsButton.IsEnabled = false;
+            mStatusLabel.Foreground = Style.LIGHT_WHITE.Opacity(0.85).ToBrush();
+            mStatusLabel.Content = "Refreshing models...".Tr(this);
+            var models = await AgentModelDiscoveryService.DiscoverAsync(provider.Id, baseUrl, apiKey, family, CancellationToken.None);
+            if (models.Count > 0)
+            {
+                var current = mSettings.GetValue("model", PropertyValue.Create(string.Empty)).ToString();
+                if (string.IsNullOrEmpty(current) || !models.Any(m => m.Id == current))
+                {
+                    mSettings.SetValue("model", PropertyValue.Create(models[0].Id));
+                    mSettings.Commit();
+                }
+            }
+            RefreshEnginePropertyPanel(CurrentEngineType());
+            mStatusLabel.Content = string.Format("Loaded {0} models.".Tr(this), models.Count);
+        }
+        catch (Exception ex)
+        {
+            mStatusLabel.Foreground = Colors.IndianRed.ToBrush();
+            mStatusLabel.Content = "Refresh models failed: " + ex.Message;
+        }
+        finally
+        {
+            mRefreshModelsButton.IsEnabled = true;
+        }
+    }
+
     bool TryConnect(string type, out string error)
     {
         error = string.Empty;
@@ -3121,6 +3165,7 @@ internal sealed class AgentSideBarContentProvider
     TuneLab.GUI.Components.Button mStopButton = null!;
     Avalonia.Controls.ComboBox mThinkingLevelBox = null!;
     TuneLab.GUI.Components.Button mSubmitButton = null!;
+    TuneLab.GUI.Components.Button mRefreshModelsButton = null!;
     TuneLab.GUI.Components.Button? mMenuButton;
     Flyout mMenuFlyout = null!;
     bool mMenuJustClosed;
