@@ -133,14 +133,20 @@ internal partial class PianoRoll
 
     static void DrawPianoKeyLabel(DrawingContext context, Rect rect, IBrush brush, int keyNumber, string label, int textAlignment, int rectAlignment, Point offset = default)
     {
-        if (Settings.PianoKeyLabelStyle.Value == "Numbered" && TryGetNumberedPitchLabelParts(keyNumber, out var number, out int octaveOffset) && CanDrawNumberedDotLabel(rect, octaveOffset))
+        if (Settings.PianoKeyLabelStyle.Value == "Numbered" && TryGetNumberedPitchLabelParts(keyNumber, out var number, out int octaveOffset))
         {
-            // 字体连字只覆盖 ±2 个八度（1'' 到 1,,）；更远的八度退回手动画点。
-            if (Math.Abs(octaveOffset) <= JianpuMaxOctaveOffset)
+            // 字体路径：连字只覆盖 ±2 个八度（1'' 到 1,,），且简谱字形（数字+八度点）字号更大、
+            // 需要的纵向空间更多；不满足时退回手动画点（DrawNumberedDotLabel）。
+            if (Math.Abs(octaveOffset) <= JianpuMaxOctaveOffset && CanDrawJianpuLabel(rect, octaveOffset))
+            {
                 DrawJianpuLabel(context, rect, brush, number, octaveOffset, textAlignment, rectAlignment, offset);
-            else
+                return;
+            }
+            if (CanDrawNumberedDotLabel(rect, octaveOffset))
+            {
                 DrawNumberedDotLabel(context, rect, brush, number, octaveOffset, textAlignment, rectAlignment, offset);
-            return;
+                return;
+            }
         }
 
         context.DrawString(label, rect, brush, KeyLabelFontSize(rect), textAlignment, rectAlignment, offset);
@@ -156,7 +162,24 @@ internal partial class PianoRoll
                 ? number + new string(',', -octaveOffset)
                 : number;
 
-        context.DrawString(text, rect, brush, KeyLabelFontSize(rect), textAlignment, rectAlignment, offset, JianpuTypeface);
+        context.DrawString(text, rect, brush, JianpuLabelFontSize(rect), textAlignment, rectAlignment, offset, JianpuTypeface);
+    }
+
+    // 简谱字号：明显大于普通标签——字体的八度点是 5% em 的小圆点，字号小了几乎看不见。
+    // 档位随键高：小键 14、常规黑键（≈28px）17、白键（≈48px）21。
+    static double JianpuLabelFontSize(Rect rect)
+    {
+        if (rect.Height < 24)
+            return 14;
+        if (rect.Height < 34)
+            return 17;
+        return 21;
+    }
+
+    // 简谱字体的行高 ≈1.5em（字形盒 950/550 单位），加上八度点占位——需要的纵向空间比普通标签大。
+    static bool CanDrawJianpuLabel(Rect rect, int octaveOffset)
+    {
+        return rect.Height >= JianpuLabelFontSize(rect) * 1.5 + Math.Abs(octaveOffset) * 2.5;
     }
 
     static bool CanDrawNumberedDotLabel(Rect rect, int octaveOffset)
