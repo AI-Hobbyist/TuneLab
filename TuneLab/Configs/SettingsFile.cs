@@ -20,6 +20,9 @@ internal class SettingsFile
     public bool ShowAllPianoKeyLabels { get; set; } = false;
     public string PianoKeyLabelStyle { get; set; } = "PitchName";
     public string NumberedPianoKeyTonic { get; set; } = "C";
+    // 录入歌词时由编辑器做 G2P（汉字→拼音 / 假名→罗马音）填进 note 的发音字段。
+    // true（默认）= 保持既有行为；false = 歌词原文直达引擎，由引擎自行 G2P（方 言等非拼音音系的前提）。
+    public bool AutoGeneratePronunciation { get; set; } = true;
     public string PianoKeySamplesPath { get; set; } = string.Empty;
     public int AutoSaveInterval { get; set; } = 10;
     public int AutoSaveMaxCount { get; set; } = 5;
@@ -35,7 +38,4 @@ internal class SettingsFile
     // 单次工具结果回灌模型的字符数上限（中央兜底，防某工具输出淹没上下文）。默认设宽（普通机器十几个音源/结果远小于此，
     // 不受影响；只拦成百上千的畸形案例）；<=0 = 不限。见 AgentRunner 的 clamp。
     public int AgentMaxToolResultChars { get; set; } = 40000;
-    // 扩展冲突消解的用户选择（routeKey="kind:identity" → 选中的 packageId）：同一身份 id/扩展名被多包提供时用户选用哪个包。
-    // 扁平小映射、无密钥，与 AgentModelProvider 同属「用户选择」类，故直接随 app 设置存盘，不另开配置文件。
-    public Dictionary<string, string> ExtensionRouting { get; set; } = new();
 }

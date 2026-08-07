@@ -28,6 +28,12 @@ internal class Automation : DataObject, IAutomation
         SetInfo(info);
     }
 
+    // 相对值口径的曲线取值（锚点存的就是相对值，不叠 DefaultValue）。供构造新锚点用，见 AddLine。
+    double[] GetRelativeValues(IReadOnlyList<double> ticks)
+    {
+        return mPoints.Convert(p => p.ToPoint()).MonotonicHermiteInterpolation(ticks);
+    }
+
     public double[] GetValues(IReadOnlyList<double> ticks)
     {
         var values = mPoints.Convert(p => p.ToPoint()).MonotonicHermiteInterpolation(ticks);
@@ -67,12 +73,14 @@ internal class Automation : DataObject, IAutomation
 
         double start = points[0].Pos - extend;
         double end = points[points.Count - 1].Pos + extend;
-        var dirty = AnchorDirtyRange.ContinuousTrack();
+        var dirty = AnchorDirtyRange.ContinuousTrack(mPoints);
         void NotifyRangeModified() => mRangeModified.Invoke(dirty.Start, dirty.End);
         Push(new UndoOnlyCommand(NotifyRangeModified));
         dirty.Union(start, end);
-        var y = GetValues([start, end]);
-        AddPoints([new(start, y[0]), new(end, y[1])], dirty);
+        // 封边点取编辑前曲线在该处的值，用相对值口径直取：绝对值要 +DefaultValue 再由 AddPoints
+        // −DefaultValue 换回来，这一趟往返足以把常数段的值抖出 1ulp，脏区的等值判定按精确值比较会因此落空。
+        var y = GetRelativeValues([start, end]);
+        AddPoints([new(start, y[0]), new(end, y[1])], dirty, valuesAreRelative: true);
         for (int i = mPoints.Count - 1; i >= 0; i--)
         {
             if (mPoints[i].Pos >= end)
@@ -83,8 +91,10 @@ internal class Automation : DataObject, IAutomation
 
             dirty.Touch(mPoints, i);
             mPoints.RemoveAt(i);
+            dirty.TouchGap(mPoints, i - 1);   // 后相位：合拢缝两侧的切线随邻居易主而变
         }
         AddPoints(points, dirty);
+        dirty.CloseTails(mPoints);
         NotifyRangeModified();
         Push(new RedoOnlyCommand(NotifyRangeModified));
     }
@@ -104,9 +114,11 @@ internal class Automation : DataObject, IAutomation
         AddLine([new(start, defaultValue), new(end, defaultValue)], extend);
     }
 
-    void AddPoints(IReadOnlyList<AnchorPoint> points, AnchorDirtyRange dirty)
+    // valuesAreRelative：入参已是相对值（不含 DefaultValue），跳过换算——封边点等"取自当前曲线"的
+    // 构造走这条，免去一次 +DefaultValue/−DefaultValue 往返（见 AddLine）。
+    void AddPoints(IReadOnlyList<AnchorPoint> points, AnchorDirtyRange dirty, bool valuesAreRelative = false)
     {
-        double defaultValue = DefaultValue;
+        double defaultValue = valuesAreRelative ? 0 : DefaultValue;
         if (defaultValue != 0)
         {
             var ps = new AnchorPoint[points.Count];
@@ -128,11 +140,13 @@ internal class Automation : DataObject, IAutomation
 
             if (pointIndex >= 0 && mPoints[pointIndex].Pos == point.Pos)
             {
+                dirty.Touch(mPoints, pointIndex);   // 前相位：改写前的值与几何
                 mPoints[pointIndex] = point;
                 dirty.Touch(mPoints, pointIndex);
                 continue;
             }
 
+            dirty.TouchGap(mPoints, pointIndex);    // 前相位：落位缝两侧的切线将因新点插入而变
             mPoints.Insert(pointIndex + 1, point);
             dirty.Touch(mPoints, pointIndex + 1);
         }
@@ -140,10 +154,11 @@ internal class Automation : DataObject, IAutomation
 
     public void InsertPoint(AnchorPoint point)
     {
-        var dirty = AnchorDirtyRange.ContinuousTrack();
+        var dirty = AnchorDirtyRange.ContinuousTrack(mPoints);
         void NotifyRangeModified() => mRangeModified.Invoke(dirty.Start, dirty.End);
         Push(new UndoOnlyCommand(NotifyRangeModified));
         AddPoints([point], dirty);
+        dirty.CloseTails(mPoints);
         NotifyRangeModified();
         Push(new RedoOnlyCommand(NotifyRangeModified));
     }
@@ -153,7 +168,7 @@ internal class Automation : DataObject, IAutomation
         if (start > end)
             return;
 
-        var dirty = AnchorDirtyRange.ContinuousTrack();
+        var dirty = AnchorDirtyRange.ContinuousTrack(mPoints);
         bool hasDeletedPoint = false;
         void NotifyRangeModified() => mRangeModified.Invoke(dirty.Start, dirty.End);
         for (int i = mPoints.Count - 1; i >= 0; i--)
@@ -172,10 +187,12 @@ internal class Automation : DataObject, IAutomation
 
             dirty.Touch(mPoints, i);
             mPoints.RemoveAt(i);
+            dirty.TouchGap(mPoints, i - 1);   // 后相位：合拢缝
         }
 
         if (hasDeletedPoint)
         {
+            dirty.CloseTails(mPoints);
             NotifyRangeModified();
             Push(new RedoOnlyCommand(NotifyRangeModified));
         }
@@ -187,7 +204,7 @@ internal class Automation : DataObject, IAutomation
             return;
 
         var pointSet = points.ToHashSet();
-        var dirty = AnchorDirtyRange.ContinuousTrack();
+        var dirty = AnchorDirtyRange.ContinuousTrack(mPoints);
         bool hasDeletedPoint = false;
         void NotifyRangeModified() => mRangeModified.Invoke(dirty.Start, dirty.End);
         for (int i = mPoints.Count - 1; i >= 0; i--)
@@ -203,10 +220,12 @@ internal class Automation : DataObject, IAutomation
 
             dirty.Touch(mPoints, i);
             mPoints.RemoveAt(i);
+            dirty.TouchGap(mPoints, i - 1);   // 后相位：合拢缝
         }
 
         if (hasDeletedPoint)
         {
+            dirty.CloseTails(mPoints);
             NotifyRangeModified();
             Push(new RedoOnlyCommand(NotifyRangeModified));
         }
@@ -221,7 +240,7 @@ internal class Automation : DataObject, IAutomation
         if (selectedPoints.IsEmpty())
             return;
 
-        var dirty = AnchorDirtyRange.ContinuousTrack();
+        var dirty = AnchorDirtyRange.ContinuousTrack(mPoints);
         void NotifyRangeModified() => mRangeModified.Invoke(dirty.Start, dirty.End);
         Push(new UndoOnlyCommand(NotifyRangeModified));
 
@@ -234,9 +253,11 @@ internal class Automation : DataObject, IAutomation
 
             dirty.Touch(mPoints, i);
             mPoints.RemoveAt(i);
+            dirty.TouchGap(mPoints, i - 1);   // 后相位：合拢缝
         }
         AddPoints(selectedPoints.Select(point => new AnchorPoint(point.Pos + offsetPos, point.Value + offsetValue + defaultValue) { IsSelected = true }).ToList(), dirty);
 
+        dirty.CloseTails(mPoints);
         NotifyRangeModified();
         Push(new RedoOnlyCommand(NotifyRangeModified));
     }

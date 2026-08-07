@@ -8,7 +8,7 @@ TuneLab 内置 AI Agent 通过"工具"读取与编辑当前工程。**核心理�
 - **护栏**：一切**工程状态的修改**天然属"用户会要的"，恒走 `tl`，绝不因"只 agent 需要"另开专用工程写工具——否则碎掉单一撤销单位 + 授权闸门 + 模型动作词汇。
 - **SSOT 约束的是执行面、不是工具数**：多道工具门可以（`run_script` 内联、`run_saved_script` 按名），只要都汇进同一受闸门执行面（`ScriptWriteExecutor` → `ScriptContext` 那次 `Commit`）。库管理工具（`save/list/read/delete_script`）不改工程状态、也非 `tl` 可脚本，故为工具。
 
-## 工具全集（23 个）
+## 工具全集（25 个）
 
 三个面：**操作工程** + **管理脚本库** + **环境感知（只读为主，含设置/快捷键助手的写口）**（外加一个**探测沙箱** `run_in_sandbox`，可丢弃工程里探静态读够不着的东西）。
 
@@ -24,7 +24,7 @@ TuneLab 内置 AI Agent 通过"工具"读取与编辑当前工程。**核心理�
 | `delete_script` | 库 | 删某脚本（同时从菜单移除）。 |
 | `get_script_inputs` | 库 | 读某脚本的入参 schema（逐字段名/类型/默认/范围·选项）+ 用户**上次输入值**。只读（只 eval getInputConfig，无副作用）。run_saved_script 前调。 |
 | `run_saved_script` | 库 | 按库名跑已存脚本（= 替用户按那个菜单项），`inputs` 可省：给了覆盖在上次值上再补默认，没给用上次/默认。走 run_script 同一授权闸门。 |
-| `list_extensions` | 感知 | 列用户已装扩展：包级(名/id/版本/作者/类别/加载状态/包描述) + 逐能力位(身份/作者摘要/有无 introduction/冲突态)。直接读 `ExtensionManager.LoadResults`。 |
+| `list_extensions` | 感知 | 列用户已装扩展：包级(名/id/版本/作者/类别/加载状态/包描述) + 逐能力位(身份/**一句话摘要**/**本次结局 DISABLED·FAILED·SKIPPED**/冲突态)。返回前补齐缺的摘要（**短文档直接用作者原话，长文档才调一次模型**、按内容哈希缓存），补不完如实回报。 |
 | `get_extension_introduction` | 感知 | 读**某个能力位**的 introduction（作者写的 markdown，manifest 声明路径、上限截断）；没写则**标注式降级**给包级 description 并声明它是二手参考；同身份跨包时要 `packageId` 消歧。按需拉取（渐进式披露）。 |
 | `list_sound_sources` | 感知 | 三层钻取：不给 `engine` → 列引擎(不 Init)；给 `engine` → 列该引擎音源(id/名/描述)；给 `engine`+`source` → 读该音源参数 schema(part/note/自动化/音素级，各带类型/范围/默认)。后两层仅 Init 该引擎。`kind` 可选过滤。 |
 | `list_effects` | 感知 | 分层枚举效果器：不给 `engine` → 列 effect 引擎(不 Init)；给 `engine` → 用 part-free 空 context 纯静态读其参数 schema(静态属性 + 自动化轨，各带类型/范围/默认，仅 Init 它)。 |
@@ -34,6 +34,7 @@ TuneLab 内置 AI Agent 通过"工具"读取与编辑当前工程。**核心理�
 | `set_keybinding` | 感知(写) | 改一条绑定：绑手势 / `gesture:""` 解绑 / `reset:true` 恢复默认。同域冲突默认拒绝（要 `replaceConflict:true` 才夺键并解除原命令）；**过授权闸门**；即时生效无需重启。 |
 | `list_extension_routing` | 感知 | 列被多包争用的扩展身份：各候选包 / 当前生效 / 是用户选定还是默认规则。**排障用**（"插件不生效"常是被顶替，非没装好）。读 `ExtensionRouting.GetConflicts`。 |
 | `set_extension_routing` | 感知(写) | 为某争用身份选定提供包（空=清除回默认规则）。**过授权闸门**；即时落盘但**重启后生效**。 |
+| `set_extension_enabled` | 感知(写) | 把某个已装包（或包内某一个能力位）**关掉但不卸载**；`capability` 省略=整包。**过授权闸门**；即时落盘但**重启后生效**。读面在 `list_extensions` 的 DISABLED 注记。 |
 | `list_extension_settings` | 感知 | 列哪些扩展声明了**自己的设置**（设置窗「扩展」页），给定一个则列其字段：键/标签/类型·范围·选项/默认/当前值。**密钥字段只报 (set)/(not set)、绝不回灌明文**。schema 取自插件 `GetSettingsConfig`。 |
 | `set_extension_setting` | 感知(写) | 改某扩展一个设置字段 + 落盘 + `ApplyOne` 立即回喂。按字段 config 校验；**密钥字段一律拒写**；**过授权闸门**。 |
 | `run_in_sandbox` | 探测 | 在一个**可丢弃无头工程**里跑 JS（同一 `tl` 面 + `sandbox` 全局），够到静态读够不着的东西（尤其**真实音素**：挂真音源+合法歌词+触发合成后才存在）。写入不碰用户数据、**不过授权闸门**。见下「探测沙箱」节。 |
@@ -50,6 +51,7 @@ TuneLab 内置 AI Agent 通过"工具"读取与编辑当前工程。**核心理�
         ├─ get_script_inputs ──────────────────► ScriptRunner.GetInputConfig + ScriptInputMemory（只读）
         ├─ save/list/read/delete_script ───────► ScriptLibrary / ScriptTools
         ├─ list_extensions / get_extension_introduction ─► ExtensionManager.LoadResults（含逐条目 Entries，只读）
+        │        └─ 返回前：ExtensionSummaryFiller（短文档原话直采 / 长文档串行+预算旁路请求）──► ExtensionSummaryCache（内容寻址）
         ├─ list_sound_sources ─────────────────► VoicesManager / InstrumentsManager（只读；给 engine 才 Init；给 engine+source 合成 context 求参数 schema）
         ├─ list_effects ───────────────────────► EffectManager（只读，给 engine 才 Init + 空 context 求 schema）
         ├─ list_settings ──────────────────────► SettingsRegistry（只读；声明即枚举源）
@@ -58,6 +60,7 @@ TuneLab 内置 AI Agent 通过"工具"读取与编辑当前工程。**核心理�
         ├─ set_keybinding ─────────────────────► ToolAuthorization ──► Keymap.Rebind / ResetToDefault（自带落盘 + Changed 广播）
         ├─ list_extension_routing ─────────────► ExtensionRouting.GetConflicts / GetSelected（只读）
         ├─ set_extension_routing ──────────────► ToolAuthorization ──► ExtensionRouting.SetSelected（落盘，重启生效）
+        ├─ set_extension_enabled ──────────────► ToolAuthorization ──► ExtensionActivation.SetPackageEnabled / SetEntryEnabled（落盘，重启生效）
         ├─ list_extension_settings ─────────────► ExtensionSettingsManager.GetEntries + 插件 GetSettingsConfig（只读；密钥只报有无）
         ├─ set_extension_setting ──────────────► ToolAuthorization ──► ExtensionSettingsStore.Save + ExtensionSettingsManager.ApplyOne
         └─ run_in_sandbox ─────────────────────► SandboxHost（专用线程 + 可泵 SyncContext + 可丢弃 IProject；tl + sandbox 全局；不过授权闸门）
@@ -100,7 +103,7 @@ RunScriptTool (Agent 层，薄) ──► ScriptRunner ──► Jint 引擎 + �
 | `project`（`tl.currentProject()`） | 字段(读写，**导出设置**) `exportPath/exportFileName/exportFormat(wav|mp3|flac|ogg)/exportSampleRate/exportBitDepth/exportBitrate/masterExportEnabled/masterExportChannels`；`tracks()`、`addTrack(info?,index?)`、`insertTrack(track,index?)`、`removeTrack(track)→track`、`importTracks(path)→[track]`(从文件导入全部轨、加法式并进、保留当前时基/原始 tick、返回新轨；格式 tlp/tlpx/mid/midi+插件)、`tempos()`、`timeSignatures()`、`setTempo(bpm,atTick?)`、`setTimeSignature(num,den,atBar?)`、`removeTempo(atTick)`、`removeTimeSignature(atBar)`(该处无标记则报错；首个标记 = 基准速度/拍号，不可删) |
 | `track` | 字段(读写) `name/isMute/isSolo/gain(dB)/pan/asRefer/color`、(读写，**导出设置**) `exportEnabled/exportChannels(1\|2)`；`getInfo()`(不含导出开关，见下)、`parts()`、`addPart(info)`、`insertPart(part)`(**可跨轨** = 迁移)、`removePart(part)→part` |
 | `part` | 几何(读写) `pos`(锚点绝对 tick，也是内容坐标原点 → 赋值即平移整段)、`startOffset`、`endOffset`；(只读派生) `startPos/endPos/dur`；其它(读写) `name/gain`(dB,part 级)、(只读) `type`；`getInfo()`、`track()→track`(向上取所属轨，只读)、`soundSource()→{type,id,name,kind,defaultLyric}`、`setSoundSource({kind,type,id})`(切音源；未知报错、空清源)、`effects()`、`addEffect(info,index?)`、`insertEffect(effect,index?)`、`removeEffect(effect)→effect`、`moveEffect(effect,index)`(效果链增删排)、`getProperty(key)→值\|null`、`setProperty(key,value)`(per-part 声明参数，键/范围见 list_sound_sources)、`notes()`、`selectedNotes()`、`addNote(info)`、`insertNote(note)`、`removeNote(note)→note`、`samplePitch(s,e,n)`、`setPitchLine(s,e,pts)`、`clearPitch(s,e)`、`automationIds()`(连续轨)、`sampleAutomation(id,s,e,n)`、`setAutomation(id,s,e,pts,default?)`、`clearAutomation(id,s,e)`、`piecewiseAutomationIds()`(分段轨)、`samplePiecewiseAutomation(id,s,e,n)`、`setPiecewiseAutomationLine(id,s,e,pts)`、`clearPiecewiseAutomation(id,s,e)`、`vibratos()`、`addVibrato(info)`、`insertVibrato(vib)`、`removeVibrato(vib)→vibrato` |
-| `note` | 字段(读写) `pos/dur/pitch/lyric/pronunciation`(发音覆盖，空串=按歌词派生)、(只读) `pitchName/hasPinnedPhonemes`、(读写) `bodyOffset`(秒，写自动钉死)；`getInfo()`、`part()→part`(向上取所属 part，只读；`vibrato.part()`/`effect.part()` 同理)、`getProperty(key)→值\|null`、`setProperty(key,value)`(per-note 声明参数，见 list_sound_sources)、`phonemes()→[phoneme]`、`addLeadingPhoneme(info)`、`addBodyPhoneme(info)`(引导/主体是两个独立列表，故两个方法)、`removePhoneme(ph)`、`pinPhonemes()`、`clearPhonemes()`(音素只读来自引擎，首次写自动钉死) |
+| `note` | 字段(读写) `pos/dur/pitch/lyric/pronunciation`(显式发音覆盖，空串=无覆盖、歌词原文直达引擎由其自行 G2P)、(只读) `pitchName/hasPinnedPhonemes`、(读写) `bodyOffset`(秒，写自动钉死)；`getInfo()`、`part()→part`(向上取所属 part，只读；`vibrato.part()`/`effect.part()` 同理)、`getProperty(key)→值\|null`、`setProperty(key,value)`(per-note 声明参数，见 list_sound_sources)、`phonemes()→[phoneme]`、`addLeadingPhoneme(info)`、`addBodyPhoneme(info)`(引导/主体是两个独立列表，故两个方法)、`removePhoneme(ph)`、`pinPhonemes()`、`clearPhonemes()`(音素只读来自引擎，首次写自动钉死) |
 | `phoneme`（`note.phonemes()` 的一项，voice 专属） | 字段(只读) `leading`(bool)、(读写) `symbol/duration(秒)/stretchWeight`(0=刚性辅音/>0=可伸元音，写任一自动钉死)；`getInfo()`、`getProperty(key)→值\|null`、`setProperty(key,value)`(per-phoneme 声明参数，键见 list_sound_sources 音素 slot)。**按位置定址**：增删改变其后下标，结构变更后重取 `note.phonemes()` |
 | `vibrato` | 字段(读写) `pos/dur/frequency/amplitude/phase/attack/release`；`getInfo()`、`affectedAutomations()→{轨id:振幅}`、`affectedEffectAutomations()→{effect id:{轨id:振幅}}`、`setAmplitude(id,amp,effect?)`、`removeAmplitude(id,effect?)`(影响表：本颤音把振幅施加到哪些参数轨；省略 effect = 音源级轨) |
 | `effect`（`part.effects()` 的一项） | 字段(读写) `isEnabled`(false=旁路)、(只读) `type/name/id/index`(链中 0-based 位)；`getInfo()`、`getProperty(key)→值\|null`、`setProperty(key,value)`(number/bool/string，键/范围见 list_effects)；`automationIds()`、`sampleAutomation(id,s,e,n)`、`setAutomation(id,s,e,pts,default?)`、`clearAutomation(id,s,e)`、`piecewiseAutomationIds()`、`samplePiecewiseAutomation(id,s,e,n)`、`setPiecewiseAutomationLine(id,s,e,pts)`、`clearPiecewiseAutomation(id,s,e)`(本 effect 的参数自动化曲线，形状同 part 级) |
@@ -131,7 +134,7 @@ RunScriptTool (Agent 层，薄) ──► ScriptRunner ──► Jint 引擎 + �
 - **`save_script(name, code)`**：存（新建/覆盖）到库（`%APPDATA%/TuneLab/Scripts`）。**只持久化、不执行**。若 `code` 声明了 `getScriptInfo` 先**预校验**（沙箱 eval 顶层 + 调 `getScriptInfo`，复用 `ScriptTools.InspectSource`，改动原子回退，**先于授权**——不为坏脚本弹卡片）——失败不保存、回灌错误；成功回报注册到哪个菜单。无 `getScriptInfo` 则存为普通一次性脚本（仅 Script 侧栏）。**覆盖已存脚本**是破坏用户外部文件 → 过授权闸门（见下）；新建是加性、不拦。
 - **`list_scripts`** / **`read_script(name)`** / **`delete_script(name)`**：列出(标工具+context/带入参/plain) / 读源码 / 删除。**`delete_script` 恒过授权闸门**（删外部文件不可撤销）。
 
-**工程之外的写的授权（`ToolAuthorization`）**：历史记录管理器只保工程数据、**保不了外部文件与应用配置**，故 `delete_script`（恒）、`save_script` 覆盖已存（仅覆盖）、`set_setting`（恒）、`set_keybinding`（恒）、`set_extension_routing`（恒）、`set_extension_setting`（恒）也走 `Settings.AgentAuthorization` + 同一确认卡片。与工程写的区别是**无预览-回退**（这些操作不能试运行）：`Auto` 直接做；`ReadOnlyAdvice` 不做、只回报会做什么 + 提示手动/提权；`Confirm` 经卡片裁决（应用本次/始终允许切 Auto/拒绝）。确认回调统一为 `Func<AgentAuthorizationRequest, …>`（`AgentWriteKind` = ProjectEdit / ScriptDelete / ScriptOverwrite / SettingChange / KeybindingChange / RoutingChange / ExtensionSettingChange；`NewValue` 供文案点名新值、`SecondaryTarget` 点名顺带受影响的对象[当前只有夺键时被解绑的那个命令]），卡片按种类出不同文案（改设置/改快捷键的卡片显示**本地化行标/命令名**、模型侧才用键与 id）。只读工具（含环境感知的枚举件）永不过闸门。
+**工程之外的写的授权（`ToolAuthorization`）**：历史记录管理器只保工程数据、**保不了外部文件与应用配置**，故 `delete_script`（恒）、`save_script` 覆盖已存（仅覆盖）、`set_setting`（恒）、`set_keybinding`（恒）、`set_extension_routing`（恒）、`set_extension_setting`（恒）、`set_extension_enabled`（恒）也走 `Settings.AgentAuthorization` + 同一确认卡片。与工程写的区别是**无预览-回退**（这些操作不能试运行）：`Auto` 直接做；`ReadOnlyAdvice` 不做、只回报会做什么 + 提示手动/提权；`Confirm` 经卡片裁决（应用本次/始终允许切 Auto/拒绝）。确认回调统一为 `Func<AgentAuthorizationRequest, …>`（`AgentWriteKind` = ProjectEdit / ScriptDelete / ScriptOverwrite / SettingChange / KeybindingChange / RoutingChange / ExtensionSettingChange / ProjectExport(+Overwrite) / ExtensionActivationChange；`NewValue` 供文案点名新值、`SecondaryTarget` 是定位/说明本次改动所需的第二个对象[夺键时=被顺带解绑的那个命令；启停单个能力时=它所属的包名]），卡片按种类出不同文案（改设置/改快捷键的卡片显示**本地化行标/命令名**、模型侧才用键与 id）。只读工具（含环境感知的枚举件）永不过闸门。
 
 工具脚本约定（喂 LLM 全文在 `ScriptApiReference.cs` 的 "TOOL SCRIPTS" 节）：顶层**只定义函数、无副作用**；`getScriptInfo()` 返回 `{name, category?, author?, version?, context}`（`name` 里读 `tl.language` 本地化）；`main()` 是动作。`context` = `global`（顶部 Scripts 菜单，按 category 分组）/ `note`（钢琴命中音符，目标 `selectedNotes()`）/ `partContent`（钢琴空白，目标 `currentPart()`）/ `part`（编排命中 part，目标 `selectedParts()`）/ `track`（轨道头，目标 `selectedTracks()`）/ `trackContent`（编排空白泳道，目标 `selectedTracks()`）。注册/菜单注入由 `TuneLab.Scripting.ScriptTools` + `TuneLab.UI.ScriptToolMenu` 完成（设计见 `docs/script-tools-design.md`）。
 
@@ -151,7 +154,7 @@ RunScriptTool (Agent 层，薄) ──► ScriptRunner ──► Jint 引擎 + �
 编辑面只让 agent 改工程，但要「推荐插件/音源、指导用户在哪用某能力」，agent 得先**看见宿主环境**。这几件除 `set_setting` 外都是纯只读查询——按架构原则（单一动作面）**工程状态的修改恒走 `run_script`，绝不另开工程写工具**；`set_setting` 改的是**宿主应用配置**（不是工程状态、没有也不该有 `tl` 面），故是工具面的一个写口，并自带授权闸门：
 
 - **`list_extensions`**：读 `ExtensionManager.LoadResults`（已本地化摊平的结构化加载结果），按包一条列名/id/版本/作者/类别/加载状态/错误/包级 description，并内嵌逐 **能力位** 行（`kind:identity` 身份清单、显示名、有无 introduction、routing 冲突态）。两层粒度各有其用：**包**承载排障与管理事实（加载状态/sdk 门/卸载单位/routing 的选择值也是包 id），**能力位**才是推荐与使用时真正引用的东西。是「诉求 3」的地基。
-- **`get_extension_introduction(capability, packageId?)`**：在各包 `Entries` 里按 `kind:identity` / 裸 identity / 显示名匹配条目 → 读其 `IntroductionPath`（加载期已按 manifest 声明 + `localizations` 语言覆盖解析成绝对路径）→ `File.ReadAllText`。**粒度是能力位而非包**（一个包多个能力各有各的介绍）；同身份跨包并存时**不猜**、列候选要求传 `packageId`（同 `list_extension_settings` 的规矩）。介绍可能很长 → 独立按需工具（渐进式披露，同 `get_script_api`），回灌上限 2 万字符截断。**宿主只认 manifest 声明的 introduction**：包里的 README 是作者面向仓库读者的自留文件，不再当元数据；回报里点明该文本出自作者、非宿主保证。
+- **`get_extension_introduction(capability, packageId?)`**：在各包 `Entries` 里按 `kind:identity` / 裸 identity / 显示名匹配条目（三种写法的匹配与消歧收口在 `ExtensionCapabilityLookup`，与 `set_extension_enabled` 共用一份——它们认的写法必须完全一致，那是对模型的契约，一处多认一种、另一处不认，模型就会在工具间来回试错） → 读其 `IntroductionPath`（加载期已按 manifest 声明 + `localizations` 语言覆盖解析成绝对路径）→ `File.ReadAllText`。**粒度是能力位而非包**（一个包多个能力各有各的介绍）；同身份跨包并存时**不猜**、列候选要求传 `packageId`（同 `list_extension_settings` 的规矩）。介绍可能很长 → 独立按需工具（渐进式披露，同 `get_script_api`），回灌上限 2 万字符截断。**宿主只认 manifest 声明的 introduction**：包里的 README 是作者面向仓库读者的自留文件，不再当元数据；回报里点明该文本出自作者、非宿主保证。
 - **`list_sound_sources(kind?, engine?, source?)`**：三层钻取避免一次性 Init 全部引擎——不给 `engine` 用 `GetAllVoiceEngines/GetProviders/GetDisplayName`（不 Init）列引擎；给 `engine` 用 `GetAllVoiceInfos/GetAllInstrumentInfos`（**仅 Init 该引擎**）列其音源；给 `engine`+`source` 读该音源**参数 schema**（诉求 4/5 的地基）。音源枚举/schema 求值跑插件代码，故在 **UI 线程**执行；空引擎 `type=""` 在列表里跳过。
   - **音源参数 schema（第三层，A4）**：config 是 **voiceId 的函数**（不同音源可声明不同参数），且 `VoicesManager.Declare` 对**未知 id 静默回退空引擎**给出误导性空 schema——故必须按「引擎 + 真实音源 id」读、先 `TryGetVoiceInfo` 校验 source 存在。`VoicesManager`/`InstrumentsManager` 的 `Get*Config` 是 public（但 `GetInitedEngine` 是 private，故走 manager 方法而非直取引擎，与 effect 不同）。用 Agent 层自建的 **part-free 合成 context**（真 `VoiceId` + 空 `Notes`/`PartProperties`/`Automations`，见 `SoundSourceInfoTools` 的 `StaticVoicePartContext` 等）纯静态调 5 个（voice）/4 个（instrument，无音素/歌词）声明方法。schema 是**默认值版**（条件化 schema 只呈现默认分支，同 effect 上限）。**phoneme 是静态读的天花板**：其 slot 来自 note 里**真实音素**（数据驱动），空 note 恒空——除非引擎恰好静态声明了 slot schema，否则如实标注"需合成后才可见"、**不造假 note**（phoneme 的真发现走「探测沙箱」`run_in_sandbox`，见下节：agent 在可丢弃工程里挂源/造合法歌词/触发合成/读回显）。
 - **`list_effects(engine?)`**：`EffectManager` 严格镜像音源管理器（`GetAllEffectEngines/GetProviders/GetDisplayName/GetInitedEngine`），故列引擎层与音源同格式（共用 `EngineCatalog`）。与音源不同——effect **无「音源目录」**（一个引擎 = 一种效果器类型），第二层列的是**参数 schema**：给 `engine` 时 `GetInitedEngine`（**仅 Init 它**）→ 传一个 **part-free 的空 `IEffectSynthesisPropertyContext`**（空 `IEffectSynthesisView`：无改过的值 → 各参数取引擎默认）→ 调引擎三个纯函数声明方法 `GetPropertyConfig`（静态属性 `ObjectConfig`）/`GetAutomationConfigs`（可编辑自动化轨）/`GetSynthesizedParameterConfigs`（只读回显轨），逐参数输出类型/范围/默认。是「诉求 6」的地基。要点：宿主自带的 `EffectPropertyContext` 绑 part 且 private，不可复用，故 Agent 层自建极简空 context；effect 无内建引擎（全来自插件）；条件化 schema 只能拿「默认值版」（静态枚举固有上限）；读 schema 必须 Init 引擎（跑插件代码）→ UI 线程。
@@ -199,6 +202,33 @@ RunScriptTool (Agent 层，薄) ──► ScriptRunner ──► Jint 引擎 + �
 - **`set_extension_routing(kind, identity, packageId?)`**（写）：只接受**确实争用**的身份（非争用直接报错，免得写进无意义选择）；packageId 必须是该身份的候选之一；空 = 清除选择并如实告知会回落到谁；与当前选择相同则"什么都没做"。过闸门（`AgentWriteKind.RoutingChange`），**回报必须说"重启后生效"**（`SetSelected` 即时落盘，但解析发生在加载期），卡片文案也带这句。
 - **系统提示钉住排障链**：`list_extensions`（状态/错误/是否被顶替）→ `list_extension_routing`（有争用才需要）→ `list_sound_sources`/`list_effects`（能力真的在不在），**明确要求不许停在第一步**。
 
+### 能力位摘要（`list_extensions` 内联补齐）
+
+作者只写 introduction 全文，**刻意没有 summary 字段**（作者不知道模型要什么，写出来多半是产品文案）。代价是模型每要"扫一眼这台机器上都有什么能力"，就得逐个把全文拉进上下文（每份上限 2 万字符）——装十几个插件时这一步比它真正要做的事还贵。故 `list_extensions` **返回前把缺的摘要补齐**，逐能力位带一行；要作者原文仍走 `get_extension_introduction`。对 agent 而言 summary 就是能力位自带的属性，它感知不到生成过程、也没有对应的工具。
+
+- **短文档直接用作者原话，不调模型**：introduction 归一化（去 markdown 标题/列表标记、折叠空白）后 ≤600 字符时，它本身就是一句话说明——再转述一遍既费钱又只会更差（转述必然丢信息，还引入编造的可能）。这类条目标 `Verbatim`，呈现时说 **(author's own words)** 而非 "TuneLab's paraphrase"：**出处比转述强，不该一律标成转述**。实测这一条能消掉大多数请求，真正要调模型的只剩长文档。
+- **内容寻址**：键 = introduction **文件内容**的哈希（前 16 字节 hex）。三个好处白得：① 插件更新换了文案 → 哈希变 → **自动失效**（一份过期摘要比没有摘要更糟，模型会照着它向用户断言）；② 语言变体天然分开（`localizations` 让不同语言指向不同文件）；③ 多后缀 format 条目共用一份说明 → 共用一条摘要，卸载重装也照样命中。代价是文件不可读，故另存 `Label` 字段纯供人排查、**永不参与查找**。
+- **存 `Configs/ExtensionSummaries.json`**：与用户环境绑定 **且** 是派生缓存，两条都指向不进 Settings.json。懒加载，照 `ScriptInputMemory` 范式。写入时顺带清掉指向"当前已装扩展里不存在的 introduction"的条目；**一条 live 都没有时不清**——那通常意味着扩展还没加载完，照做会把整份缓存抹掉。
+- **`SUMMARY:` 标记协议**（防"我来帮你总结："）：要求模型的回复**最后一行**恰为 `SUMMARY: <一句话>`，宿主只取最后一个标记之后的内容，**没有标记就整条丢弃**。只在 prompt 里写 `no preamble` 挡不住——`Sure, here is a one-line summary.` 这种客套话长度合规、也不以 `{` 开头，会一路混进缓存被后来的每个会话读到。取**最后一个**标记是因为模型偶尔会先复述一遍格式要求。
+- **宁可没有也不要错的，且绝不截断**：超 600 字符（离谱输出的兜底，不参与塑形）、以 `{`/`[` 开头、或答 `NONE`（模型自判这份文档没什么可总结的）→ 丢弃不缓存。截出来的半句话，agent 之后每次读到都会困惑，而用户与开发者都不知情。
+- **串行 + 60 秒预算，补不完如实回报**：一次可能要补十几条，并发很容易撞上 provider 的频率限制，一旦 429 整批白跑。超预算就停手，末尾附一句"N 条没做完，让用户稍后再问一次"，对应条目写 `(not summarized yet …)`——**不静默给半份**，模型得知道自己拿到的是不是全的。单份失败不拖累其余、也不做负缓存。
+- **不合批**（曾考虑拼几份进一次请求以减少往返，否掉了）：① **串味**——同时喂多个同类插件（措辞高度相似），模型很容易把 A 的特性写进 B 的摘要，而这种错"看起来完全合理"，是最难被发现的一类；② 失败从丢一条变成**丢一批**（合批要结构化输出，稍有偏差整批解析失败）；③ 长输入本身降质，靠后的几份明显更笼统；④ 省的只是往返、不是 token，而限流已由串行解决。何况有了"短文档直采"之后，真需要调模型的恰恰是长文档——最不该合批的那种。
+- **喂入口径**与 `get_extension_introduction` 一致（复用它的 `MaxIntroductionChars`）——绝不用比 agent 自己能看到的更少的信息去总结；两处各设一个数，早晚漂移成"摘要是从半份文档提炼的"而没人察觉。
+- **两版被否掉的形态**：① 给 agent 一个 `set_extension_summary` 让它读完写回——依赖它记得调，且为产出一句话得先把全文拉进它的上下文，而这一步的全部目的恰恰是让它不必读全文；② 拆成独立的 `get_extension_summary` 工具——"扫一眼全部"要么退化成 N 次工具往返（每次都要重发完整上下文 + 全部工具声明，比内联贵得多），要么就是把 `list_extensions` 抄一遍。
+- **不进 UI**：详情窗渲染的是作者写的全文。把自动生成的句子摆到用户面前，等于让宿主替作者背书一段他没写过的话。
+
+### 扩展启停（`set_extension_enabled` + `list_extensions` 的结局注记）
+
+"关掉但不卸载"——插件老报错、或加载慢又不常用时的正解。存取在 `ExtensionActivation`（独立 JSON `Configs/ExtensionActivation.json`，形状 `packageId → 被禁 entryKey 列表`，`"*"` = 整包），UI 全在扩展详情窗（header 的包级开关 + 各 tab 的条目级开关）；侧栏卡片**只展示状态**（「已禁用」+「需重启」徽标），刻意不放开关——卡片就那么点高，右栏已有版本徽标与卸载键，再塞开关不是挨着卸载"邀请误点"、就是把右栏挤成三层堆叠。**不进 Settings.json**（`ExtensionRouting.json` 同理）：Settings 只承「宿主固定的设置集合」——同一份发给任何用户都成立；而这两份的键与值都是"这台机器上装了哪些包"的函数，换台机器整份都无意义，属用户使用留下的痕迹，与 `ParameterPinning` / `RecentSoundSourceManager` / `ExtensionSettings.json` 同类。判据是**数据是否与用户环境绑定**，不是它有没有设置窗 UI（路由有一整页 UI，照样得搬出去）。
+
+- **与路由是两根轴，别混**：路由回答"同一身份有多个实现时用谁"，启停回答"这份实现要不要参与加载"——后者对**没有任何竞争者的独苗**同样成立，而路由对独苗无话可说（它只列冲突行）。故 agent 排障时两件都要看：被顶替（routing）与被关掉（activation）的表象都是"装了却没用上"，处方却完全不同。
+- **两级粒度**：省略 `capability` = 整包（**legacy 包与 manifest 坏包只有这一档**，它们没有条目可禁；且整包关掉时连程序集都不加载，是真能省启动时间的那一档）；给 `capability`（`kind:identity`）= 只关包里那一个能力，其余照常工作。多后缀 format 条目的几个身份共用同一份实现，**一起开关**（写入时逐身份各存一条，判定时任一命中即算禁用——作者日后增删后缀不会让用户的禁用悄悄失效）。
+- **`list_extensions` 的两处如实标注**（缺了就会主动误导，同 routing 的道理）：整包被关时包级 `status=Disabled` 外另起一行说明"装了但被关，本次运行它的能力一个都不存在"；逐能力位行补 `[DISABLED by the user]` / `[FAILED to load: …]` / `[SKIPPED: …]`——**包级状态是汇总，答不了"这个包里到底哪一个能力没起来"**，而那正是用户要问的粒度。这也是 `ExtensionEntryInfo.Status` 这个条目级状态存在的理由。
+- **`set_extension_enabled(packageId, enabled, capability?)`**（写）：过闸门（`AgentWriteKind.ExtensionActivationChange`，卡片按"整包/单能力 × 开/关"四句分别措辞）。整包已关时，单个能力**既不能单独开**（如实要求先开整包）**也无需再关**（已经是关的）——不写一个看不出效果的选择。与当前状态相同则"什么都没做"、不弹卡。回报必须说**重启后生效**，且关的那次要补一句"在那之前它这一轮仍然可用"。
+- **禁用发生在注册之前**：被禁的条目根本不进各 manager，于是 routing 矩阵、扩展设置页、`list_sound_sources`/`list_effects` 自然都看不到它——**无需在每个下游各写一遍过滤**。副作用之一：被禁条目在详情窗里没有设置齿轮（它没有实例可配置），重新启用并重启后自会回来。
+- **工具描述里钉住后果**：关掉 = 下次启动它彻底不存在，工程里引用它的部分（用那个音源的 part、那个格式的文件）会解析不到——`set_extension_enabled` 的描述要求 agent 先把这句告诉用户再动手。
+- **键会自己清理**（`ExtensionActivation.PruneUnknown`，加载全部包之后按"已装全集"跑一次）：卸载不会回来收拾自己的禁用键，留着就会埋雷——日后重装同一个包会**静默地装完就是关的**。语义 = 包没了，对它的选择也就没了；再装回来算新装、默认启用。
+
 ### 扩展自己的设置（`list_extension_settings` / `set_extension_setting`）
 
 设置窗「扩展」页那些——由插件经 `IExtensionSettings` 声明、存 `ExtensionSettings.json`（两级分桶 `root[packageId][kind:extensionId]`）。与宿主应用设置那对工具同范式，差别在**判据只能来自插件的声明**（扩展字段没有静态类型，`GetSettingsConfig` 就是唯一真源，且它是**当前值的函数**、字段可动态显隐）：
@@ -207,6 +237,7 @@ RunScriptTool (Agent 层，薄) ──► ScriptRunner ──► Jint 引擎 + �
 - **`set_extension_setting(extension, key, value, packageId?)`**（写）：按字段 config 校验（`ConfigText` 出措辞，`JsonScalar` 统一数字/字符串宽容口径），过闸门（`AgentWriteKind.ExtensionSettingChange`），落地路径**与设置窗关页时逐字一致**：读全量已存值 → 改一格 → **按改后值重算的 schema** 取密钥集（动态面板下密钥字段可能显隐，避免漏标/误标）→ `ExtensionSettingsStore.Save` → `ExtensionSettingsManager.ApplyOne` 立即回喂。回报提醒"引擎可能只在下次启动时读取"。
 - **密钥政策（用户 2026-07-26 定）：只读不回灌 + 禁写**。声明为 `TextBoxConfig.IsPassword` 的字段（API key / 许可证，走 DPAPI/钥匙串）：`list` 只报 `currently SET` / `NOT set`、**绝不把明文放进模型上下文**；`set` 一律拒绝并引导用户自己去设置窗填。理由=把用户密钥经模型上下文送去第三方服务，风险与收益完全不成比例。注意**保存时密钥仍被完整保留**（Load 解密 → Save 重新加密，与设置窗同一往返），拒写只拦 agent 这一路。
 - **边界**：`agent-model` 的 provider 设置也存在同一文件里，但它的 UI 在 agent 侧栏、不进设置窗扩展页，故 `ExtensionSettingsManager.GetEntries()` 不含它 → 这对工具也看不到它（刻意：agent 不配置自己的模型连接，见 `AgentModelProvider` 的 `AgentWritable=false`）。
+- **format 也在列**（桶键 `<kind>:<两方向后缀并集按声明序用 `|` 拼接>`，如双向 `format:mid|midi`、只导出 `format-export:midi`；kind 由作者填了哪几个后缀字段**推出**，manifest 里的 `type` 恒为 `format`）：它与三种引擎的结构差异是注册的是**工厂**而非长驻实例，故 `GetEntries()` 拿到的是 `FormatsManager` 的**探测实例**（只用来问 schema / 存取值），真正干活的实例在导入导出时现 new、由 `FormatsManager` 就地回喂。对 agent 完全无感：`set` 后照旧立即生效（下次导入/导出的实例就会拿到），回报里那句"可能要重启"对 format 反而不适用但无害。**身份是条目不是后缀**——多后缀格式只出现一行，`extension` 传拼接串或显示名均可；同一后缀的导入与导出若由两个类实现（那是两个条目），则是**两行、两个桶**，得分别设。
 - **顺手修的宿主漏洞**：`GetEntries()` 此前只收 effect + voice，**漏了 instrument**（其管理器同样有不触发 Init 的 `GetExtensionSettings`）——声明了设置的 instrument 插件既不在设置窗渲染、也拿不到 `ApplyPersisted` 回喂。已补一行 `Collect(…, "instrument", …)`，故本对工具与设置窗扩展页同时受益（新增 `instrument:` 桶键，此前从未写过任何值，无迁移问题）。
 
 ## 探测沙箱（`run_in_sandbox`）

@@ -10,13 +10,18 @@ namespace TuneLab.GUI.Components;
 
 // 给任意由 ScrollViewer 支撑滚动的宿主挂平滑滚轮：隧道拦截原生逐格跳滚，指数缓动逼近目标偏移。
 // 与滚动条视觉解耦——无论条是 AdornerLayer 浮层（OverlayScrollBars）还是树内叠放（如自造下拉弹层）都可复用。
-// shift+滚轮走横向（须 allowHorizontal）、否则纵向；无可滚内容则放行冒泡让外层容器接管。
+// shift+滚轮与触控板横滑走横向（须 allowHorizontal）、否则纵向；无可滚内容则放行冒泡让外层容器接管。
 internal sealed class SmoothWheelScroller
 {
-    public SmoothWheelScroller(Control host, Func<ScrollViewer?> scrollViewer, bool allowHorizontal = false)
+    // horizontalOnly：宿主**只有横轴**可滚（如一行 tab 条）。此时普通滚轮就驱动横轴，不必按 shift。
+    // 不给这个开关的话，纵轴无可滚内容会让事件直接放行——横向条就完全滚不动了。
+    // 做成显式 opt-in 而非"纵轴滚不动就自动转横轴"：后者会让既有调用方（如只有横向内容的文本框）
+    // 悄悄改变行为，而这里是宿主自己清楚"我就是一根横条"。
+    public SmoothWheelScroller(Control host, Func<ScrollViewer?> scrollViewer, bool allowHorizontal = false, bool horizontalOnly = false)
     {
         mScrollViewer = scrollViewer;
         mAllowHorizontal = allowHorizontal;
+        mHorizontalOnly = horizontalOnly;
         mAnimation = new WheelAnimation(this);
         host.AddHandler(InputElement.PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
     }
@@ -36,7 +41,13 @@ internal sealed class SmoothWheelScroller
                 return;
         }
 
-        bool horizontal = (e.KeyModifiers & KeyModifiers.Shift) != 0 && mAllowHorizontal;
+        // 轴判定：横条恒走横轴；否则横向分量占优（触控板双指横滑 / 倾斜滚轮）走横轴，剩下的按 shift 走。
+        // 纵向宿主收到纯横滑必须放行——旧实现在 Delta.Y==0 时拿 Delta.X 当纵向量用，横滑会把竖列表滚起来。
+        bool horizontalGesture = Math.Abs(e.Delta.X) > Math.Abs(e.Delta.Y);
+        bool horizontal = mHorizontalOnly || horizontalGesture || ((e.KeyModifiers & KeyModifiers.Shift) != 0 && mAllowHorizontal);
+        if (horizontal && !mHorizontalOnly && !mAllowHorizontal)
+            return;   // 宿主没有横轴：不消费横滑，放行冒泡
+
         double max = horizontal
             ? Math.Max(0, sv.Extent.Width - sv.Viewport.Width)
             : Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
@@ -46,7 +57,9 @@ internal sealed class SmoothWheelScroller
         double curBase = mAnimating && mHorizontal == horizontal
             ? mTarget
             : (horizontal ? sv.Offset.X : sv.Offset.Y);
-        double delta = e.Delta.Y != 0 ? e.Delta.Y : e.Delta.X;
+        double delta = horizontalGesture ? e.Delta.X : (e.Delta.Y != 0 ? e.Delta.Y : e.Delta.X);
+        if (delta == 0)
+            return;
 
         // 边界放行（嵌套滚动链）：内容虽可滚，但已在滚轮方向的端点还继续滚 → 不消费，让事件冒泡给
         // 外层容器接管，用户无需把鼠标移出内层滚动区。delta>0=向上(趋 0)、delta<0=向下(趋 max)。
@@ -99,6 +112,7 @@ internal sealed class SmoothWheelScroller
 
     readonly Func<ScrollViewer?> mScrollViewer;
     readonly bool mAllowHorizontal;
+    readonly bool mHorizontalOnly;
     readonly WheelAnimation mAnimation;
     bool mAnimating;
     bool mHorizontal;

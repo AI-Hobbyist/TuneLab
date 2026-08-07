@@ -136,18 +136,54 @@ internal class ExtensionSideBarContentProvider : ISideBarContentProvider
             itemView.OpenDetailRequested += () => OnOpenDetail(result);
             if (ExtensionManager.PendingUninstalls.Contains(result.DirectoryPath))
                 itemView.MarkPendingUninstall();
+            itemView.SetRestartRequired(NeedsRestart(result));
             mAllExtensions.Add(itemView);
         }
+    }
+
+    // 存下来的启停选择与【本次运行的实际状态】是否已经不一致——不一致就得重启才生效。
+    // 两侧都要比：包级（整包关/开）与逐条目级，任一处不符即为真。
+    private static bool NeedsRestart(ExtensionLoadResult result)
+    {
+        if (string.IsNullOrEmpty(result.Id))
+            return false;
+
+        if (ExtensionActivation.IsPackageDisabled(result.Id) != (result.Status == ExtensionLoadStatus.Disabled))
+            return true;
+
+        foreach (var entry in result.Entries)
+        {
+            if (ExtensionActivation.IsEntryDisabled(result.Id, entry.Kind, entry.Identities)
+                != (entry.Status == ExtensionEntryStatus.Disabled))
+                return true;
+        }
+        return false;
+    }
+
+    // 重算并回推「需重启」提示到两个视图（卡片 + 正开着的详情窗）。
+    private void SyncActivationHints(ExtensionLoadResult result, ExtensionItemView itemView)
+    {
+        bool needsRestart = NeedsRestart(result);
+        itemView.SetRestartRequired(needsRestart);
+        if (mDetailWindow != null && mDetailWindowPath == result.DirectoryPath)
+            mDetailWindow.SetRestartRequired(needsRestart);
     }
 
     // 展示用的类别列表（每项渲染成一枚徽标）。无真实类别时退回单项占位。
     private static IReadOnlyList<string> DisplayTypes(ExtensionLoadResult result)
     {
         if (result.Types.Count > 0)
-            return result.Types.Select(Capitalize).ToList();
+            return result.Types.Select(BadgeLabel).Distinct().ToList();
 
         return [result.Generation == ExtensionGeneration.Legacy ? "Legacy" : "Extension"];
     }
+
+    // 徽标文本：format 三型合并成一枚 **Format**。
+    // 徽标回答的是"这是个什么类型的插件"，而"能读还是能写"是**条目粒度**的事实——一个既导入又导出的包
+    // 会挂出两枚只差方向的徽标，占掉整行却没多说什么。方向要在详情窗每个 tab 旁边点明（那里两个 tab 并排、
+    // 名字只差括号里一个词，不标方向反而分不清），见 ExtensionDetailPage.Kind。
+    private static string BadgeLabel(string kind)
+        => FormatsManager.IsFormatKind(kind) ? "Format" : Capitalize(kind);
 
     private static string Capitalize(string s)
         => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
@@ -198,11 +234,7 @@ internal class ExtensionSideBarContentProvider : ISideBarContentProvider
     // 首个有设置的条目"这类猜测（卡片上原来那个包级齿轮已因此移除）。
     private void OnOpenSettings(ExtensionLoadResult result, string extensionKey)
     {
-        var settings = new SettingsWindow(result.Id, extensionKey);
-        if (TopLevel.GetTopLevel(mContentPanel) is Avalonia.Controls.Window owner)
-            settings.Show(owner);
-        else
-            settings.Show();
+        SettingsWindow.Open(TopLevel.GetTopLevel(mContentPanel) as Avalonia.Controls.Window, result.Id, extensionKey);
     }
 
     // 详情窗正文的分页：**逐 manifest 条目恒一页**，不做任何合并、也不按"有没有内容"过滤。
@@ -211,6 +243,7 @@ internal class ExtensionSideBarContentProvider : ISideBarContentProvider
     //   故不会出现两个条目指同一份文档，也就不需要"按文件去重"那种事后补救（那样两条目 name 不同时无从取舍）。
     // 不过滤：tab 一栏如实回答"这个包提供哪些能力位、各自是什么"。没写文档的条目照样占一页（显占位），
     //   否则用户看不到它的存在；也只有恒生成，才有地方承载该条目的齿轮（及后续的启用/禁用开关）。
+    // 【也不因禁用而过滤】被关掉的条目照样占一页——那正是用户回来把它重新打开的地方。
     private static List<ExtensionDetailPage> BuildDetailPages(ExtensionLoadResult result)
     {
         var pages = new List<ExtensionDetailPage>();
@@ -226,14 +259,9 @@ internal class ExtensionSideBarContentProvider : ISideBarContentProvider
 
         foreach (var entry in result.Entries)
         {
-            // 多身份条目（多后缀 format）取首个命中的桶——设置桶目前是 per 能力位的，format 也还没接进设置系统；
-            // 真接进来时应改成 per 条目一桶（否则同一格式的几个后缀会各存一份设置）。
-            string? settingsKey = null;
-            foreach (var id in entry.Identities)
-            {
-                var key = entry.Kind + ":" + id;
-                if (settingsKeys.Contains(key)) { settingsKey = key; break; }
-            }
+            // 被禁用的条目不会注册，故也不在 GetEntries 里 → 本页没有齿轮。这是实情：它这次没加载，
+            // 没有实例可配置；重新启用并重启后齿轮自会回来。
+            var settingsKey = SettingsKeyOf(entry, settingsKeys);
 
             string? markdown = null;
             if (!string.IsNullOrEmpty(entry.IntroductionPath))
@@ -246,9 +274,11 @@ internal class ExtensionSideBarContentProvider : ISideBarContentProvider
             {
                 Title = string.IsNullOrEmpty(entry.DisplayName) ? result.Name : entry.DisplayName,
                 Kind = Capitalize(entry.Kind),
+                EntryKind = entry.Kind,   // 原样 type：启停键要与加载期同口径，不能用上面的展示串
+                CanDisable = ExtensionActivation.CanDisableEntry(result.Id, entry.Kind, entry.Identities),
                 // format 条目的身份就是文件后缀：如实列在页里，否则用户只看到一个名字、不知道它管哪些文件。
                 Identities = entry.Identities,
-                IdentitiesAreFileSuffixes = entry.Kind == "format",
+                IdentitiesAreFileSuffixes = FormatsManager.IsFormatKind(entry.Kind),
                 Markdown = markdown,
                 FilePath = entry.IntroductionPath,
                 SettingsKey = settingsKey,
@@ -256,6 +286,29 @@ internal class ExtensionSideBarContentProvider : ISideBarContentProvider
         }
 
         return pages;
+    }
+
+    // 条目 → 它的设置桶键（没有设置则 null）。
+    // engine 类是 1:1，身份即桶键；format 三型是【多后缀共一份实现、也就共一个桶】，键取全部后缀按声明序拼接
+    // （与 FormatsManager.EntryId 同口径）——逐后缀去查会全部落空，多后缀 format 的齿轮就没了。
+    private static string? SettingsKeyOf(ExtensionEntryInfo entry, HashSet<string> settingsKeys)
+    {
+        if (entry.Identities.Count == 0)
+            return null;
+
+        if (FormatsManager.IsFormatKind(entry.Kind))
+        {
+            var key = entry.Kind + ":" + FormatsManager.EntryId(entry.Identities);
+            return settingsKeys.Contains(key) ? key : null;
+        }
+
+        foreach (var id in entry.Identities)
+        {
+            var key = entry.Kind + ":" + id;
+            if (settingsKeys.Contains(key))
+                return key;
+        }
+        return null;
     }
 
     // 打开扩展详情窗：正文按包内各条目分页渲染其 introduction（都没写则显占位），弹出可缩放详情窗。
@@ -277,6 +330,7 @@ internal class ExtensionSideBarContentProvider : ISideBarContentProvider
                 // 类别徽标只在无条目页时用得上（legacy / manifest 坏包）；有 tab 的包由各 tab 自带徽标。
                 Types = DisplayTypes(result),
                 PackageDir = result.DirectoryPath,
+                PackageId = result.Id,
                 Pages = pages,
                 IsLegacy = result.Generation == ExtensionGeneration.Legacy,
                 IsPendingUninstall = ExtensionManager.PendingUninstalls.Contains(result.DirectoryPath),
@@ -301,7 +355,16 @@ internal class ExtensionSideBarContentProvider : ISideBarContentProvider
                 if (itemView != null)
                     OnCancelUninstall(itemView);
             };
+            // 窗内改了启停（包级或条目级）：卡片上没有开关可同步，但「需重启」提示要跟着亮/灭——
+            // 那是卡片列表里唯一能看出"这个包的启停被改过、还没生效"的地方。
+            win.ActivationChanged += () =>
+            {
+                var itemView = mAllExtensions.FirstOrDefault(v => v.ExtensionPath == result.DirectoryPath);
+                if (itemView != null)
+                    SyncActivationHints(result, itemView);
+            };
             mDetailWindow = win;
+            win.SetRestartRequired(NeedsRestart(result));
 
             if (TopLevel.GetTopLevel(mContentPanel) is Avalonia.Controls.Window owner)
                 win.Show(owner);

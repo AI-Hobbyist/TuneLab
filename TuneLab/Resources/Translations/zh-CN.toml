@@ -43,6 +43,7 @@
 "Auto Save Interval (second)" = "自动保存间隔（秒）"
 "Parameter Boundary Extension (tick)" = "参数边界扩展（tick）"
 "Parameter Sync Mode" = "参数同步模式"
+"Auto Generate Pronunciation" = "自动生成发音"
 "Track Hue Change Rate (degree/second)" = "轨道色相变化速率（度/秒）"
 "General" = "通用"
 "Audio" = "音频"
@@ -74,7 +75,7 @@
 "Note Tool" = "音符工具"
 "Pitch Pen" = "音高画笔"
 "Anchor Tool" = "锚点工具"
-"Pitch Locking Brush" = "音高锁定笔刷"
+"Locking Brush" = "固定笔刷"
 "Vibrato Tool" = "颤音工具"
 
 [TrackScrollView]
@@ -94,6 +95,7 @@
 
 [AutomationRenderer]
 "Drag to associate the vibrato" = "拖拽以关联颤音"
+"No value here, vibrato has no effect" = "此处无值，颤音不生效"
 
 [Dialog]
 "OK" = "确认"
@@ -101,6 +103,8 @@
 "Yes" = "是"
 "No" = "否"
 "Save" = "保存"
+"Replace" = "替换"
+"Replace this file with the recovered content?" = "用恢复出来的内容替换这个文件？"
 "Tips" = "提示"
 "Error" = "错误"
 "Failed to load script:" = "加载脚本失败："
@@ -162,6 +166,7 @@
 "Track" = "轨道"
 "Export failed: \n" = "导出失败： \n"
 "The file failed to open because it does not exist." = "打开失败，目标文件不存在。"
+"Failed to open the file:" = "打开文件失败："
 "Update Available" = "新版本可用"
 "Version" = "版本号"
 "Public Date" = "发布时间"
@@ -182,6 +187,12 @@
 "Installed: " = "已安装："
 "Partial" = "部分"
 "Skipped" = "已跳过"
+"Disabled" = "已禁用"
+"Enabled" = "已启用"
+"Restart Required" = "需重启"
+"Enable or disable this extension. Takes effect after restarting TuneLab." = "启用或禁用该扩展。重启 TuneLab 后生效。"
+"Enable or disable this capability. Takes effect after restarting TuneLab." = "启用或禁用该能力。重启 TuneLab 后生效。"
+"The whole extension is disabled, so its capabilities cannot be turned on individually." = "整个扩展已被禁用，其中的单个能力无法单独启用。"
 
 [Property]
 "Properties" = "属性"
@@ -239,7 +250,7 @@
 "Note Tool" = "音符工具"
 "Pitch Pen" = "音高画笔"
 "Anchor Tool" = "锚点工具"
-"Pitch Locking Brush" = "音高锁定笔刷"
+"Locking Brush" = "固定笔刷"
 "Vibrato Tool" = "颤音工具"
 "Play/Pause" = "播放/暂停"
 "Go to Start" = "跳到起点"
@@ -252,6 +263,7 @@
 "Open" = "打开"
 "Save" = "保存"
 "Save As" = "另存为"
+"Save to Original Location" = "存回原位"
 "Export As" = "导出为"
 "Export Mix" = "导出混音文件"
 "Edit" = "编辑"
@@ -372,6 +384,10 @@
 "The agent wants to delete the saved script \"{0}\". This can't be undone." = "Agent 想删除已保存的脚本“{0}”。此操作无法撤销。"
 "The agent wants to overwrite the saved script \"{0}\". This can't be undone." = "Agent 想覆盖已保存的脚本“{0}”。此操作无法撤销。"
 "The agent wants \"{1}\" to be the package that provides \"{0}\" (takes effect after a restart)." = "Agent 想让「{1}」成为「{0}」的提供包（重启后生效）。"
+"The agent wants to enable the extension \"{0}\" (takes effect after a restart)." = "Agent 想启用扩展「{0}」（重启后生效）。"
+"The agent wants to disable the extension \"{0}\" (takes effect after a restart)." = "Agent 想禁用扩展「{0}」（重启后生效）。"
+"The agent wants to enable the \"{0}\" capability of \"{1}\" (takes effect after a restart)." = "Agent 想启用「{1}」的「{0}」能力（重启后生效）。"
+"The agent wants to disable the \"{0}\" capability of \"{1}\" (takes effect after a restart)." = "Agent 想禁用「{1}」的「{0}」能力（重启后生效）。"
 "The agent wants to remove the shortcut for \"{0}\"." = "Agent 想解除「{0}」的快捷键绑定。"
 "The agent wants to set the shortcut for \"{0}\" to {1}." = "Agent 想把「{0}」的快捷键设为 {1}。"
 "This also unbinds the shortcut of \"{0}\"." = "这会同时解除「{0}」的快捷键绑定。"

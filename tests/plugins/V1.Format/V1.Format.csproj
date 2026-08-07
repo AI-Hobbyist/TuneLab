@@ -18,6 +18,9 @@
 
   <ItemGroup>
     <Content Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 拆写形态：导入与导出各是一个条目，各有自己的一份 introduction（详情窗两个 tab）。 -->
+    <Content Include="Introduction.Import.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Introduction.Export.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

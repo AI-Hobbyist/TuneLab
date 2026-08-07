@@ -11,14 +11,19 @@ internal static class PathManager
 {
     public static string AppDataFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
     public static string TuneLabFolder => Path.Combine(AppDataFolder, "TuneLab");
+    // History 子目录由 AutoSaveStore 自己拥有（它按对复制与轮换），不在此另立一个会与之重复的定义。
     public static string AutoSaveFolder => Path.Combine(TuneLabFolder, "AutoSave");
-    public static string AutoSaveHistoryFolder => Path.Combine(AutoSaveFolder, "History");
     public static string LogsFolder => Path.Combine(TuneLabFolder, "Logs");
     public static string ConfigsFolder => Path.Combine(TuneLabFolder, "Configs");
     public static string SettingsFilePath => Path.Combine(ConfigsFolder, "Settings.json");
     public static string EditorStateFilePath => Path.Combine(ConfigsFolder, "EditorState.json");
     public static string RecentSoundSourcesFilePath => Path.Combine(ConfigsFolder, "RecentSoundSources.json");
     public static string ParameterPinsFilePath => Path.Combine(ConfigsFolder, "ParameterPins.json");
+    // 与用户环境绑定的扩展数据各存各的（同 ExtensionSettings.json，都不进 Settings.json）：
+    public static string ExtensionRoutingFilePath => Path.Combine(ConfigsFolder, "ExtensionRouting.json");
+    public static string ExtensionActivationFilePath => Path.Combine(ConfigsFolder, "ExtensionActivation.json");
+    // 能力位摘要缓存（宿主从作者的 introduction 备好、供 agent 读；派生数据非用户可调项，键是内容哈希）。
+    public static string ExtensionSummariesFilePath => Path.Combine(ConfigsFolder, "ExtensionSummaries.json");
     public static string KeybindingsFilePath => Path.Combine(ConfigsFolder, "Keybindings.json");
     public static string ScriptInputsFilePath => Path.Combine(ConfigsFolder, "ScriptInputs.json");
     public static string ExtensionsFolder => Path.Combine(TuneLabFolder, "Extensions");

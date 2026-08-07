@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 测试插件（V1 / format，紧凑形态 + 方向子集）：读 .asym/.asymx、只写 .asymx。
+       引用当前 V1 SDK，Private=false 不打进包。输出落 tests/packages/v1-asymformat/。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputPath>$(MSBuildThisFileDirectory)..\..\packages\v1-asymformat\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\TuneLab.Foundation\TuneLab.Foundation.csproj" Private="false" />
+    <ProjectReference Include="..\..\..\TuneLab.SDK\TuneLab.SDK.csproj" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Introduction.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

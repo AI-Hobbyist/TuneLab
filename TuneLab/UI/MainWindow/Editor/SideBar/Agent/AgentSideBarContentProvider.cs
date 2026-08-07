@@ -130,7 +130,9 @@ internal sealed class AgentSideBarContentProvider
                 new GetScriptInputsTool(project, mCurrentPartProvider, mQuantizationProvider, lang, mSelectionProvider, mPianoSelectionProvider),
                 new RunSavedScriptTool(writeExecutor, project, mCurrentPartProvider, mQuantizationProvider, lang, mSelectionProvider, mPianoSelectionProvider),
                 // 环境感知（只读）：枚举插件/readme、音源目录、effect 引擎+参数——让 agent 看见宿主装了什么、可推荐什么。
-                new ListExtensionsTool(),
+                // 逐能力位的一句话摘要由宿主在返回前补齐（短文档直接用作者原话，长文档才发一次旁路请求、
+                // 按内容哈希缓存），故不额外开工具；要作者全文仍走 get_extension_introduction。
+                new ListExtensionsTool(SendSideRequestAsync),
                 new GetExtensionIntroductionTool(),
                 new ListSoundSourcesTool(),
                 new ListEffectsTool(),
@@ -144,6 +146,9 @@ internal sealed class AgentSideBarContentProvider
                 // 扩展路由：主要用于排障（「我的插件怎么不生效」→ 其实是身份被别的包顶替了），改选同样过闸门。
                 new ListExtensionRoutingTool(),
                 new SetExtensionRoutingTool(RequestScriptAuthorizationAsync),
+                // 扩展启停：把某个包（或包内某个能力）关掉但不卸载。与路由是两根轴——路由在多个实现里挑一个，
+                // 启停决定某份实现要不要参与加载（对没有竞争者的独苗同样适用）。读面在 list_extensions。
+                new SetExtensionEnabledTool(RequestScriptAuthorizationAsync),
                 // 扩展自己的设置（设置窗「扩展」页）：读 schema+当前值 / 改一格。密钥字段只报有无、禁读禁写。
                 new ListExtensionSettingsTool(),
                 new SetExtensionSettingTool(RequestScriptAuthorizationAsync),
@@ -1241,6 +1246,18 @@ internal sealed class AgentSideBarContentProvider
         };
     }
 
+    // 扩展摘要补齐用的旁路请求：与自动标题同一形态——**自包含的一次性调用**，不带工具声明、不带对话
+    // 历史、不带主循环的系统提示，只是复用同一个 provider 连接（session 对象逐次调用无共享可变状态，
+    // 主循环正 await 工具时并发调它是安全的）。未连模型 → 返回 null，补齐闸据此整体跳过。
+    async Task<string?> SendSideRequestAsync(IReadOnlyList<AgentMessage> messages, CancellationToken cancellationToken)
+    {
+        var session_model = mSession;
+        if (session_model == null)
+            return null;
+        var reply = await session_model.SendAsync(new AgentModelRequest { Messages = messages }, cancellationToken);
+        return reply.Content;
+    }
+
     // 自动标题：用模型把首轮总结成几字标题，覆盖占位的首条截断。失败/未连接则保留占位（已是首条截断）。
     async Task GenerateTitleAsync(SessionContext ctx, string userText, string assistantText)
     {
@@ -1261,6 +1278,10 @@ internal sealed class AgentSideBarContentProvider
             var reply = await session_model.SendAsync(request, CancellationToken.None);
             // 防线：模型没遵守"只回简短标题"——回了一大段、或把工具结果/数据当回复 dump（曾致标题=一长串内容或 {"音轨名称":...} JSON）→
             // 丢弃，保留占位（首条用户消息截断，已是可读标题）。真·6 词标题远短于 60 字、也不会以 { [ 开头。
+            // 【已知未防的一类】前言型客套话（"好的，标题：音符编辑"）够短、也不以 { 开头，会原样存进去。
+            // 至今未实际发生（起标题是被训练得极熟的短指令，且 user 消息里没有长文档诱它进入讲解语气），
+            // 且标题用户可见、一键可改名，故暂不处理。真遇到时对策现成：照 ExtensionSummaryFiller 的
+            // `SUMMARY:` 标记协议做一个 `TITLE:`——只取标记之后的内容，没标记就整条丢弃。
             var raw = (reply.Content ?? string.Empty).Trim();
             if (raw.Length == 0 || raw.Length > 60 || raw[0] == '{' || raw[0] == '[')
                 return;
@@ -1641,6 +1662,11 @@ internal sealed class AgentSideBarContentProvider
         backdrop.PointerWheelChanged += (_, e) =>
         {
             e.Handled = true;
+            // 触控板双指横滑（横向分量占优）在预览里没有对应动作，直接吃掉：不忽略的话 Delta.Y==0 会落进
+            // 下面的三元判断被当成"向下滚"、横滑一下图就缩小一档。
+            if (Math.Abs(e.Delta.X) > Math.Abs(e.Delta.Y))
+                return;
+
             var s0 = scale.ScaleX;
             var s1 = Math.Clamp(s0 * (e.Delta.Y > 0 ? 1.15 : 1 / 1.15), MinScale, MaxScale);
             if (s1 == s0)
@@ -2631,6 +2657,15 @@ internal sealed class AgentSideBarContentProvider
                         " " + string.Format("This also unbinds the shortcut of \"{0}\".".Tr(this), request.SecondaryTarget)),
                 AgentWriteKind.RoutingChange => string.Format("The agent wants \"{1}\" to be the package that provides \"{0}\" (takes effect after a restart).".Tr(this), request.Target, request.NewValue),
                 AgentWriteKind.ExtensionSettingChange => string.Format("The agent wants to change the extension setting \"{0}\" to {1}.".Tr(this), request.Target, request.NewValue),
+                // 启停：整包与单个能力两种口径，开与关又各一句——四句都写全，不拿"设为 enable/disable"这种
+                // 机器味的通用句糊过去（关掉一个能力等于让它从本次运行里消失，用户得一眼看懂关的是什么）。
+                AgentWriteKind.ExtensionActivationChange => string.IsNullOrEmpty(request.SecondaryTarget)
+                    ? (request.NewValue == "enable"
+                        ? string.Format("The agent wants to enable the extension \"{0}\" (takes effect after a restart).".Tr(this), request.Target)
+                        : string.Format("The agent wants to disable the extension \"{0}\" (takes effect after a restart).".Tr(this), request.Target))
+                    : (request.NewValue == "enable"
+                        ? string.Format("The agent wants to enable the \"{0}\" capability of \"{1}\" (takes effect after a restart).".Tr(this), request.Target, request.SecondaryTarget)
+                        : string.Format("The agent wants to disable the \"{0}\" capability of \"{1}\" (takes effect after a restart).".Tr(this), request.Target, request.SecondaryTarget)),
                 // 导出：卡片必须摆出【完整落地路径】——路径是任意的，用户只有看到它才能判断这一下写到哪。
                 // 覆盖另起一句，别把"替换掉已有文件"混在同一句里说轻了。
                 AgentWriteKind.ProjectExport => string.Format("The agent wants to export the project as {1} to:\n{0}".Tr(this), request.Target, request.NewValue),

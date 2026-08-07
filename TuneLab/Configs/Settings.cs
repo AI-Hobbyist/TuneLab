@@ -10,7 +10,10 @@ namespace TuneLab.Configs;
 // 宿主设置：值 holder + 元数据 + 磁盘读写全部声明在 SettingsRegistry（单一真源）。本类只做两件事：
 //  ① 对外暴露既有的 Settings.Xxx 访问器（委托到注册表条目的 NotifiableProperty，消费者零改动）；
 //  ② Init/Save 遍历注册表读写 settings.json（键/类型/顺序与旧格式一致，逐字段兼容）。
-// ExtensionRouting 是非通知型扁平映射（改后须重启，走 ExtensionRouting 模块），随本文件读写、不入注册表。
+// 【边界】本文件只承「宿主固定的设置集合」——同一份配置发给任何用户都成立。凡与**用户环境**绑定的
+// （装了哪些扩展、用过哪些音源、往参数面板钉了什么）都不在此列：那是使用痕迹，各自独立 JSON
+// （ExtensionRouting.json / ExtensionActivation.json / ExtensionSettings.json / ParameterPins.json /
+//  RecentSoundSources.json）。判据是"这份数据换台机器还成不成立"，不是"它有没有设置窗 UI"。
 internal static class Settings
 {
     // 默认值来源（单一默认源；阶段②重写设置窗后可并入注册表）。
@@ -27,6 +30,7 @@ internal static class Settings
     public static NotifiableProperty<bool> ShowAllPianoKeyLabels => SettingsRegistry.ShowAllPianoKeyLabels.Property;
     public static NotifiableProperty<string> PianoKeyLabelStyle => SettingsRegistry.PianoKeyLabelStyle.Property;
     public static NotifiableProperty<string> NumberedPianoKeyTonic => SettingsRegistry.NumberedPianoKeyTonic.Property;
+    public static NotifiableProperty<bool> AutoGeneratePronunciation => SettingsRegistry.AutoGeneratePronunciation.Property;
     public static NotifiableProperty<string> PianoKeySamplesPath => SettingsRegistry.PianoKeySamplesPath.Property;
     public static NotifiableProperty<int> AutoSaveInterval => SettingsRegistry.AutoSaveInterval.Property;
     public static NotifiableProperty<int> AutoSaveMaxCount => SettingsRegistry.AutoSaveMaxCount.Property;
@@ -39,8 +43,6 @@ internal static class Settings
     public static NotifiableProperty<string> AgentModelProvider => SettingsRegistry.AgentModelProvider.Property;
     public static NotifiableProperty<string> AgentAuthorization => SettingsRegistry.AgentAuthorization.Property;
     public static NotifiableProperty<int> AgentMaxToolResultChars => SettingsRegistry.AgentMaxToolResultChars.Property;
-    // 扩展冲突消解的用户选择（routeKey → packageId）；非通知型（改后须重启生效，与切语言一致），存取经 ExtensionRouting。
-    public static Dictionary<string, string> ExtensionRouting { get; private set; } = new();
 
     public static void Init(string path)
     {
@@ -60,8 +62,6 @@ internal static class Settings
 
         foreach (var item in SettingsRegistry.All)
             item.Load(json);
-
-        ExtensionRouting = ReadRouting(json);
     }
 
     public static void Save(string path)
@@ -71,11 +71,6 @@ internal static class Settings
             var json = new JsonObject();
             foreach (var item in SettingsRegistry.All)
                 item.Save(json);
-
-            var routing = new JsonObject();
-            foreach (var kv in ExtensionRouting)
-                routing[kv.Key] = JsonValue.Create(kv.Value);
-            json["ExtensionRouting"] = routing;
 
             var folder = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(folder))
@@ -89,24 +84,6 @@ internal static class Settings
         {
             Log.Error("Failed to save settings: " + ex);
         }
-    }
-
-    static Dictionary<string, string> ReadRouting(JsonObject json)
-    {
-        var result = new Dictionary<string, string>();
-        if (json.TryGetPropertyValue("ExtensionRouting", out var node) && node is JsonObject obj)
-        {
-            foreach (var kv in obj)
-            {
-                try
-                {
-                    if (kv.Value is not null)
-                        result[kv.Key] = kv.Value.GetValue<string>();
-                }
-                catch { }
-            }
-        }
-        return result;
     }
 
     static readonly JsonSerializerOptions JsonSerializerOptions = new() { WriteIndented = true };
