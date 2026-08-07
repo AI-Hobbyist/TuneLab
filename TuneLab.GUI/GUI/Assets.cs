@@ -85,6 +85,11 @@ internal static class Assets
     // 只有 Regular 字形，使用处勿继承 Bold/Italic；无中文字形，勿用于含可翻译文本的字符串。
     public static FontFamily NotoMono = new FontFamily("avares://TuneLab/Assets/Font#Noto Mono");
 
+    // 简谱（数字简谱）音高标签字体，真身在仓库根 jianpu-ascii-font 子模块的 JianpuASCII.ttf（ttf 内部家族名带空格：Jianpu Ascii）。
+    // 以 ASCII 连字（ligature）渲染简谱：数字 1-7 为音符，' 高八度（点在上）、, 低八度（点在下），#/b 为变音记号。
+    // 仅含简谱所需字符（数字/撇/逗号/井号等），勿用于一般文本；只有 Regular 字形。
+    public static FontFamily Jianpu = new FontFamily("avares://TuneLab/Assets/Font#Jianpu Ascii");
+
     // 数值显示/输入的默认观感字体：显式 Segoe UI（平台默认，表格数字同宽）。历史上这些处写裸名 "NotoMono"
     // 解析失败回退到它，观感已被认可为基准。勿改成不设 FontFamily——那会继承 WithInterFont 注入的
     // 应用默认 Inter（数字比例宽度）；非 Windows 缺 Segoe UI 时回退平台默认，与旧行为一致。

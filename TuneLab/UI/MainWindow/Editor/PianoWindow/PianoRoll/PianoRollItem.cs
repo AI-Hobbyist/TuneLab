@@ -135,11 +135,28 @@ internal partial class PianoRoll
     {
         if (Settings.PianoKeyLabelStyle.Value == "Numbered" && TryGetNumberedPitchLabelParts(keyNumber, out var number, out int octaveOffset) && CanDrawNumberedDotLabel(rect, octaveOffset))
         {
-            DrawNumberedDotLabel(context, rect, brush, number, octaveOffset, textAlignment, rectAlignment, offset);
+            // 字体连字只覆盖 ±2 个八度（1'' 到 1,,）；更远的八度退回手动画点。
+            if (Math.Abs(octaveOffset) <= JianpuMaxOctaveOffset)
+                DrawJianpuLabel(context, rect, brush, number, octaveOffset, textAlignment, rectAlignment, offset);
+            else
+                DrawNumberedDotLabel(context, rect, brush, number, octaveOffset, textAlignment, rectAlignment, offset);
             return;
         }
 
         context.DrawString(label, rect, brush, KeyLabelFontSize(rect), textAlignment, rectAlignment, offset);
+    }
+
+    // 简谱音高标签：直接以 jianpu-ascii-font 的 ASCII 连字写法渲染——数字 1-7 为音符，' 高八度（点在上）、
+    // , 低八度（点在下），# 为升号。由字体连字合成带八度点的规范简谱字形，比手动画点更标准、随字号缩放。
+    static void DrawJianpuLabel(DrawingContext context, Rect rect, IBrush brush, string number, int octaveOffset, int textAlignment, int rectAlignment, Point offset)
+    {
+        string text = octaveOffset > 0
+            ? number + new string('\'', octaveOffset)
+            : octaveOffset < 0
+                ? number + new string(',', -octaveOffset)
+                : number;
+
+        context.DrawString(text, rect, brush, KeyLabelFontSize(rect), textAlignment, rectAlignment, offset, JianpuTypeface);
     }
 
     static bool CanDrawNumberedDotLabel(Rect rect, int octaveOffset)
@@ -230,4 +247,7 @@ internal partial class PianoRoll
     const double NumberedDotTextShift = 2.5;
     const double NumberedDotRightInset = 13;
     const double NumberedDotLabelMinHeight = 18;
+    // 简谱字体（Assets.Jianpu，jianpu-ascii-font）——其 ASCII 连字只支持 ±2 个八度。
+    static readonly Typeface JianpuTypeface = new(Assets.Jianpu);
+    const int JianpuMaxOctaveOffset = 2;
 }
