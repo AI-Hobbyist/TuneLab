@@ -72,13 +72,46 @@ internal class TempoManager : DataObject, ITempoManager
         mTempos[index].Bpm.Set(bpm);
     }
 
-    public double[] GetTimes(IReadOnlyList<double> ticks) => Snapshot.ToSeconds(ticks);
-    public double[] GetTicks(IReadOnlyList<double> times) => Snapshot.ToTicks(times);
-    public double GetTick(double time) => Snapshot.ToTick(time);
-    public double GetTime(double tick) => Snapshot.ToSecond(tick);
+    public double[] GetTimes(IReadOnlyList<double> ticks) => Timebase.ToSeconds(ticks);
+    public double[] GetTicks(IReadOnlyList<double> times) => Timebase.ToTicks(times);
+    public double GetTick(double time) => Timebase.ToTick(time);
+    public double GetTime(double tick) => Timebase.ToSecond(tick);
 
     // 快照即换算实现：live 侧用的就是惰性重建的缓存，捕获时直接共享（不可变，零拷贝）。
-    public TempoSnapshot CreateSnapshot() => Snapshot;
+    public TempoSnapshot CreateSnapshot() => Timebase;
+
+    // —— M2 会话时基覆盖（DAW 为 master）——
+    // 桥接时按 DAW 当前曲速恒定线性换算（tick = 秒 × bpm/60 × RESOLUTION）；覆盖期间工程
+    // 曲速表不变（只是不参与换算），断开（null）即还原。变更走 Notify → Modified，
+    // 触发既有失效机制（合成重建 / UI 刷新），与本地改曲速同路径。
+    public double? TimebaseOverrideBpm { get; private set; }
+
+    public void SetTimebaseOverride(double? bpm)
+    {
+        if (bpm != null && (!double.IsFinite(bpm.Value) || bpm.Value <= 0))
+            bpm = null;
+
+        if (TimebaseOverrideBpm == bpm)
+            return;
+
+        TimebaseOverrideBpm = bpm;
+        mOverrideSnapshot = bpm is double v
+            ? new TempoSnapshot([new TempoMark(0, v)], MusicTheory.RESOLUTION)
+            : null;
+        mSnapshot = null;
+        Notify();
+    }
+
+    // 生效中的时基：覆盖态用 DAW 恒定曲速快照，否则用工程曲速快照。
+    TempoSnapshot Timebase
+    {
+        get
+        {
+            if (mOverrideSnapshot != null)
+                return mOverrideSnapshot;
+            return mSnapshot ??= new TempoSnapshot(mTempos.Convert(t => new TempoMark(t.Pos, t.Bpm)), MusicTheory.RESOLUTION);
+        }
+    }
 
     public List<TempoInfo> GetInfo()
     {
@@ -94,8 +127,7 @@ internal class TempoManager : DataObject, ITempoManager
         mTempos.SetInfo(info.Convert(t => new TempoForTempoManager(t)).ToArray());
     }
 
-    TempoSnapshot Snapshot => mSnapshot ??= new TempoSnapshot(mTempos.Convert(t => new TempoMark(t.Pos, t.Bpm)), MusicTheory.RESOLUTION);
-
+    TempoSnapshot? mOverrideSnapshot;
     TempoSnapshot? mSnapshot;
     readonly DataObjectList<TempoForTempoManager> mTempos;
     readonly IProject mProject;

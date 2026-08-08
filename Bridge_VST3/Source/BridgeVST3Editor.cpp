@@ -18,7 +18,7 @@ BridgeVST3Editor::BridgeVST3Editor (BridgeVST3Processor& p)
     addAndMakeVisible (mVersionLabel);
     mVersionLabel.setJustificationType (juce::Justification::centred);
     mVersionLabel.setFont (juce::Font (11.0f));
-    mVersionLabel.setText ("TuneLab VST Bridge  (M0)", juce::dontSendNotification);
+    mVersionLabel.setText ("TuneLab VST Bridge  (M1)", juce::dontSendNotification);
 
     startTimer (TL_BRIDGE_HEARTBEAT_MS);
     timerCallback();
@@ -44,14 +44,33 @@ void BridgeVST3Editor::resized()
 
 void BridgeVST3Editor::timerCallback()
 {
-    if (!mProcessor.session().isCreated())
+    auto& session = mProcessor.session();
+    if (!session.isCreated())
     {
         mStatusLabel.setText ("Bridge session unavailable", juce::dontSendNotification);
+        mDetailLabel.setText ({}, juce::dontSendNotification);
     }
     else
     {
         mStatusLabel.setText (mProcessor.lastConnected() ? "Connected" : "Waiting for TuneLab...", juce::dontSendNotification);
-        mDetailLabel.setText ("Session: " + mProcessor.sessionId(), juce::dontSendNotification);
+
+        // M1：会话 id + DAW 音频配置（采样率/块大小/激活总线）。
+        juce::String detail = "Session: " + mProcessor.sessionId();
+        const uint32_t sr = session.readSampleRate();
+        if (sr != 0)
+        {
+            detail += "\nDAW: " + juce::String (sr) + " Hz, block " + juce::String (session.readBlockSize())
+                    + ", buses " + juce::String (session.readActiveBuses());
+
+            // 诊断（M1 音频链路）：DAW 播放头位置 + 总线 0 的宿主写位/插件读位/下溢。
+            const uint64_t dawPos  = session.readSamplePos();
+            const uint64_t writePos = session.ringWritePos (0);
+            const uint64_t readPos  = session.ringReadPos (0);
+            const uint64_t underflow = session.ringState (0) != nullptr ? session.ringState (0)->underflow : 0;
+            detail += "\npos " + juce::String (dawPos) + "  W " + juce::String (writePos)
+                    + "  R " + juce::String (readPos) + "  uf " + juce::String (underflow);
+        }
+        mDetailLabel.setText (detail, juce::dontSendNotification);
     }
 }
 

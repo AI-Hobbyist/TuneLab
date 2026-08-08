@@ -40,6 +40,10 @@ enum TLBridgeProtocolError {
     kTLBridgeErrorBusy            = 3,   /* 已有宿主连接 */
 };
 
+/* 传输状态位（TLBridgeControl.state；映射 VST ProcessContext 位标志） */
+#define TL_BRIDGE_STATE_PLAYING   0x1u   /* DAW 正在播放 */
+#define TL_BRIDGE_STATE_LOOPING   0x2u   /* DAW 循环激活 */
+
 typedef struct TLBridgeTrack {
     char     name[TL_BRIDGE_TRACK_NAME_MAX];  /* UTF-8 轨道名；空串 = 未占用 */
     uint32_t enabled;                          /* 该轨是否输出 */
@@ -117,6 +121,32 @@ typedef struct TLBridgeControl {
 #define TL_BRIDGE_TRACK_OFF_BUS_INDEX    68u
 #define TL_BRIDGE_TRACK_OFF_FOLLOW_GAIN_PAN 72u
 #define TL_BRIDGE_TRACK_OFF_MIRROR_MUTE_SOLO 76u
+
+/* —— M1：每输出总线一条立体声环形缓冲（按绝对采样位置寻址） ——
+ * 环不是滚动队列，而是"按绝对采样位置索引的滑窗"：帧 p 落在槽 p % TL_BRIDGE_RING_SAMPLES。
+ * 有效窗口为 [writePos - TL_BRIDGE_RING_SAMPLES, writePos)（宿主单向写，插件单向读）。
+ * 宿主（写者）渲染到 writePos 之后写回；插件（读者）在实时回调按 DAW 位置拉取。
+ * 数据区为 L/R 交错 float32，贴合 AudioBusBuffers。 */
+typedef struct TLBridgeRing {
+    uint64_t writePos;   /* 宿主已渲染到（不含）的绝对采样位置上限 */
+    uint64_t readPos;    /* 插件已消费到的绝对采样位置上限（宿主可读，诊断/校准） */
+    uint64_t underflow;  /* 插件累计下溢样本数（宿主可读，诊断） */
+} TLBridgeRing;
+
+#define TL_BRIDGE_RING_SAMPLES    384000u   /* 每总线环容量（帧）：8s @ 48k，可调 */
+#define TL_BRIDGE_RING_SIZE       24u       /* sizeof(TLBridgeRing) */
+#define TL_BRIDGE_RING_OFF_WRITE_POS   0u
+#define TL_BRIDGE_RING_OFF_READ_POS    8u
+#define TL_BRIDGE_RING_OFF_UNDERFLOW   16u
+
+/* 环形缓冲区布局（控制块之后，同一文件映射内） */
+#define TL_BRIDGE_RING_STATE_OFF  TL_BRIDGE_CONTROL_SIZE
+#define TL_BRIDGE_RING_DATA_OFF   (TL_BRIDGE_RING_STATE_OFF + TL_BRIDGE_MAX_TRACKS * TL_BRIDGE_RING_SIZE)
+#define TL_BRIDGE_RING_DATA_SIZE  (TL_BRIDGE_MAX_TRACKS * TL_BRIDGE_RING_SAMPLES * 2) /* 交错样本总数 */
+#define TL_BRIDGE_TOTAL_SIZE      (TL_BRIDGE_RING_DATA_OFF + TL_BRIDGE_RING_DATA_SIZE * (uint32_t)sizeof(float))
+
+#define TL_BRIDGE_OFF_RING_STATE(bus)  (TL_BRIDGE_RING_STATE_OFF + (bus) * TL_BRIDGE_RING_SIZE)
+#define TL_BRIDGE_OFF_RING_DATA(bus)   (TL_BRIDGE_RING_DATA_OFF + (bus) * TL_BRIDGE_RING_SAMPLES * 2 * (uint32_t)sizeof(float))
 
 #ifdef __cplusplus
 } /* extern "C" */

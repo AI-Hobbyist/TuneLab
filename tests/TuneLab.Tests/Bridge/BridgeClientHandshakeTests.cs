@@ -117,8 +117,8 @@ public class BridgeClientHandshakeTests
         FakePlugin(string sessionId, uint version, uint magic)
         {
             SessionId = sessionId;
-            mMapping = MemoryMappedFile.CreateNew(BridgeProtocol.ShmName(sessionId), BridgeProtocol.Offset.ControlSize);
-            mAccessor = mMapping.CreateViewAccessor(0, BridgeProtocol.Offset.ControlSize, MemoryMappedFileAccess.ReadWrite);
+            mMapping = MemoryMappedFile.CreateNew(BridgeProtocol.ShmName(sessionId), BridgeProtocol.TotalSize);
+            mAccessor = mMapping.CreateViewAccessor(0, BridgeProtocol.TotalSize, MemoryMappedFileAccess.ReadWrite);
             mAccessor.Write(BridgeProtocol.Offset.Magic, magic);
             mAccessor.Write(BridgeProtocol.Offset.Version, version);
             mAccessor.Write(BridgeProtocol.Offset.Connected, (uint)0);

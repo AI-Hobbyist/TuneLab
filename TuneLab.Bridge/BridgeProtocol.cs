@@ -22,6 +22,10 @@ internal static class BridgeProtocol
     public const uint ErrorVersionMismatch = 2;
     public const uint ErrorBusy = 3;
 
+    // 传输状态位（TLBridgeControl.state；与 TL_BRIDGE_STATE_* 一致）。
+    public const ulong StatePlaying = 0x1;
+    public const ulong StateLooping = 0x2;
+
     public static string ShmName(string sessionId) => ShmPrefix + sessionId;
 
     // TLBridgeControl 各字段字节偏移（与 TL_BRIDGE_OFF_* 一致）。
@@ -65,4 +69,18 @@ internal static class BridgeProtocol
     }
 
     public static int TrackStart(int trackIndex) => Offset.Tracks + trackIndex * Offset.TrackSize;
+
+    // —— M1：每输出总线一条立体声环形缓冲（与 TLBridgeRing / TL_BRIDGE_RING_* 一致）。
+    public const int RingSamples = 384000;               // 每总线环容量（帧）：8s @ 48k
+    public const int RingSize = 24;                      // sizeof(TLBridgeRing)：3 × uint64
+    public const int RingOffWritePos = 0;
+    public const int RingOffReadPos = 8;
+    public const int RingOffUnderflow = 16;
+
+    // 环形缓冲区布局（控制块之后，同一文件映射内）。
+    public static int RingStateStart(int bus) => Offset.ControlSize + bus * RingSize;
+    public static int RingDataStart(int bus) => RingDataBase + bus * RingSamples * 2 * sizeof(float);
+    public static int RingDataBase => Offset.ControlSize + MaxTracks * RingSize;
+    public static int RingDataTotalSamples => MaxTracks * RingSamples * 2;
+    public static int TotalSize => RingDataBase + RingDataTotalSamples * sizeof(float);
 }

@@ -207,6 +207,25 @@ internal partial class TimelineView : View
         return new FormattedText(BpmString(tempo), System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight, AppFont.Typeface, 12, null).Width + 16;
     }
 
+    // —— M2 会话时基覆盖（DAW 为 master）——
+    // 桥接时时间轴 tempo 行显示 DAW 恒定曲速而非工程曲速表（工程表本身不变，仅换算时被覆盖）；
+    // 覆盖未激活（null）时回落工程表。编辑输入仍走单参版本（改的是工程表，不受覆盖影响）。
+    public string BpmString(ITempoManager tempoManager, ITempo tempo)
+    {
+        return EffectiveBpm(tempoManager, tempo).ToString("F2");
+    }
+
+    public double TempoWidth(ITempoManager tempoManager, ITempo tempo)
+    {
+        return new FormattedText(BpmString(tempoManager, tempo), System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight, AppFont.Typeface, 12, null).Width + 16;
+    }
+
+    double EffectiveBpm(ITempoManager tempoManager, ITempo tempo)
+    {
+        double? overrideBpm = tempoManager.TimebaseOverrideBpm;
+        return overrideBpm is > 0 ? overrideBpm.Value : tempo.Bpm;
+    }
+
     public string MeterString(ITimeSignature timeSignature)
     {
         return $"{timeSignature.Numerator}/{timeSignature.Denominator}";

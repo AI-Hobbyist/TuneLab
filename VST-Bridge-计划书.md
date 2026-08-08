@@ -405,6 +405,137 @@ cmd /c "call ""<VS>\VC\Auxiliary\Build\vcvars64.bat"" && cmake -S Bridge_VST3 -B
 
 ---
 
+## 13. M1 实施状态（2026-08-08，已完成，待用户手工验收）
+
+M1「音频链路」已实施，对应第 8 节里程碑表格的 M1 行。
+
+**已交付：**
+
+| 位置 | 内容 |
+|---|---|
+| `Bridge/protocol/TLBridgeProtocol.h` | 追加 `TLBridgeRing`（writePos/readPos/underflow，24B）+ 每总线环布局宏：`TL_BRIDGE_RING_SAMPLES=384000`、`TL_BRIDGE_RING_STATE_OFF`、`TL_BRIDGE_RING_DATA_OFF`、`TL_BRIDGE_TOTAL_SIZE`、`TL_BRIDGE_OFF_RING_STATE/DATA(bus)` |
+| `TuneLab.Bridge/BridgeProtocol.cs` | C# 镜像补 `RingSamples/RingSize/RingOff*`、`RingStateStart/RingDataStart/RingDataBase/TotalSize` |
+| `TuneLab.Bridge/BridgeRingBuffer.cs` | 宿主侧共享环 I/O：按绝对采样位置寻址、绕回分段写、`SetWritePos` 带 release 内存屏障 |
+| `TuneLab.Bridge/IBridgeAudioProvider.cs` + `BridgeTrack.cs` | 宿主→TuneLab 的音频提供者契约（避免 `TuneLab.Bridge` 反向引用 `TuneLab` 的循环依赖）：轨道快照/逐轨渲染/静音独奏/采样率应用/桥接激活 |
+| `TuneLab.Bridge/BridgeRenderer.cs` | 渲染线程：DAW 位置 + 200ms push-ahead 为目标、按 chunk 渲染写环、seek 重置、控制块写 `latencySamples`、轨道表刷新、采样率跟随 |
+| `TuneLab.Bridge/BridgeClient.cs` | 映射尺寸扩到 `TotalSize`；暴露 `Accessor` 供渲染线程 |
+| `TuneLab.Bridge/BridgePanel.axaml.cs` | `Open(..., provider)` 新签名；连接态启停 `BridgeRenderer` 并激活宿主桥接（SDL 静音），断开恢复 |
+| `TuneLab/Audio/AudioEngine.cs` | `BridgeMode` 开关 + `Read()` 桥接态静音 + `GetTracksSnapshot()` + `MixBridgeData()` |
+| `TuneLab/Audio/AudioGraph.cs` | `TracksSnapshot()`（加锁取数组） |
+| `TuneLab/Audio/AudioBridgeProvider.cs` | 提供者实现：轨道→`BridgeTrack` 快照缓存、`FollowGainPan` 走 `AddData`/否则 raw 叠加、`SetBridgeActive`→`BridgeMode` |
+| `TuneLab/UI/MainWindow/Editor/Editor.cs` | 桥面板调用传入 `AudioBridgeProvider.Instance` |
+| `Bridge_VST3/Source/BridgeVST3Shared.h/.cpp` | 映射 `TL_BRIDGE_TOTAL_SIZE`；补实时安全访问器：`ringData/ringWritePos/ringSetReadPos/ringAddUnderflow/writeSamplePos/readLatencySamples`（`std::atomic` 自由函数） |
+| `Bridge_VST3/Source/BridgeVST3Processor.h/.cpp` | 64 条输出总线默认激活；`prepareToPlay` 写 `activeBuses` 并 `setLatencySamples`；`processBlock` 逐总线从共享环拉 `[samplePos, samplePos+numSamples)` 填总线（下溢补 0 计数）；`timer` 跟随宿主延迟更新 `setLatencySamples` |
+| `Bridge_VST3/Source/BridgeVST3Editor.cpp` | 状态页显示 DAW 采样率/块大小/激活总线；版本标注 M1 |
+| `tests/TuneLab.Tests/Bridge/` | 布局测试补 `RingOffsetsMatchHeader`；新增 `BridgeRingBufferTests`（写发布/绕回/复位/总线不重叠）；`FakePlugin` 映射 `TotalSize` |
+
+**验证：**
+
+- `dotnet build TuneLab.sln -c Debug` 全绿；`dotnet test` **255 全过**（Bridge 新增 6：环布局 ×1、环形缓冲 ×5），legacy 兼容测试 10/10。
+- `Bridge_VST3.vst3` 编译安装成功（`build/Bridge_VST3/Bridge_VST3_artefacts/Debug/VST3/`）。
+
+**相对计划书的设计取舍（M1 落地时决策）：**
+
+- **按"总线"而非"轨"建环**：`TL_BRIDGE_MAX_TRACKS` 条环，按 `busIndex` 索引；多轨可叠加到同一总线（M1 默认 `track[i]→bus[i]`，叠加能力已实现，M3 开放自由分配）。比"每轨一环 + 插件端映射"更贴合插件逐总线拉取、少一层映射。
+- **64 条输出总线默认全激活**：保证 DAW 始终可见全部输出（空轨静音）；动态按轨激活/停用留待 M3（对应 10 节"固定最大总线数"风险对策）。
+- **M1 保持 SDL 运行但静音**（`BridgeMode`）：避免设备重建/销毁复杂度；传输跟随（播放/暂停/seek 同步）属 M2。
+- 环容量 `384000` 帧（8s@48k，字面量而非 `8*48000`，因布局测试正则不解析算术式）。
+
+**待用户手工验收（对应 8 节 M1 验收标准）：**
+
+1. `Bridge_VST3.vst3` 拷入 DAW VST3 目录并加载；TuneLab 桥面板「连接」。
+2. DAW 中确认可听到 TuneLab 音频（Track 1..N 对应总线 1..N，可逐轨路由/静音验证）；播放/暂停/拖动跳转时无爆音、跳转处静音正确。
+3. 桥接期间 TuneLab 本地输出静音（不双声）；断开后恢复本地模式。
+4. 采样率：DAW 44.1k/48k 下 TuneLab 渲染正确对齐。
+
+---
+
+## 14. M2 传输同步实施状态（2026-08-08，已完成，待用户手工验收）
+
+M2「传输同步」已实施，对应第 8 节里程碑表格的 M2 行。DAW 为 master，TuneLab 跟随：播放/暂停/播放头位置/曲速逐项透传；拍号暂不驱动 UI（仅透传字段），循环沿用 DAW 本地行为。
+
+**已交付：**
+
+| 位置 | 内容 |
+|---|---|
+| `Bridge/protocol/TLBridgeProtocol.h` + `TuneLab.Bridge/BridgeProtocol.cs` + 布局测试 | 控制块新增传输状态位：`TL_BRIDGE_STATE_PLAYING=0x1`、`TL_BRIDGE_STATE_LOOPING=0x2`（`Offset.State` 位标志，对应 VST `ProcessContext` 位）；C# 镜像 `StatePlaying/StateLooping`；布局测试断言两宏一致 |
+| `Bridge_VST3/Source/BridgeVST3Shared.h` | 新增 `writeTransport(state, tempo, timeSigNum, timeSigDen, ppqPosition, ppqOfLastBarStart)`：一次写入控制块六个传输字段 |
+| `Bridge_VST3/Source/BridgeVST3Processor.cpp` | `processBlock` 从 `AudioPlayHead` 取 `PositionInfo`：`getIsPlaying`→PLAYING、`getIsLooping`→LOOPING、`getBpm`→tempo、`getTimeSignature`→num/den、`getPpqPosition`→ppq、`getPpqPositionOfLastBarStart`→barStart；`writeSamplePos` + `writeTransport` 每块回写 |
+| `TuneLab.Bridge/IBridgeAudioProvider.cs` | 新增三个传输回调：`SetTransportPlaying(bool)`、`SetTransportSeek(double seconds)`、`SetTransportTempo(double? bpm)`（含 M2 注释） |
+| `TuneLab.Bridge/BridgeTransport.cs`（新） | 渲染线程每轮 `Apply`：play/pause **边沿**检测透传；播放头位置 `samplePos/sampleRate`→秒，播放中按 50ms 间隔平滑跟随、>0.25s 跳变立即跟随，停止时仅跳变跟随；曲速 >0.5 BPM 变化触发覆盖、无效/0 清空覆盖（BPM 阈值防抖动，无时间节流） |
+| `TuneLab.Bridge/BridgeRenderer.cs` | `RenderOnce` 内（读 `dawPos` 后）调 `mTransport.Apply(accessor, mProvider, sampleRate)` |
+| `TuneLab/Audio/AudioBridgeProvider.cs` | 三个回调实现：一律 `Dispatcher.UIThread.Post`（与 `ApplySampleRate` 同范式，避免渲染线程触发 UI/合成）→ `AudioEngine.Play/Pause/Seek`；曲速覆盖遍历 `GetTracksSnapshot()` 命中 `Track.TempoManager` 调 `SetTimebaseOverride` |
+| `TuneLab/Data/TempoManager.cs` | 会话时基覆盖：`TimebaseOverrideBpm` + `SetTimebaseOverride(double?)`（覆盖期恒定 DAW 曲速线性换算，工程曲速表不变，断开还原）；换算经 `Timebase` 属性路由，变更走 `Notify()`→`Modified` 触发既有重合成/UI 失效 |
+| `TuneLab/Audio/AudioEngine.cs` | `OnProgressChanged` 桥接态直接 return（DAW 为 master，不自行越界暂停） |
+| `tests/TuneLab.Tests/Bridge/BridgeTransportTests.cs`（新） | 进程内共享内存 + `FakeProvider`：play/pause 边沿（不重复通知）、播放中跳变跟随/小步进节流、停止时拖动跟随、曲速覆盖/清空/防抖 |
+| `tests/TuneLab.Tests/TempoConvertTests.cs` | 追加时基覆盖用例：恒定曲速换算、断开还原、非法值（0/负/NaN）忽略 |
+
+**验证：**
+
+- `dotnet build TuneLab.sln -c Debug` 全绿（0 错误）；`dotnet test` **261 全过**（M1 255 + 新增 6：传输 ×4、时基覆盖 ×2）。
+- `Bridge_VST3.vst3` 已重编（`ninja: no work to do`，含传输写入代码，输出 `build/Bridge_VST3/Bridge_VST3_artefacts/Debug/VST3/`）。
+
+**相对计划书的设计取舍（M2 落地时决策）：**
+
+- **曲速覆盖挂到工程 TempoManager 而非每轨**：DAW 是单一时间轴；任一图内轨的 `TempoManager` 即工程曲速表（多轨共享 `Project` 实例），命中即返回，空工程跳过。覆盖期恒定 DAW BPM 线性换算，**不改写工程曲速表**，断开即还原。
+- **曲速只用 BPM 阈值（0.5）防抖，不做时间节流**：DAW 变速是离散操作，自动化连续小幅变化被阈值吸收；去掉时间节流使行为完全确定、可测。
+- **拍号暂不透传为 UI 行为**：字段已随 `writeTransport` 透传，但 TuneLab 拍号在 MIDI 部件里按谱面走，M2 不做 DAW 拍号驱动（对应 8 节验收只列变速/变拍号两项，拍号跟随留待后续）。
+- **停止时位置跟随仅限明显跳变**（>0.25s）：连上 DAW 停播瞬间播放头对齐一次，之后不随微扰重复 seek，避免无谓重合成。
+- **播放中位置跟随 50ms 间隔 + 0.25s 跳变双重判据**：拖动播放头（大跳）即时对齐；正常播放逐 50ms 平滑推近（seek 本身幂等，重合成成本可接受）。
+
+**待用户手工验收（对应 8 节 M2 验收标准）：**
+
+1. DAW 播放 → TuneLab 编辑器播放头光标同步走动；暂停/继续 → 跟随。
+2. DAW 拖动播放头（播放或停止态）→ TuneLab 光标跳到对应位置。
+3. DAW 变速 → TuneLab 跟速（重合成按新曲速），光标 tick 映射一致。
+4. 桥接态下 TuneLab 不再自行"播到尾自动暂停"（DAW 为 master）。
+5. 断开桥接 → 时基覆盖还原工程曲速，本地模式不受影响。
+
+### 14.1 M2 后续 Bug 修复（2026-08-08，待用户手工验收）
+
+**① 曲速和 DAW 不同步（TuneLab 回落工程曲速表）：**
+
+- 根因：DAW 停止/传输边界帧 `AudioPlayHead::getBpm()` 报 nullopt → 插件写 `tempo=0`；宿主 `BridgeTransport.Apply` 原逻辑在 `tempo=0` 时**清空时基覆盖** → TuneLab 瞬间回落工程曲速表（"曲速不同步"）+ 反复重合成。
+- 修复：`BridgeTransport.cs` 去掉"清空覆盖"分支——连接期间 `tempo<=0` 视为"本帧未上报"，**保留上次有效曲速**；覆盖仅在断开时由 `StopRenderer` 统一 `SetTransportTempo(null)` 还原。
+- 测试：`TempoOverride_AppliesAndRetainsLastValid`（原 `...AndClears` 改名）断言 `WriteTempo(0)` 后覆盖保留、新曲速继续应用。
+
+**② 过桥接后关闭 TuneLab 有进程残留：**
+
+- 根因：BridgePanel 是常驻第二窗口且"关闭即隐藏"（真正关闭只在应用退出时）；Avalonia 默认 `ShutdownMode.OnLastWindowClose` 意味着**关主窗口不触发退出**（桥接面板窗口仍在）→ 进程残留。
+- 修复：`App.axaml.cs` 在设置 `desktop.MainWindow` 后显式 `desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose` → 关主窗口即退出 → `ShutdownRequested` 置 `mAllowClose` → 桥接面板关闭 → `Closed` 走 `StopRenderer`（停渲染器、`SetBridgeActive(false)`、`SetTransportTempo(null)` 还原曲速、`SetTransportPlaying(false)`）+ `mClient.Dispose()`。
+
+**③ DAW 无声（插件输出恒静音，M1 遗留根因）：**
+
+- 宿主日志证据：`Bridge renderer: ... bus0Write=91671 ... peak=0.2229/0.1652` ——宿主**确实**往环里渲染出了真实音频、连接/传输同步均正常，但 DAW 仍无声 → 断点锁定在插件输出侧。
+- 根因：`BridgeVST3Processor.cpp` 里 `processBlock` 与 `prepareToPlay` 都用 **`getBusCount(true)`** 当输出总线数。JUCE 的 `getBusCount(bool isInput)` 参数是 **isInput**（`return isInput ? inputBuses : outputBuses;`），插件**没有任何输入总线** → 恒返回 0 → 逐总线拉环循环**一次都不执行** → `buffer.clear()` 后输出保持全静音。
+- 修复：两处 `getBusCount(true)` → **`getBusCount(false)`**（输出总线）；`getChannelIndexInProcessBlockBuffer(false, bus, 0)` 对未分配通道返回 -1 已由 `continue` 兜底。
+- 验证：插件重编成功并已部署到 `C:\Program Files\Common Files\VST3\Bridge_VST3.vst3`（时间戳 2026/8/9 00:17:29）。注意 cmake `--build` 的 POST_BUILD 安装步骤用 `copy_directory` 对已存在文件**不覆盖**——部署到 DAW 目录需用 `robocopy /E /IS /IT` 强制覆盖。
+
+**④ 有声音但不连续（环回绕后 DAW 循环/回跳读到被覆盖旧数据）：**
+
+- 宿主日志证据：`bus0Write=423808 advanced=False`（`423808 > RingSamples=384000`，环已回绕；宿主此后不再重写）→ DAW 循环回跳到 `[0,150000]`，其中 `dawPos ∈ [0, 423808-384000=39808)` 的环槽已被更新的绝对位置 `[384000,423808)` 音频覆盖 → 插件读到错位旧数据，每圈开头 ~0.83s 声音错乱。
+- 根因：`BridgeRenderer.RenderOnce` 的 `if (writePos > target) continue;` 只判断"写位超前于目标"，**未判断读位是否已落入环回绕覆盖的区域**——环是滑窗，写位与读位间距超过环容量后旧数据必然被覆盖。
+- 修复：渲染前计算有效起点 `validStart = writePos > RingSamples ? writePos - RingSamples : 0`；`dawPos < validStart` 时重置写位到 `dawPos` 重铺 `[dawPos, target)`（此时插件 `writePos >= needEnd` 检查保证要么读到新数据、要么补零，不会读半写状态）。非回绕的小幅回跳（`dawPos >= validStart`）仍复用旧数据，不重复渲染。
+- 验证：宿主重编 + `dotnet test` 261 全过；宿主端生效需重启 TuneLab。
+
+**⑤ 播放不全（开头音符缺失——连接/合成未就绪时被写成静音、写位越过后再不重写的永久空洞）：**
+
+- 宿主日志证据（map16）：`map16=0.000,...,0.000,0.003,0.027,0.308,...`——环 `[0, ~0.3s]` 恒为 0，音频只存在于 `[~0.3s, 2.07s]`；`now`（DAW 当前位置窗口峰值）在 0.56s/1.31s/2.04s 非零、`[0,0.3s]` 恒 0 → 开头音符所在区域从连上起就一直是静音。
+- 根因：宿主连接后、DAW 停在 0 时立即把 `[0, lead=200ms]` 渲染进环——但此刻合成尚未就绪，写进去的是静音；渲染线程只往 `writePos` 之后追加，**写位越过该区域后永不回头重写** → 合成完成后开头区域已永久空缺（TuneLab 自身播放正常因为它是合成完才播）。
+- 修复：`BridgeRenderer.RenderOnce` 在 `writePos >= target`（已达成/超前）且 **DAW 未播放**时，周期性（每 32 轮 ≈ 160ms）整环回填 `[dawPos, writePos)`：只重写数据、不推进写位（`RenderBus(..., updateWritePos:false)`）→ 合成一完成，之前写成静音的区域自动补上。播放中不回填（避免与插件实时读竞态）。条件用 `>=` 覆盖"刚铺满领先窗"（全新环 writePos==target）与"已超前"两种状态。
+- 验证：用户 DAW 实测 3 音符全部有声。
+
+**⑥ DAW 调节 BPM 后 TuneLab 显示不变（时间轴 tempo 行只显示工程曲速表，覆盖不进 UI）：**
+
+- 根因：时间轴 tempo 行（`TimelineView` 的 `TempoItem`）渲染的是 `TempoManager.Tempos`（工程曲速表 `mTempos`）；DAW 会话时基覆盖 `TimebaseOverrideBpm` 只作用于内部换算（合成），**全仓库无任何 UI 读取它**——因此无论 DAW BPM 怎么调，TuneLab 显示的 tempo 恒为工程值（内部合成其实已按 DAW 曲速同步）。
+- 修复：`ITempoManager` 暴露只读 `double? TimebaseOverrideBpm`；`TimelineView` 新增带覆盖的 `BpmString/TempoWidth(ITempoManager, ITempo)`（`EffectiveBpm`：覆盖 `>0` 用覆盖、否则工程表），`TempoItem` 的 `Rect/Render` 改用双参版本 → 桥接激活时 tempo 行显示 DAW 恒定曲速，断连/覆盖为空自动还原。编辑输入仍走单参版本（改的是工程表，不受覆盖影响）。覆盖变更走 `Notify → Modified` 既有刷新链路。
+- 诊断：渲染器诊断行新增 `tempo=`（宿主读共享内存插件上报曲速），用于确认插件是否持续上报。
+- 验证：用户 DAW 实测 BPM 已同步显示。
+
+**验证：** `dotnet build TuneLab.sln -c Debug` 0 错误；`dotnet test` **261 全过**（含改名的曲速保留用例）。宿主端已重编（TuneLab.exe 需重启生效）；插件因 ③ 已重编并部署（DAW 需重启加载新 dll）。⑤⑥ 用户 DAW 实测均已确认（3 音符全有声 + BPM 同步显示）。
+
+---
+
 ## 附：参考资料位置
 
 - **插件与插件界面（JUCE）**：`THIRD_PARTY/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.cpp`（VST3 包装/总线对拍）、`juce_audio_processors/`（`AudioProcessor`、`AudioProcessorEditor`、`AudioPlayHead`、`BusesProperties`/`setBusesLayout`）、`juce_audio_processors_headless/`（无头测试）、`THIRD_PARTY/JUCE/examples/Plugins/`（AudioPluginHost 参考宿主）、`THIRD_PARTY/JUCE/docs/`（CMake `juce_add_plugin` 用法）。

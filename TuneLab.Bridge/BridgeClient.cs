@@ -24,6 +24,9 @@ internal sealed class BridgeClient : IDisposable
     public State CurrentState { get; private set; } = State.Disconnected;
     public string? ErrorMessage { get; private set; }
 
+    // 共享内存视图访问器（连接后非空）：渲染线程/环形缓冲经此读写控制块与音频环。
+    public MemoryMappedViewAccessor? Accessor => mAccessor;
+
     // 状态变更回调（在心跳线程触发；UI 侧需自行切回 UI 线程）。
     public event Action? StateChanged;
 
@@ -93,7 +96,7 @@ internal sealed class BridgeClient : IDisposable
         try
         {
             mapping = MemoryMappedFile.OpenExisting(BridgeProtocol.ShmName(SessionId), MemoryMappedFileRights.ReadWrite);
-            accessor = mapping.CreateViewAccessor(0, BridgeProtocol.Offset.ControlSize, MemoryMappedFileAccess.ReadWrite);
+            accessor = mapping.CreateViewAccessor(0, BridgeProtocol.TotalSize, MemoryMappedFileAccess.ReadWrite);
 
             uint magic = accessor.ReadUInt32(BridgeProtocol.Offset.Magic);
             uint version = accessor.ReadUInt32(BridgeProtocol.Offset.Version);

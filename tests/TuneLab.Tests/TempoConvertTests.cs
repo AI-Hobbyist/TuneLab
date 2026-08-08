@@ -135,4 +135,38 @@ public class TempoConvertTests
         foreach (var tick in ticks)
             Assert.Equal(tick, snapshot.ToTick(snapshot.ToSecond(tick)), 6);
     }
+
+    // —— M2 会话时基覆盖（DAW 为 master）——
+    [Fact]
+    public void TimebaseOverride_ConstantBpm()
+    {
+        // 工程 120 BPM，覆盖为 60 BPM 后按 DAW 恒定曲速线性换算：480 tick = 1s。
+        var manager = MakeManager((0, 120), (1920, 240));
+
+        manager.SetTimebaseOverride(60);
+        Assert.Equal(60.0, manager.TimebaseOverrideBpm);
+        Assert.Equal(1.0, manager.GetTime(480));
+        Assert.Equal(480.0, manager.GetTick(1.0));
+        Assert.Equal(2.0, manager.GetTime(960));
+        Assert.Equal(1.0, manager.CreateSnapshot().ToSecond(480));
+
+        // 覆盖期间工程曲速表不被改动：断开覆盖后还原。
+        manager.SetTimebaseOverride(null);
+        Assert.Null(manager.TimebaseOverrideBpm);
+        Assert.Equal(2.0, manager.GetTime(1920));    // 240 BPM 段仍生效
+        Assert.Equal(0.5, manager.GetTime(480));     // 回到工程 120 BPM
+    }
+
+    [Fact]
+    public void TimebaseOverride_IgnoresInvalid()
+    {
+        var manager = MakeManager((0, 120));
+        manager.SetTimebaseOverride(0);
+        Assert.Null(manager.TimebaseOverrideBpm);
+        manager.SetTimebaseOverride(-60);
+        Assert.Null(manager.TimebaseOverrideBpm);
+        manager.SetTimebaseOverride(double.NaN);
+        Assert.Null(manager.TimebaseOverrideBpm);
+        Assert.Equal(0.5, manager.GetTime(480));     // 始终走工程曲速
+    }
 }

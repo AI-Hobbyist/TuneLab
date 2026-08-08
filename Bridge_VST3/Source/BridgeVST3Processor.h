@@ -50,6 +50,7 @@ private:
     BridgeSession mSession;
     juce::String mSessionId;
     std::atomic<bool> mLastConnected { false };
+    uint32_t mLastLatency = 0;   // 已上报的延迟（避免每心跳重复 setLatencySamples）
 };
 
 } // namespace BridgeVST3

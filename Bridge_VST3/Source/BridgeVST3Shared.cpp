@@ -18,14 +18,14 @@ bool BridgeSession::init (const std::string& sessionId)
     mSessionId = sessionId;
     const std::string name = std::string (TL_BRIDGE_SHM_PREFIX) + sessionId;
 
-    // 创建（若已存在则打开）命名文件映射。
-    mMapping = CreateFileMappingA (INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, TL_BRIDGE_CONTROL_SIZE, name.c_str());
+    // 创建（若已存在则打开）命名文件映射。M1：映射含环形缓冲区的总尺寸（控制块 + 每总线环）。
+    mMapping = CreateFileMappingA (INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, TL_BRIDGE_TOTAL_SIZE, name.c_str());
     if (mMapping == nullptr)
         return false;
 
     const bool alreadyExists = (GetLastError() == ERROR_ALREADY_EXISTS);
 
-    mControl = static_cast<TLBridgeControl*> (MapViewOfFile (mMapping, FILE_MAP_ALL_ACCESS, 0, 0, TL_BRIDGE_CONTROL_SIZE));
+    mControl = static_cast<TLBridgeControl*> (MapViewOfFile (mMapping, FILE_MAP_ALL_ACCESS, 0, 0, TL_BRIDGE_TOTAL_SIZE));
     if (mControl == nullptr)
     {
         CloseHandle (mMapping);
@@ -35,7 +35,7 @@ bool BridgeSession::init (const std::string& sessionId)
 
     if (!alreadyExists)
     {
-        // 新会话：清零并写协议头。
+        // 新会话：清零控制块并写协议头（环形区由系统建映射时清零）。
         ZeroMemory (mControl, TL_BRIDGE_CONTROL_SIZE);
         mControl->magic = TL_BRIDGE_MAGIC;
         mControl->version = TL_BRIDGE_VERSION;

@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -20,15 +21,17 @@ internal partial class BridgePanel : Window
 {
     public const string DefaultSessionId = "default";
 
-    public static void Open(Window? owner, uint hostAppVersion)
+    public static void Open(Window? owner, uint hostAppVersion, IBridgeAudioProvider provider)
     {
         if (sInstance is { } opened)
         {
+            // 窗口可能处于"关闭即隐藏"状态（桥接仍在运行）：重新显示并置前。
+            opened.Show();
             opened.Activate();
             return;
         }
 
-        var window = new BridgePanel(hostAppVersion);
+        var window = new BridgePanel(hostAppVersion, provider);
         sInstance = window;
         window.Closed += (_, _) => { if (ReferenceEquals(sInstance, window)) sInstance = null; };
         if (owner != null)
@@ -37,8 +40,10 @@ internal partial class BridgePanel : Window
             window.Show();
     }
 
-    public BridgePanel(uint hostAppVersion)
+    public BridgePanel(uint hostAppVersion, IBridgeAudioProvider provider)
     {
+        mProvider = provider;
+
         InitializeComponent();
         Focusable = true;
         CanResize = false;
@@ -92,8 +97,21 @@ internal partial class BridgePanel : Window
         mClient = new BridgeClient(DefaultSessionId) { HostAppVersion = mHostAppVersion };
         mClient.StateChanged += OnClientStateChanged;
 
+        // 关闭窗口 ≠ 断开桥接：隐藏窗口，渲染线程与会话保持，音频继续推给 DAW。
+        // 应用真正退出（ShutdownRequested）时放行关闭，走下方 Closed 清理。
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.ShutdownRequested += (_, _) => mAllowClose = true;
+        Closing += (_, e) =>
+        {
+            if (!mAllowClose)
+            {
+                e.Cancel = true;
+                Hide();
+            }
+        };
         Closed += (_, _) =>
         {
+            StopRenderer();
             if (mClient != null)
             {
                 mClient.StateChanged -= OnClientStateChanged;
@@ -155,6 +173,7 @@ internal partial class BridgePanel : Window
                 mStatusText.Text = "Disconnected".Tr(this);
                 mConnectTextContent.Item = new TextItem() { Text = "Connect".Tr(this) };
                 mSessionIdInput.IsEnabled = true;
+                StopRenderer();
                 break;
             case BridgeClient.State.WaitingForPlugin:
                 mStatusText.Text = "Waiting for plugin...".Tr(this);
@@ -165,21 +184,51 @@ internal partial class BridgePanel : Window
                 mStatusText.Text = ("Connected".Tr(this) + "  " + mClient.SessionId);
                 mConnectTextContent.Item = new TextItem() { Text = "Disconnect".Tr(this) };
                 mSessionIdInput.IsEnabled = false;
+                StartRenderer();
                 break;
             case BridgeClient.State.Error:
                 mStatusText.Text = "Error".Tr(this) + ": " + (mClient.ErrorMessage ?? string.Empty);
                 mConnectTextContent.Item = new TextItem() { Text = "Connect".Tr(this) };
                 mSessionIdInput.IsEnabled = true;
+                StopRenderer();
                 break;
         }
     }
 
+    // M1：连接后启动渲染线程（把 TuneLab 音轨推入共享环），断开/出错时停止。
+    void StartRenderer()
+    {
+        if (mRenderer != null)
+            return;
+        // 先激活桥接（SDL 静音 + 采样率变更跳过设备重开），再启动渲染线程，
+        // 确保渲染线程首个迭代的采样率请求在 BridgeMode 已置位时处理。
+        mProvider.SetBridgeActive(true);
+        mRenderer = new BridgeRenderer(mClient!, mProvider);
+        mRenderer.Start();
+    }
+
+    void StopRenderer()
+    {
+        if (mRenderer == null)
+            return;
+        mRenderer.Stop();
+        mRenderer = null;
+        mProvider.SetBridgeActive(false);
+        // 退出桥接（断开/出错/关闭）：DAW 不再为 master——还原时基覆盖并暂停，
+        // 让 TuneLab 回到本地播放/本地曲速表（避免覆盖残留导致曲速持续锁定 DAW 值）。
+        mProvider.SetTransportTempo(null);
+        mProvider.SetTransportPlaying(false);
+    }
+
     BridgeClient? mClient;
+    BridgeRenderer? mRenderer;
     readonly uint mHostAppVersion;
+    readonly IBridgeAudioProvider mProvider;
     TextInput mSessionIdInput;
     Avalonia.Controls.TextBlock mStatusText;
     Button mConnectButton;
     ButtonContent mConnectTextContent;
+    bool mAllowClose;
 
     static BridgePanel? sInstance;
 }

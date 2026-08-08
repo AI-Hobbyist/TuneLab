@@ -66,6 +66,29 @@ public class BridgeProtocolLayoutTests
         AssertMacroUInt(header, "TL_BRIDGE_TRACK_NAME_MAX", BridgeProtocol.TrackNameMax);
         AssertMacroUInt(header, "TL_BRIDGE_HEARTBEAT_MS", BridgeProtocol.HeartbeatMs);
         AssertMacroUInt(header, "TL_BRIDGE_HEARTBEAT_TIMEOUT_MS", BridgeProtocol.HeartbeatTimeoutMs);
+        AssertMacroUInt(header, "TL_BRIDGE_STATE_PLAYING", (int)BridgeProtocol.StatePlaying);
+        AssertMacroUInt(header, "TL_BRIDGE_STATE_LOOPING", (int)BridgeProtocol.StateLooping);
+    }
+
+    [Fact]
+    public void RingOffsetsMatchHeader()
+    {
+        var header = ReadHeader();
+
+        AssertMacroUInt(header, "TL_BRIDGE_RING_SAMPLES", BridgeProtocol.RingSamples);
+        AssertMacroUInt(header, "TL_BRIDGE_RING_SIZE", BridgeProtocol.RingSize);
+        AssertMacroUInt(header, "TL_BRIDGE_RING_OFF_WRITE_POS", BridgeProtocol.RingOffWritePos);
+        AssertMacroUInt(header, "TL_BRIDGE_RING_OFF_READ_POS", BridgeProtocol.RingOffReadPos);
+        AssertMacroUInt(header, "TL_BRIDGE_RING_OFF_UNDERFLOW", BridgeProtocol.RingOffUnderflow);
+
+        // 派生布局（C# 与头文件 TL_BRIDGE_RING_STATE_OFF / TL_BRIDGE_RING_DATA_OFF / TL_BRIDGE_TOTAL_SIZE 同公式）。
+        Assert.Equal(BridgeProtocol.Offset.ControlSize, BridgeProtocol.RingStateStart(0));
+        Assert.Equal(BridgeProtocol.Offset.ControlSize + BridgeProtocol.MaxTracks * BridgeProtocol.RingSize, BridgeProtocol.RingDataBase);
+        Assert.Equal(BridgeProtocol.RingDataBase + BridgeProtocol.RingDataTotalSamples * sizeof(float), BridgeProtocol.TotalSize);
+        // 总线 1 的环状态起点 = 总线 0 + RingSize（不重叠）。
+        Assert.Equal(BridgeProtocol.RingStateStart(0) + BridgeProtocol.RingSize, BridgeProtocol.RingStateStart(1));
+        // 总线 1 数据区起点 = 总线 0 + RingSamples*2*sizeof(float)（不重叠）。
+        Assert.Equal(BridgeProtocol.RingDataStart(0) + BridgeProtocol.RingSamples * 2 * sizeof(float), BridgeProtocol.RingDataStart(1));
     }
 
     static void AssertMacroUInt(string header, string macro, int expected)

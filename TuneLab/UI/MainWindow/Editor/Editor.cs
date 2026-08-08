@@ -1587,7 +1587,7 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         {
             var menuBarItem = new MenuItem { Foreground = Style.TEXT_LIGHT.ToBrush(), Focusable = false }.SetTrName("Bridge");
             {
-                var menuItem = new MenuItem().SetTrName("Bridge Panel...").SetAction(() => BridgePanel.Open(this.Window(), HostAppVersion()));
+                var menuItem = new MenuItem().SetTrName("Bridge Panel...").SetAction(() => BridgePanel.Open(this.Window(), HostAppVersion(), TuneLab.Audio.AudioBridgeProvider.Instance));
                 menuBarItem.Items.Add(menuItem);
             }
             menu.Items.Add(menuBarItem);
