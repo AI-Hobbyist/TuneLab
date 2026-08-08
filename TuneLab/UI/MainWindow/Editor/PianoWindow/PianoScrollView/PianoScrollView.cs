@@ -144,6 +144,9 @@ internal partial class PianoScrollView : View, IPianoScrollView
 
         Settings.BackgroundImagePath.Modified.Subscribe(LoadBackgroundImage, s);
         Settings.BackgroundImageOpacity.Modified.Subscribe(InvalidateVisual, s);
+        // 音符前端音高标签跟随琴键标签：切换 CDEFGAB/简谱模式或主音时重绘（见 DrawNotePitchLabel）。
+        Settings.PianoKeyLabelStyle.Modified.Subscribe(InvalidateVisual, s);
+        Settings.NumberedPianoKeyTonic.Modified.Subscribe(InvalidateVisual, s);
         LoadBackgroundImage();
 
         // voice 立绘随当前 part 及其音源（换引擎 / 换声库）变化重解析；动图播放随挂载 / 卸载视觉树起停（不可见不空转）。
@@ -193,6 +196,51 @@ internal partial class PianoScrollView : View, IPianoScrollView
             }
         };
         context.FillRectangle(shadowBrush, new Rect(0, 0, Bounds.Width, TopShadowHeight));
+    }
+
+    // —— 音符前端下方音高标签 —— //
+    const double NotePitchLabelMinKeyHeight = 14;   // 键高低于此跳过（缩太小时标签挤成一团）
+    const double NotePitchLabelMargin = 1;          // 标签离音符下缘的间距
+    const double NotePitchLabelChipPadding = 3;     // 标签底片内边距
+    static readonly IBrush NotePitchLabelBrush = new Color(255, 34, 34, 42).ToBrush();
+    static readonly IBrush NotePitchLabelBackBrush = Colors.White.Opacity(0.62).ToBrush();
+
+    double NotePitchLabelFontSize() => Math.Clamp(PitchAxis.KeyHeight * 0.34, 8, 12);
+    double NoteJianpuLabelFontSize() => Math.Clamp(PitchAxis.KeyHeight * 0.4, 10, 16);
+
+    // 音符前端（左端）下方显示当前音高：CDEFGAB（如 "C4"）或简谱（数字+八度点，如 1、1'、1,）。
+    // 与钢琴键（PianoRoll）同一套换算——简谱数字与八度偏移依主音（Settings.NumberedPianoKeyTonic）得到，
+    // 保证与琴键显示一致。半透明白底片保证在白/黑琴键行上都可读。
+    void DrawNotePitchLabel(DrawingContext context, INote note, Rect noteRect)
+    {
+        if (noteRect.Height < NotePitchLabelMinKeyHeight)
+            return;
+
+        int keyNumber = note.Pitch.Value;
+        bool numbered = PianoKeyLabel.IsNumbered;
+        string? numberedText = numbered ? PianoKeyLabel.NumberedAsciiText(keyNumber) : null;
+
+        string label;
+        Typeface typeface;
+        double fontSize;
+        if (numberedText != null)
+        {
+            label = numberedText;
+            typeface = PianoKeyLabel.JianpuTypeface;
+            fontSize = NoteJianpuLabelFontSize();
+        }
+        else
+        {
+            label = numbered ? PianoKeyLabel.NumberedPitchLabel(keyNumber) : PianoKeyLabel.PitchNameLabel(keyNumber);
+            typeface = Utils.Extensions.DrawStringTypeface;
+            fontSize = NotePitchLabelFontSize();
+        }
+
+        var formatted = new FormattedText(label, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, fontSize, NotePitchLabelBrush);
+        var point = new Point(noteRect.Left, noteRect.Bottom + NotePitchLabelMargin);
+        var chip = new Rect(point.X - NotePitchLabelChipPadding, point.Y - NotePitchLabelChipPadding, formatted.Width + NotePitchLabelChipPadding * 2, formatted.Height + NotePitchLabelChipPadding * 2);
+        context.FillRectangle(NotePitchLabelBackBrush, chip, 3);
+        context.DrawString(label, point, NotePitchLabelBrush, fontSize, Alignment.LeftTop, typeface);
     }
 
     // —— 合成状态条 hover 延时：鼠标进命中区起表，停够 SynthesisHoverDelaySeconds 才算“就绪”可弹；划走即取消。 —— //
@@ -633,6 +681,19 @@ internal partial class PianoScrollView : View, IPianoScrollView
                 context.DrawString(MusicTheory.PitchName(note.Pitch.Value), rect, lyricBrush, 12, Alignment.LeftCenter, Alignment.LeftCenter, new(0, 14));
             }
             clip.Dispose();
+        }
+
+        // 音符前端下方音高标签：单独一趟画在音符之上（避免被同位置下方音高的音符盖住），内容/格式与钢琴键一致
+        // （CDEFGAB 或简谱，见 DrawNotePitchLabel）。
+        foreach (var note in Part.Notes)
+        {
+            if (note.GlobalEndPos() < minVisibleTick)
+                continue;
+
+            if (note.GlobalStartPos() > maxVisibleTick)
+                break;
+
+            DrawNotePitchLabel(context, note, this.NoteRect(note));
         }
 
         // draw pitch

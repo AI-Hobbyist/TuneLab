@@ -133,11 +133,11 @@ internal partial class PianoRoll
 
     static void DrawPianoKeyLabel(DrawingContext context, Rect rect, IBrush brush, int keyNumber, string label, int textAlignment, int rectAlignment, Point offset = default)
     {
-        if (Settings.PianoKeyLabelStyle.Value == "Numbered" && TryGetNumberedPitchLabelParts(keyNumber, out var number, out int octaveOffset))
+        if (PianoKeyLabel.IsNumbered && PianoKeyLabel.TryGetNumberedPitchLabelParts(keyNumber, out var number, out int octaveOffset))
         {
             // 字体路径：连字只覆盖 ±2 个八度（1'' 到 1,,），且简谱字形（数字+八度点）字号更大、
             // 需要的纵向空间更多；不满足时退回手动画点（DrawNumberedDotLabel）。
-            if (Math.Abs(octaveOffset) <= JianpuMaxOctaveOffset && CanDrawJianpuLabel(rect, octaveOffset))
+            if (Math.Abs(octaveOffset) <= PianoKeyLabel.JianpuMaxOctaveOffset && CanDrawJianpuLabel(rect, octaveOffset))
             {
                 DrawJianpuLabel(context, rect, brush, number, octaveOffset, textAlignment, rectAlignment, offset);
                 return;
@@ -162,7 +162,7 @@ internal partial class PianoRoll
                 ? number + new string(',', -octaveOffset)
                 : number;
 
-        context.DrawString(text, rect, brush, JianpuLabelFontSize(rect), textAlignment, rectAlignment, offset, JianpuTypeface);
+        context.DrawString(text, rect, brush, JianpuLabelFontSize(rect), textAlignment, rectAlignment, offset, PianoKeyLabel.JianpuTypeface);
     }
 
     // 简谱字号：明显大于普通标签——字体的八度点是 5% em 的小圆点，字号小了几乎看不见。
@@ -212,65 +212,18 @@ internal partial class PianoRoll
         }
     }
 
-    static string? PianoKeyLabel(int keyNumber)
+    static string? KeyLabel(int keyNumber)
     {
         if (!Settings.ShowAllPianoKeyLabels)
             return null;
-        return Settings.PianoKeyLabelStyle.Value == "Numbered"
-            ? NumberedPitchLabel(keyNumber)
-            : PitchNameLabel(keyNumber);
+        return PianoKeyLabel.IsNumbered
+            ? PianoKeyLabel.NumberedPitchLabel(keyNumber)
+            : PianoKeyLabel.PitchNameLabel(keyNumber);
     }
 
-    static string PitchNameLabel(int keyNumber)
-    {
-        int pitchClass = PositiveMod(keyNumber - MusicTheory.C0_PITCH, 12);
-        int octave = (keyNumber - MusicTheory.C0_PITCH) / 12;
-        return PitchNames[pitchClass] + octave;
-    }
-
-    static string NumberedPitchLabel(int keyNumber)
-    {
-        int pitchClass = PositiveMod(keyNumber - MusicTheory.C0_PITCH, 12);
-        int octave = (keyNumber - MusicTheory.C0_PITCH) / 12;
-        int tonic = TonicPitchClass(Settings.NumberedPianoKeyTonic.Value);
-        int relative = PositiveMod(pitchClass - tonic, 12);
-        return $"{NumberedPitchNames[relative]} (C{octave})";
-    }
-
-    static bool TryGetNumberedPitchLabelParts(int keyNumber, out string number, out int octaveOffset)
-    {
-        int pitchClass = PositiveMod(keyNumber - MusicTheory.C0_PITCH, 12);
-        int tonic = TonicPitchClass(Settings.NumberedPianoKeyTonic.Value);
-        int relative = PositiveMod(pitchClass - tonic, 12);
-        int baseTonicPitch = MusicTheory.C0_PITCH + NumberedBaseOctave * 12 + tonic;
-
-        number = NumberedPitchNames[relative];
-        octaveOffset = (keyNumber - baseTonicPitch - relative) / 12;
-        return true;
-    }
-
-    static int TonicPitchClass(string? tonic)
-    {
-        for (int i = 0; i < PitchNames.Length; i++)
-        {
-            if (string.Equals(tonic, PitchNames[i], StringComparison.OrdinalIgnoreCase))
-                return i;
-        }
-        return 0;
-    }
-
-    static int PositiveMod(int value, int mod)
-        => (value % mod + mod) % mod;
-
-    static readonly string[] PitchNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-    static readonly string[] NumberedPitchNames = ["1", "#1", "2", "#2", "3", "4", "#4", "5", "#5", "6", "#6", "7"];
-    const int NumberedBaseOctave = 4;
     const double NumberedDotRadius = 1.35;
     const double NumberedDotStep = 4;
     const double NumberedDotTextShift = 2.5;
     const double NumberedDotRightInset = 13;
     const double NumberedDotLabelMinHeight = 18;
-    // 简谱字体（Assets.Jianpu，jianpu-ascii-font）——其 ASCII 连字只支持 ±2 个八度。
-    static readonly Typeface JianpuTypeface = new(Assets.Jianpu);
-    const int JianpuMaxOctaveOffset = 2;
 }
