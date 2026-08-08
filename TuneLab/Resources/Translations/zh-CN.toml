@@ -331,6 +331,19 @@
 "Recent" = "最近使用"
 "Set Instrument" = "设置乐器"
 "About TuneLab" = "关于 TuneLab"
+"Bridge" = "桥接"
+"Bridge Panel..." = "桥接面板..."
+
+[BridgePanel]
+"Bridge" = "桥接"
+"Session Id" = "会话 ID"
+"Connect" = "连接"
+"Cancel" = "取消"
+"Disconnect" = "断开"
+"Disconnected" = "已断开"
+"Waiting for plugin..." = "等待插件…"
+"Connected" = "已连接"
+"Error" = "错误"
 
 [AgentSideBarContentProvider]
 "Agent" = "Agent"

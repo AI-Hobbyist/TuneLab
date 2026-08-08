@@ -31,6 +31,7 @@
   <!-- 类型保持 internal，靠 InternalsVisibleTo 暴露给宿主与安装器。 -->
   <ItemGroup>
     <InternalsVisibleTo Include="TuneLab" />
+    <InternalsVisibleTo Include="TuneLab.Bridge" />
     <InternalsVisibleTo Include="TuneLab.Setup" />
   </ItemGroup>
 

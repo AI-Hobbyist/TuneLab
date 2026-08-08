@@ -42,6 +42,7 @@ using TuneLab.Extensions.Formats;
 using TuneLab.Extensions.Formats.TLP;
 using TuneLab.Extensions.Instruments;
 using TuneLab.Extensions.Voices;
+using TuneLab.Bridge;
 namespace TuneLab.UI;
 
 internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDependency, FunctionBar.IDependency
@@ -1257,6 +1258,13 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         mPianoWindow.TickAxis.AnimateMoveTickToX(endTick, mPianoWindow.TickAxis.ViewLength);
     }
 
+    // 宿主版本号（例 1.6.0 → 0x00010600）：随桥接握手写入控制块，供插件侧识别宿主版本。
+    static uint HostAppVersion()
+    {
+        var v = AppInfo.Version;
+        return (uint)((Math.Clamp(v.Major, 0, 255) << 16) | (Math.Clamp(v.Minor, 0, 255) << 8) | Math.Clamp(v.Build, 0, 255));
+    }
+
     struct Description
     {
         public string name { get; set; }
@@ -1573,6 +1581,15 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
             mRebuildScriptsMenu = Rebuild;
             Rebuild();
             SetupScriptsWatcher(Rebuild);
+            menu.Items.Add(menuBarItem);
+        }
+
+        {
+            var menuBarItem = new MenuItem { Foreground = Style.TEXT_LIGHT.ToBrush(), Focusable = false }.SetTrName("Bridge");
+            {
+                var menuItem = new MenuItem().SetTrName("Bridge Panel...").SetAction(() => BridgePanel.Open(this.Window(), HostAppVersion()));
+                menuBarItem.Items.Add(menuItem);
+            }
             menu.Items.Add(menuBarItem);
         }
 

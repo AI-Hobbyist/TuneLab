@@ -19,6 +19,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="TuneLab" />
     <InternalsVisibleTo Include="TuneLab.GUI" />
+    <InternalsVisibleTo Include="TuneLab.Bridge" />
     <InternalsVisibleTo Include="TuneLab.Setup" />
   </ItemGroup>
 
