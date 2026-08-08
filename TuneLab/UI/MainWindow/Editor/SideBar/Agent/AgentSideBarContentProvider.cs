@@ -29,7 +29,6 @@ using TuneLab.SDK;
 using TuneLab.Utils;
 using ScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility;
 using PlacementMode = Avalonia.Controls.PlacementMode;
-using ComboBoxItem = TuneLab.SDK.ComboBoxItem;   // 消歧：避开 Avalonia.Controls.ComboBoxItem
 
 namespace TuneLab.UI;
 
@@ -46,44 +45,36 @@ internal sealed class AgentSideBarContentProvider
     {
         // 设置数据须挂在文档根上（属性面板字段绑定会读 DataObject.Head），用独立 DataDocument，与工程 undo 隔离。
         mSettings = new DataPropertyObject(mSettingsDocument);
-        mProviderData = new DataPropertyObject(mProviderDocument);
 
         BuildChatView();
         BuildSettingsView();
         ShowChat();
         SwitchTo(NewContext()); // 立即建立首个空白会话作为当前可见会话
 
+        // 引擎恒取首个（当前仅内建 openai-compatible）。多引擎选择下拉已随冗余 UI 移除（见 BuildSettingsView）——
+        // 适配器不开放为插件类型、全部编进宿主，一个引擎就是全部，无需让用户选。
         var engines = AgentModelManager.GetAllAgentModelEngines().ToList();
-        // 选项值存不可变引擎 id（用于保存/连接/比较），显示文本用本地化显示名。
-        mEngineOptions = engines.Select(e => new ComboBoxItem(PropertyValue.Create(e), AgentModelManager.GetDisplayName(e))).ToList();
-        // 上次选中的 provider 存 app Settings；各 provider 的配置值各存 ExtensionSettings.json 的 "agent-model:<id>" 桶。
-        var savedEngine = Settings.AgentModelProvider.Value;
-        bool hadSaved = !string.IsNullOrEmpty(savedEngine) && engines.Contains(savedEngine);
-        string? initial = hadSaved ? savedEngine : (engines.Count > 0 ? engines[0] : null);
-        if (initial != null)
+        mEngineType = engines.Count > 0 ? engines[0] : string.Empty;
+        if (mEngineType != string.Empty)
         {
-            mProviderData.SetValue(EngineKey, PropertyValue.Create(initial));
-            mProviderData.Commit();
-            LoadProviderSettings(initial); // 载入该 provider 已存设置（含解密密钥）
+            LoadProviderSettings(mEngineType); // 载入该 provider 已存设置（含解密密钥）
+            RefreshEnginePropertyPanel(mEngineType);
         }
-        // provider 选择走单项 PropertyObjectController（复用属性面板的 INTERFACE 块 + label + margin 样式）。
-        mProviderController.SetConfig(BuildProviderConfig(), mProviderData);
-        if (initial != null)
-            RefreshEnginePropertyPanel(initial);
-        // 选择变更经数据对象 Modified 驱动（用户改 combo → 写入 mProviderData → 通知）。
-        mProviderData.Modified.Subscribe(OnEngineSelectionChanged);
+        // 记录初始 provider_id，供 OnSettingsModified 检测「切换供应商 → 重置端点/接口地址」；
+        // 该联动订阅放在初始载入之后，避免初始化误触发。
+        mLastRenderedProviderId = CurrentProviderId();
+        mSettings.Modified.Subscribe(OnSettingsModified);
 
         // agent 写授权胶囊在对话页 header（见 BuildChatView），即时生效、不经"确认"（授权本就是即时偏好）。
         // 订阅 Settings 本体 → 无论改动来自胶囊还是升级卡片（Confirm 里的"始终允许"）胶囊都实时同步。
         Settings.AgentAuthorization.Modified.Subscribe(RefreshAuthPill);
         RefreshAuthPill();
-        // 设置面板 dirty 追踪：字段编辑 / provider 切换即置脏、标题显 *；× 时据此弹「应用/忽略」。
+        // 设置面板 dirty 追踪：字段编辑即置脏、标题显 *；× 时据此弹「应用/忽略」。
         // 订阅置于 ctor 初始 provider 载入之后，故初始化不误标脏（且每次进面板还会重置）。
         mSettings.Modified.Subscribe(RecomputeSettingsDirty);
-        mProviderData.Modified.Subscribe(RecomputeSettingsDirty);
 
         // 之前 Submit 过（app Settings 记了 provider）才打开即静默自动接入，直接可聊天；否则首次发送再引导去设置。
-        if (hadSaved && TryConnect(savedEngine, out _))
+        if (mEngineType != string.Empty && Settings.AgentModelProvider.Value == mEngineType && TryConnect(mEngineType, out _))
             AppendMessage(mActive, "system", ConnectedNotice()); // 启动即提示连到哪个模型
 
     }
@@ -2175,8 +2166,8 @@ internal sealed class AgentSideBarContentProvider
 
         var content = new StackPanel() { Orientation = Orientation.Vertical };
         // 授权已移到对话页 header 胶囊（即时生效）；本面板只剩「连接类设置」，全部统一为「确认才生效」，dirty 追踪无一例外。
-        // Model Provider 选择 + 引擎属性面板都用 PropertyObjectController（同 INTERFACE 块、同 label/margin 样式），连成统一面板。
-        content.Children.Add(mProviderController);
+        // 顶部引擎选择下拉已移除（仅一个内建引擎、无选择意义）；面板直接是引擎的属性面板
+        // （Provider/Endpoint/接口地址/API Key/模型/温度/Max Tokens，见 OpenAICompatibleEngine）。
         content.Children.Add(mPropertiesController);
         var tools = new DockPanel() { Margin = new(24, 8, 24, 0), LastChildFill = true };
         mRefreshModelsButton = SmallTextButton("Refresh Models".Tr(this), 0, 28, Style.BUTTON_NORMAL, Style.BUTTON_NORMAL_HOVER);
@@ -2205,14 +2196,6 @@ internal sealed class AgentSideBarContentProvider
         DockPanel.SetDock(sep, Dock.Top);
         mSettingsView.Children.Add(sep);
         mSettingsView.Children.Add(scroll);
-    }
-
-    // provider 选择的单项 config：复用 ComboBoxConfig（label 走 DisplayText，由属性面板渲成统一样式）。
-    ObjectConfig BuildProviderConfig()
-    {
-        var props = new OrderedMap<PropertyKey, IControllerConfig>();
-        props.Add((EngineKey, "Model Provider".Tr(this)), ComboBoxConfig.Create(mEngineOptions));
-        return ObjectConfig.Create(props);
     }
 
     // ───────────────── 授权胶囊（对话页 header） ─────────────────
@@ -2879,13 +2862,13 @@ internal sealed class AgentSideBarContentProvider
 
     // ───────────────── 设置面板 dirty 追踪 / 返回 ─────────────────
 
-    // 字段编辑 / provider 切换后重算脏态：与进入面板时的快照【值比对】（PropertyObject 深相等），
+    // 字段编辑后重算脏态：与进入面板时的快照【值比对】（PropertyObject 深相等），
     // 故改一个值再改回去、数据一致时不算脏。mSuppressDirty 期间的程序化写入（如还原快照）不参与。
     void RecomputeSettingsDirty()
     {
         if (mSuppressDirty || mSettingsSnapshot == null)
             return;
-        bool dirty = CurrentEngineType() != mProviderSnapshot || !mSettings.GetInfo().Equals(mSettingsSnapshot);
+        bool dirty = !mSettings.GetInfo().Equals(mSettingsSnapshot);
         if (dirty == mSettingsDirty)
             return;
         mSettingsDirty = dirty;
@@ -2917,26 +2900,20 @@ internal sealed class AgentSideBarContentProvider
         }
     }
 
-    // 还原到进入设置面板前的状态：重载快照 provider 的已存设置（覆盖用户的未确认编辑）。
+    // 还原到进入设置面板前的状态：重载已存设置（覆盖用户的未确认编辑）。
     // 依据不变量——每次退出面板都「应用(写盘)」或「忽略(还原)」，故进入时内存态恒等于盘上态，重载盘即回到进入态。
     void RestoreSettingsSnapshot()
     {
         mSuppressDirty = true;
         try
         {
-            var type = mProviderSnapshot;
-            if (!string.IsNullOrEmpty(type))
+            if (!string.IsNullOrEmpty(mEngineType))
             {
-                if (type != CurrentEngineType())
-                {
-                    mProviderData.SetValue(EngineKey, PropertyValue.Create(type)); // 触发 OnEngineSelectionChanged 载入其盘上设置
-                    mProviderData.Commit();
-                }
-                else
-                {
-                    LoadProviderSettings(type); // provider 未变，直接从盘重载覆盖未确认编辑
-                    RefreshEnginePropertyPanel(type);
-                }
+                LoadProviderSettings(mEngineType); // 直接从盘重载覆盖未确认编辑
+                // 还原后把 provider_id 联动基准同步回盘上值——否则上次联动把 mLastRenderedProviderId 留在
+                // 用户临时切换的 provider，随后任意 mSettings 变化（如用户再改其它字段）会误触发一次重置。
+                mLastRenderedProviderId = CurrentProviderId();
+                RefreshEnginePropertyPanel(mEngineType);
             }
         }
         finally { mSuppressDirty = false; }
@@ -2944,15 +2921,31 @@ internal sealed class AgentSideBarContentProvider
         RefreshSettingsDirtyMark();
     }
 
-    string CurrentEngineType() => mProviderData.GetValue(EngineKey, PropertyValue.Create(string.Empty)).ToString() ?? string.Empty;
+    // 引擎恒为内建首个（当前仅 openai-compatible）；多引擎选择 UI 已移除，保存/连接/面板统一用此固定引擎。
+    string CurrentEngineType() => mEngineType;
 
-    void OnEngineSelectionChanged()
+    // 当前属性面板的供应商（provider_id 字段值）。
+    string CurrentProviderId()
+        => mSettings.GetValue("provider_id", PropertyValue.Create(AgentProviderCatalog.DefaultProvider.Id)).ToString() ?? AgentProviderCatalog.DefaultProvider.Id;
+
+    // 供应商（Provider 下拉）切换联动：直接重置端点家族 + 接口地址为该供应商默认（选供应商=用其默认端点），
+    // 再重建属性面板。订阅于初始载入之后（mLastRenderedProviderId 已对准）；联动写入再触发 Modified 时
+    // provider_id 未变即返回——天然防递归。mSuppressDirty 期间（还原快照）不联动。
+    void OnSettingsModified()
     {
-        var type = CurrentEngineType();
-        if (string.IsNullOrEmpty(type))
+        if (mSuppressDirty)
             return;
-        LoadProviderSettings(type); // 切到某 provider：先载入它各自已存的设置，再刷新面板
-        RefreshEnginePropertyPanel(type);
+
+        var providerId = CurrentProviderId();
+        if (providerId == mLastRenderedProviderId)
+            return;
+        mLastRenderedProviderId = providerId;
+
+        var provider = AgentProviderCatalog.Resolve(providerId);
+        mSettings.SetValue("endpoint_family", PropertyValue.Create(AgentProviderCatalog.FamilyId(provider.Family)));
+        mSettings.SetValue("base_url", PropertyValue.Create(provider.BaseUrl));
+        mSettings.Commit();
+        RefreshEnginePropertyPanel(mEngineType);
     }
 
     void RefreshEnginePropertyPanel(string type)
@@ -3099,8 +3092,7 @@ internal sealed class AgentSideBarContentProvider
 
     void ShowSettings()
     {
-        // 进入面板：快照当前 provider + 全部字段值（还原基准 + 脏态比对基准）、清 dirty/*（此后编辑与快照不同才算脏）。
-        mProviderSnapshot = CurrentEngineType();
+        // 进入面板：快照当前全部字段值（还原基准 + 脏态比对基准）、清 dirty/*（此后编辑与快照不同才算脏）。
         mSettingsSnapshot = mSettings.GetInfo();
         mSettingsDirty = false;
         RefreshSettingsDirtyMark();
@@ -3183,7 +3175,6 @@ internal sealed class AgentSideBarContentProvider
         InputBackground = Style.BACK.ToBrush(),
         TextTrimming = TextTrimming.CharacterEllipsis,
     };
-    readonly PropertyObjectController mProviderController = new(); // provider 选择（单项 combo），复用属性面板样式
     readonly PropertyObjectController mPropertiesController = new();
     // agent 写授权胶囊（对话页 header，即时生效）：胶囊按钮 + 短名标签 + 三选一 flyout。
     readonly TextBlock mAuthLabel = new() { FontSize = 11, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Foreground = Style.LIGHT_WHITE.Opacity(0.85).ToBrush() };
@@ -3193,7 +3184,6 @@ internal sealed class AgentSideBarContentProvider
     readonly Label mSettingsTitleLabel = new() { FontSize = 12, Margin = new(8, 0), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Foreground = Style.LIGHT_WHITE.ToBrush() };
     bool mSettingsDirty;
     bool mSuppressDirty;         // 程序化写入（还原快照）期间不置脏
-    string mProviderSnapshot = string.Empty; // 进入面板时的 provider（× 忽略时的还原基准 + 脏态比对基准）
     PropertyObject? mSettingsSnapshot;       // 进入面板时的全部字段值（脏态与快照【值比对】：改回原值即不脏）
     readonly Label mStatusLabel = new() { FontSize = 11, Margin = new(24, 0, 24, 12), Foreground = Colors.IndianRed.ToBrush() };
     TuneLab.GUI.Components.Button mSendButton = null!;
@@ -3209,11 +3199,9 @@ internal sealed class AgentSideBarContentProvider
 
     readonly DataDocument mSettingsDocument = new();
     readonly DataPropertyObject mSettings;
-    // provider 选择单独挂一个数据对象（不污染 mSettings 的持久化）；engine 值存于 EngineKey 字段。
-    readonly DataDocument mProviderDocument = new();
-    readonly DataPropertyObject mProviderData;
-    IReadOnlyList<ComboBoxItem> mEngineOptions = [];
-    const string EngineKey = "provider";
+    // 固定引擎 id（当前仅 openai-compatible；多引擎选择 UI 已移除）与供应商联动基准（见 OnSettingsModified）。
+    string mEngineType = string.Empty;
+    string mLastRenderedProviderId = string.Empty;
     IProject? mProject;
     Func<IMidiPart?>? mCurrentPartProvider;
     Func<IQuantization?>? mQuantizationProvider;
