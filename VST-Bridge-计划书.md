@@ -532,6 +532,13 @@ M2「传输同步」已实施，对应第 8 节里程碑表格的 M2 行。DAW �
 - 诊断：渲染器诊断行新增 `tempo=`（宿主读共享内存插件上报曲速），用于确认插件是否持续上报。
 - 验证：用户 DAW 实测 BPM 已同步显示。
 
+**⑦ DAW 暂停在时间轴某处时 TuneLab 仍出声（该片段被重复播放）：**
+
+- 症状：DAW 暂停/停在时间轴某处时，该位置的音频被反复播放；用户要求暂停时静音。
+- 根因：暂停时宿主仍 `!playing` → idle 回填继续刷新 `[dawPos, writePos)` 这段环数据；若 DAW 暂停时仍调 `processBlock`，插件会持续读出该处环音频 → 暂停点所在片段被重复播放。
+- 修复：`BridgeVST3Processor.cpp` 在 `writeTransport` 之后、总线循环之前加 `if ((stateBits & TL_BRIDGE_STATE_PLAYING) == 0) return;`——未播放时输出静音（顶部 `buffer.clear()` 已保证）且不读环；播放恢复照常读环（暂停期间宿主 idle 回填已把该处补就绪）。
+- 验证：插件重编 + robocopy 部署（时间戳 2026/8/9 01:10，25MB）；**DAW 需重启加载新 dll**，待用户手工验收。
+
 **验证：** `dotnet build TuneLab.sln -c Debug` 0 错误；`dotnet test` **261 全过**（含改名的曲速保留用例）。宿主端已重编（TuneLab.exe 需重启生效）；插件因 ③ 已重编并部署（DAW 需重启加载新 dll）。⑤⑥ 用户 DAW 实测均已确认（3 音符全有声 + BPM 同步显示）。
 
 ---

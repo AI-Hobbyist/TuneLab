@@ -114,6 +114,12 @@ void BridgeVST3Processor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     mSession.writeSamplePos (playPos);
     mSession.writeTransport (stateBits, tempo, timeSigNum, timeSigDen, ppqPosition, ppqOfLastBarStart);
 
+    // M1 输出侧：DAW 暂停/停止（未播放）时输出静音、不读环——否则暂停在时间轴某处时，
+    // 插件会持续读出该处环数据（宿主暂停时还在 idle 回填刷新这段），造成该片段被重复播放。
+    // 顶部 buffer.clear() 已保证输出保持静音；播放恢复后照常读环（暂停期间宿主已把该处回填就绪）。
+    if ((stateBits & TL_BRIDGE_STATE_PLAYING) == 0)
+        return;
+
     // 逐总线从共享环拉取 [playPos, playPos+numSamples) 填输出总线。
     // 注意：getBusCount 参数是 isInput——输出总线要用 false（插件无输入总线，true 恒为 0，
     // 会导致本循环一次都不执行、输出恒静音）。
