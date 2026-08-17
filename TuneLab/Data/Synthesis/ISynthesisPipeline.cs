@@ -19,7 +19,7 @@ internal interface ISynthesisPipeline : IDisposable
     // 即便当前无消费者也对外暴露：让未来接线天然连到精确信号，而非默认接到 StatusChanged 浪费性能（多余重建 / 重绘）。
     // 合成音素已回填 note。voice-only 才有意义；instrument 无音素、永不触发。
     event Action? PhonemesChanged;
-    // 合成参数回显（readback）曲线更新。voice / instrument 均可触发。
+    // 合成参数回显（synthesized parameters）曲线更新。voice / instrument 均可触发。
     event Action? ParametersChanged;
     // 合成音高回显更新。voice-only；instrument 无音高回显、永不触发。
     event Action? PitchChanged;
@@ -37,6 +37,11 @@ internal interface ISynthesisPipeline : IDisposable
     // —— 调度面（Editor 驱动逐步合成）——
     SynthesisRange? PeekNext(double startTime, double endTime);
     void Dispatch(double startTime, double endTime);
+
+    // 诊断：调度器发现「某 part 明明有待办却一直没被派活」时调用，产出一行可读的现场。
+    // 存在的理由是这类故障**不抛异常**——管线卡在在飞态、会话自报与可派活不一致、part 界把块裁在窗外，
+    // 三者症状相同（条不动），只有把各自的量同时打出来才能当场分辨。仅异常路径调用，正常调度零开销。
+    string DescribeSchedulingState(double windowStart, double windowEnd);
 
     // —— effect 失效入口（数据线程；由 MidiPart 转发）——
     void OnEffectChainStructureChanged();

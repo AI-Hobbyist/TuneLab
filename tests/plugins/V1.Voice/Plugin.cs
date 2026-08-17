@@ -47,6 +47,10 @@ public sealed class TestVoiceEngine : IVoiceSynthesisEngine
         mNoteProperties.Add("tension", SliderConfig.Linear(0, -1, 1).WithMinLabel("Relaxed").WithMaxLabel("Tense"));
         // 整数滑条（验证吸附标度经属性 lane 全链路：侧栏滑条吸附 + 钉上参数面板后拖写同吸附整数格）。
         mNoteProperties.Add(("steps", "Steps (Int)"), SliderConfig.Integer(0, 0, 8));
+        // 可随机的数值框（验证 DraggableNumberBoxConfig.WithRandomizable）：右侧骰子按钮，点击在 [0,9999] 内均匀重取并吸附整数。
+        mNoteProperties.Add(("seed", "Seed (Random)"), DraggableNumberBoxConfig.Integer(0).WithRange(0, 9999).WithRandomizable());
+        // 负例：声明可随机但只有单侧界 → 宿主不给随机入口（无界侧上没有均匀分布可取）。
+        mNoteProperties.Add(("half_open", "Half Open (No Dice)"), DraggableNumberBoxConfig.Create(0).WithMin(0).WithRandomizable());
         // per-phoneme 属性声明（验证音素属性链路：声明→侧栏面板→编辑→持久→快照读取）。按核相对角色两套：
         // 核（slot 0，元音）= accent + offset；引导 / 核后辅音 = 仅 offset——验证按 slot 差异化 schema 全链路。
         mCorePhonemeProperties.Add("accent", SliderConfig.Linear(0, 0, 1).WithMaxLabel("Strong"));
@@ -90,7 +94,7 @@ public sealed class TestVoiceEngine : IVoiceSynthesisEngine
 
     // 合成参数回显轨（只读）：恒声明一条 energy 回显轨（分段形、DefaultValue=NaN、自带色），合成前 key 即存在、可预声明。
     // 曲线数据经 IVoiceSynthesisSession.SynthesizedParameters 按同一 key（energy）承载；宿主作一等只读轨绘制。
-    public IReadOnlyOrderedMap<PropertyKey, AutomationConfig> GetSynthesizedParameterConfigs(IVoiceSynthesisPartPropertyContext context) => mReadbackConfigs;
+    public IReadOnlyOrderedMap<PropertyKey, AutomationConfig> GetSynthesizedParameterConfigs(IVoiceSynthesisPartPropertyContext context) => mSynthesizedParameterConfigs;
     public ObjectConfig GetPartPropertyConfig(IVoiceSynthesisPartPropertyContext context) => ObjectConfig.Create(mPartProperties);
     public ObjectConfig GetNotePropertyConfig(IVoiceSynthesisNotePropertyContext context) => ObjectConfig.Create(mNoteProperties);
     // 音素属性声明（复用 note 上下文）：按核相对 slot 键控授 schema——核（slot 0）= accent + offset、
@@ -137,7 +141,7 @@ public sealed class TestVoiceEngine : IVoiceSynthesisEngine
     static readonly AutomationConfig mEnergyOffsetConfig = AutomationConfig.Create(-50, 50).WithDefault(0).WithColor("#B073E5");
     // 回显轨声明（恒在、只读）：分段形（DefaultValue = NaN），曲线数据经 SynthesizedParameters 的 "energy" key 承载。
     // 显示名与同 Id 的实参轨刻意不同（"Energy" vs "Energy (Actual)"）：配对判据只认 Id，DisplayText 各自自由。
-    static readonly OrderedMap<PropertyKey, AutomationConfig> mReadbackConfigs = new()
+    static readonly OrderedMap<PropertyKey, AutomationConfig> mSynthesizedParameterConfigs = new()
     {
         { ("energy", "Energy"), AutomationConfig.Create(0, 100).WithColor("#E573B0") },
     };
@@ -267,7 +271,7 @@ public sealed class TestSession : IVoiceSynthesisSession
                 piece.Segment.Write(0, rendered.Audio);
                 piece.Segment.Commit();
                 piece.Phonemes = rendered.Phonemes;
-                piece.EnergyReadback = rendered.EnergyReadback;
+                piece.EnergySynthesizedParameter = rendered.EnergySynthesizedParameter;
                 piece.PhonemesStale = false;     // 新产物落地：各级回显恢复有效
                 piece.ParametersStale = false;
             }
@@ -297,8 +301,8 @@ public sealed class TestSession : IVoiceSynthesisSession
             {
                 if (piece.ParametersStale || piece.Failed || piece.Segment == null)
                     continue;   // 参数回显失效（上游：音素 / 音高级及以上变）→ 留白，待重渲；改音高即清此处、不清音素
-                if (piece.EnergyReadback.Count > 0)
-                    segments.Add(piece.EnergyReadback);
+                if (piece.EnergySynthesizedParameter.Count > 0)
+                    segments.Add(piece.EnergySynthesizedParameter);
             }
 
             var map = new Map<string, SynthesizedParameter>();
@@ -381,7 +385,7 @@ public sealed class TestSession : IVoiceSynthesisSession
     }
 
     // —— 合成（worker 线程，只读冻结快照；产物归属经 snapshot.Notes[i].Id 键，零活引用）——
-    sealed record RenderResult(float[] Audio, double StartTime, IReadOnlyMap<string, SynthesizedSyllable> Phonemes, List<Point> EnergyReadback);
+    sealed record RenderResult(float[] Audio, double StartTime, IReadOnlyMap<string, SynthesizedSyllable> Phonemes, List<Point> EnergySynthesizedParameter);
 
     static RenderResult? Render(VoiceSynthesisSnapshot snapshot,
         IProgress<double>? progress, CancellationToken cancellation)
@@ -734,7 +738,7 @@ public sealed class TestSession : IVoiceSynthesisSession
         public double Progress;
         public IAudioSegment? Segment;
         public IReadOnlyMap<string, SynthesizedSyllable> Phonemes = new Map<string, SynthesizedSyllable>();
-        public IReadOnlyList<Point> EnergyReadback = [];
+        public IReadOnlyList<Point> EnergySynthesizedParameter = [];
     }
 
     // 模拟引擎合成耗时（真实引擎合成需时间）：瞬时回填看不出「合成前留白 → 合成后回显」两态。

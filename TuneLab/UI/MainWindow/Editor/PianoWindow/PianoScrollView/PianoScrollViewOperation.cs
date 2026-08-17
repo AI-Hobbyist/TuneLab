@@ -2403,7 +2403,7 @@ internal partial class PianoScrollView
 
             // 区间刚变过 ⇒ 按**新**区间补基线，且必须每帧重算：本帧开头的 DiscardTo(mHead) 已把上一帧的固定撤掉。
             // 拖动期反复写入不会自毁——区间失效已纳入批量括号、此时不转发给引擎，回显不会被清（见 VoiceSynthesisContext）。
-            PianoScrollView.Part.LockAssociatedReadbackGaps(mVibrato);
+            PianoScrollView.Part.LockAssociatedSynthesizedParameterGaps(mVibrato);
         }
 
         public void Up()
@@ -2485,7 +2485,7 @@ internal partial class PianoScrollView
             PianoScrollView.Part.EndMergeDirty();
 
             // 区间刚变过 ⇒ 按新区间补基线，每帧重算（本帧开头的 DiscardTo 已撤掉上一帧的固定）。
-            PianoScrollView.Part.LockAssociatedReadbackGaps(mVibrato);
+            PianoScrollView.Part.LockAssociatedSynthesizedParameterGaps(mVibrato);
         }
 
         public void Up()
@@ -2536,9 +2536,9 @@ internal partial class PianoScrollView
             PianoScrollView.Part.BeginMergeDirty();
             // 碰颤音就补基线：给每个被拖颤音**已关联的**分段轨把覆盖区空隙固定成模型输出（幂等、只填空隙、
             // 不覆盖已画值）。区间在本操作里不变，故只需一次；放在 mHead **之前**，Move 的 DiscardTo(mHead)
-            // 才不会把它撤掉。见 SynthesisLock.LockAssociatedReadbackGaps。
+            // 才不会把它撤掉。见 SynthesisLock.LockAssociatedSynthesizedParameterGaps。
             foreach (var vibrato in vibratos)
-                PianoScrollView.Part.LockAssociatedReadbackGaps(vibrato);
+                PianoScrollView.Part.LockAssociatedSynthesizedParameterGaps(vibrato);
             mHead = PianoScrollView.Part.Head;
             mVibratos = vibratos;
             PianoScrollView.mOperatingVibratoItem = vibratoItem;
@@ -2606,9 +2606,9 @@ internal partial class PianoScrollView
             PianoScrollView.Part.BeginMergeDirty();
             // 碰颤音就补基线：给每个被拖颤音**已关联的**分段轨把覆盖区空隙固定成模型输出（幂等、只填空隙、
             // 不覆盖已画值）。区间在本操作里不变，故只需一次；放在 mHead **之前**，Move 的 DiscardTo(mHead)
-            // 才不会把它撤掉。见 SynthesisLock.LockAssociatedReadbackGaps。
+            // 才不会把它撤掉。见 SynthesisLock.LockAssociatedSynthesizedParameterGaps。
             foreach (var vibrato in vibratos)
-                PianoScrollView.Part.LockAssociatedReadbackGaps(vibrato);
+                PianoScrollView.Part.LockAssociatedSynthesizedParameterGaps(vibrato);
             mHead = PianoScrollView.Part.Head;
             mVibratos = vibratos;
             PianoScrollView.mOperatingVibratoItem = vibratoItem;
@@ -2677,7 +2677,7 @@ internal partial class PianoScrollView
             PianoScrollView.Part.BeginMergeDirty();
             // 补基线（同 VibratoAmplitudeOperation.Down 的理由）：放在 mHead 之前，不被 Move 的 DiscardTo 撤掉。
             foreach (var vibrato in vibratos)
-                PianoScrollView.Part.LockAssociatedReadbackGaps(vibrato);
+                PianoScrollView.Part.LockAssociatedSynthesizedParameterGaps(vibrato);
             mHead = PianoScrollView.Part.Head;
             PianoScrollView.mOperatingVibratoItem = vibratoItem;
             mVibratos = vibratos;
@@ -2765,7 +2765,7 @@ internal partial class PianoScrollView
             mPart.BeginMergeDirty();
             // 补基线（同 VibratoAmplitudeOperation.Down 的理由）：放在 mHead 之前，不被 Move 的 DiscardTo 撤掉。
             foreach (var vibrato in vibratos)
-                mPart.LockAssociatedReadbackGaps(vibrato);
+                mPart.LockAssociatedSynthesizedParameterGaps(vibrato);
             mHead = mPart.Head;
             PianoScrollView.mOperatingVibratoItem = vibratoItem;
             mVibratos = vibratos;
@@ -2831,7 +2831,7 @@ internal partial class PianoScrollView
             mPart.BeginMergeDirty();
             // 补基线（同 VibratoAmplitudeOperation.Down 的理由）：放在 mHead 之前，不被 Move 的 DiscardTo 撤掉。
             foreach (var vibrato in vibratos)
-                mPart.LockAssociatedReadbackGaps(vibrato);
+                mPart.LockAssociatedSynthesizedParameterGaps(vibrato);
             mHead = mPart.Head;
             PianoScrollView.mOperatingVibratoItem = vibratoItem;
             mVibratos = vibratos;
@@ -2943,7 +2943,7 @@ internal partial class PianoScrollView
             // 位置刚变过 ⇒ 按新区间补基线，每帧重算（上一帧的固定已被本帧开头的 DiscardTo 撤掉）。
             // 旧位置固定下来的曲线是用户数据，移动颤音不删它——如实保留。
             foreach (var vibrato in mMoveVibratos)
-                part.LockAssociatedReadbackGaps(vibrato);
+                part.LockAssociatedSynthesizedParameterGaps(vibrato);
         }
 
         public void Up()
@@ -3114,17 +3114,17 @@ internal partial class PianoScrollView
             if (PianoScrollView.Part == null)
                 return;
 
-            PianoScrollView.Part.EndMergeDirty();
-            if (mMoved)
-            {
-                PianoScrollView.Part.Commit();
-            }
-            else
+            if (!mMoved)
             {
                 // 只撤**本操作**产生的变更，不是 Discard() 的"撤销全部未提交命令"：同一次按下里可能有先行的
                 // 离散动作（预览落笔的 ConnectAnchorGroup / InsertPoint），那属于用户这一下的意图，不能被
-                // "没拖动"连坐撤掉。末尾照样 Commit，把这一次按下抬起收成**一个**撤销单元
-                //（纯点击无先行动作时无未提交命令，Commit 为 no-op）。
+                // "没拖动"连坐撤掉。
+                //
+                // 【顺序不变量，勿调换】DiscardTo 必须在 EndMergeDirty **之前**：mHead 取在 BeginMergeDirty
+                // 之后（见 Down），若先 End 再 DiscardTo，被撤掉的未提交命令里就包含那条 End 命令本身
+                // —— 它的逆动作是 Begin，于是括号被重新打开且再无人关闭。后果不是崩溃而是静默失效：
+                // 该 part 的曲线变更从此全被批量缓冲吞掉（插件收不到、不标脏），且调度器永久跳过它，
+                // 表现为"画完一笔就再也不渲染"，只有重开工程或剪切粘贴才能恢复。
                 PianoScrollView.Part.DiscardTo(mHead);
                 if (mCtrl)
                 {
@@ -3138,8 +3138,10 @@ internal partial class PianoScrollView
                     PianoScrollView.Part.Pitch.DeselectAllAnchors();
                     mAnchor.Select();
                 }
-                PianoScrollView.Part.Commit();
             }
+            // 末尾照样 Commit，把这一次按下抬起收成**一个**撤销单元（纯点击无先行动作时 Commit 为 no-op）。
+            PianoScrollView.Part.EndMergeDirty();
+            PianoScrollView.Part.Commit();
             mMoved = false;
             mAnchor = null;
         }
