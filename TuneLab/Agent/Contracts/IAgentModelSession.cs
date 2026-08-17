@@ -18,11 +18,29 @@ public interface IAgentModelSession : IDisposable
 
     // 流式重载：生成过程中把文本增量逐段经 onContentDelta 回调（可空），返回值仍是完整一轮回复（含工具调用/usage）。
     // 默认实现回退到上面的非流式版本（不产增量、等整段返回）——不支持流式的适配器无需改动。支持流式者覆盖此方法。
-    Task<AgentModelReply> SendAsync(AgentModelRequest request, IProgress<string>? onContentDelta, CancellationToken cancellationToken)
-        => SendAsync(request, cancellationToken);
+    async Task<AgentModelReply> SendAsync(AgentModelRequest request, IProgress<string>? onContentDelta, CancellationToken cancellationToken)
+    {
+        var reply = await SendAsync(request, cancellationToken);
+        if (!string.IsNullOrEmpty(reply.Content))
+            onContentDelta?.Report(reply.Content);
+        return reply;
+    }
 
     // 流式重载（含推理通道）：onReasoningDelta 接收推理模型的「思考」增量（OpenAI 协议 reasoning_content），与正文
     // onContentDelta 分流，供宿主单独渲染思考块。默认回退到只产正文的重载——不支持推理通道的适配器无需改动。
-    Task<AgentModelReply> SendAsync(AgentModelRequest request, IProgress<string>? onContentDelta, IProgress<string>? onReasoningDelta, CancellationToken cancellationToken)
-        => SendAsync(request, onContentDelta, cancellationToken);
+    async Task<AgentModelReply> SendAsync(AgentModelRequest request, IProgress<string>? onContentDelta, IProgress<string>? onReasoningDelta, CancellationToken cancellationToken)
+    {
+        var reply = await SendAsync(request, cancellationToken);
+        if (!string.IsNullOrEmpty(reply.Reasoning))
+            onReasoningDelta?.Report(reply.Reasoning);
+        if (!string.IsNullOrEmpty(reply.Content))
+            onContentDelta?.Report(reply.Content);
+        return reply;
+    }
+}
+
+public interface IAgentThinkingLevelSession
+{
+    bool SupportsThinkingLevel { get; }
+    AgentThinkingLevel ThinkingLevel { get; set; }
 }

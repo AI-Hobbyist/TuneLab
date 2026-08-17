@@ -45,6 +45,15 @@ internal class AudioGraph()
         }
     }
 
+    // M1：加锁取轨道数组快照，供桥接渲染线程安全遍历。
+    internal IAudioTrack[] TracksSnapshot()
+    {
+        lock (mTrackLockObject)
+        {
+            return [.. mTracks];
+        }
+    }
+
     public void AddData(IAudioTrack track, int position, int endPosition, bool isStereo, float[] buffer, int offset)
     {
         double volume = track.Volume;

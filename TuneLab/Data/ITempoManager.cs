@@ -15,6 +15,9 @@ internal interface ITempoManager : IDataObject<List<TempoInfo>>
 {
     IProject Project { get; } // TODO: Remove this
     IReadOnlyList<ITempo> Tempos { get; }
+    // 桥接会话时基覆盖（DAW 为 master）：非空时表示 DAW 恒定曲速在生效（换算与时间轴 tempo 行用它）。
+    // 仅由 BridgeTransport 经 TempoManager.SetTimebaseOverride 写入，断连置 null 还原工程曲速表。只读暴露给 UI。
+    double? TimebaseOverrideBpm { get; }
     int AddTempo(double pos, double bpm);
     void RemoveTempoAt(int index);
     void SetBpm(int index, double bpm);

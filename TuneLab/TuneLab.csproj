@@ -15,6 +15,9 @@
 
 	<ItemGroup>
 		<AvaloniaResource Include="Assets\**" />
+		<!-- 简谱音高标签字体：真身在仓库根 jianpu-ascii-font 子模块的 JianpuASCII.ttf（SIL OFL，衍生自 Source Code Pro）。
+		     Link 进 Assets\Font 以沿用 avares://TuneLab/Assets/Font#<家族名> 的内嵌字体约定（家族名：Jianpu Ascii）。 -->
+		<AvaloniaResource Include="..\jianpu-ascii-font\JianpuASCII.ttf" Link="Assets\Font\JianpuASCII.ttf" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -80,6 +83,7 @@
 	  <ProjectReference Include="..\TuneLab.I18N\TuneLab.I18N.csproj" />
 	  <ProjectReference Include="..\TuneLab.GUI\TuneLab.GUI.csproj" />
 	  <ProjectReference Include="..\TuneLab.SDK\TuneLab.SDK.csproj" />
+	  <ProjectReference Include="..\TuneLab.Bridge\TuneLab.Bridge.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

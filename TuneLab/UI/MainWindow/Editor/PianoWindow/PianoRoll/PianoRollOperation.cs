@@ -120,7 +120,8 @@ internal partial class PianoRoll
         {
             double bottom = PitchAxis.Pitch2Y(MusicTheory.C0_PITCH + (double)i * 12 / 7) - 0.5;
             double top = PitchAxis.Pitch2Y(MusicTheory.C0_PITCH + (double)(i + 1) * 12 / 7) + 0.5;
-            items.Add(new WhiteKeyItem(this) { Rect = new Rect(-4, top, Bounds.Width + 4, bottom - top), KeyNumber = GetKeyNumberForWhiteKeyIndex(i) });
+            int keyNumber = GetKeyNumberForWhiteKeyIndex(i);
+            items.Add(new WhiteKeyItem(this) { Rect = new Rect(-4, top, Bounds.Width + 4, bottom - top), KeyNumber = keyNumber, Label = KeyLabel(keyNumber) });
         }
 
         int minBlack = (int)Math.Floor(PitchAxis.MinVisiblePitch);
@@ -130,16 +131,19 @@ internal partial class PianoRoll
             if (MusicTheory.IsBlack(i))
             {
                 double top = PitchAxis.Pitch2Y(i + 1);
-                items.Add(new BlackKeyItem(this) { Rect = new Rect(0, top, 32, keyHeight) , KeyNumber = i });
+                items.Add(new BlackKeyItem(this) { Rect = new Rect(0, top, 32, keyHeight), KeyNumber = i, Label = KeyLabel(i) });
             }
         }
-    
-        int minText = (int)Math.Floor(c0hide / groupHeight);
-        int maxText = (int)Math.Ceiling((c0hide + Bounds.Height) / groupHeight);
-        for (int i = minText; i < maxText; i++)
+
+        if (!TuneLab.Configs.Settings.ShowAllPianoKeyLabels)
         {
-            double bottom = PitchAxis.Pitch2Y(MusicTheory.C0_PITCH + i * 12);
-            items.Add(new TextItem(this) { Bottom = bottom, Text = "C" + i });
+            int minText = (int)Math.Floor(c0hide / groupHeight);
+            int maxText = (int)Math.Ceiling((c0hide + Bounds.Height) / groupHeight);
+            for (int i = minText; i < maxText; i++)
+            {
+                double bottom = PitchAxis.Pitch2Y(MusicTheory.C0_PITCH + i * 12);
+                items.Add(new TextItem(this) { Bottom = bottom, Text = "C" + i });
+            }
         }
     }
 

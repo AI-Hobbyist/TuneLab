@@ -42,6 +42,7 @@ using TuneLab.Extensions.Formats;
 using TuneLab.Extensions.Formats.TLP;
 using TuneLab.Extensions.Instruments;
 using TuneLab.Extensions.Voices;
+using TuneLab.Bridge;
 namespace TuneLab.UI;
 
 internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDependency, FunctionBar.IDependency
@@ -57,7 +58,7 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
     public IHolder<IMidiPart> EditingPartHolder => mPianoWindow.PartHolder;
     public TickAxis PianoTickAxis => mPianoWindow.TickAxis;
     public PitchAxis PianoPitchAxis => mPianoWindow.PitchAxis;
-    public INotifiableProperty<PianoTool> PianoTool { get; } = new NotifiableProperty<PianoTool>(UI.PianoTool.Note);
+    public INotifiableProperty<PianoTool> PianoTool { get; } = new NotifiableProperty<PianoTool>(UI.PianoTool.Pencil);
     public INotifiableProperty<PlayScrollTarget> PlayScrollTarget { get; } = new NotifiableProperty<PlayScrollTarget>(UI.PlayScrollTarget.None);
     public Editor()
     {
@@ -75,6 +76,7 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         // 钢琴窗先于功能栏构造：FunctionBar 构造时即订阅 EditingPartHolder（颤音工具可用性）。
         mPianoWindow = new(this);// { VerticalAlignment = Avalonia.Layout.VerticalAlignment.Bottom };
         mFunctionBar = new(this);
+        mTransportBar = new(this, GotoStart, GotoEnd);
         // agent 经此实时读取"当前编辑 part"（用户说"当前/这个 part"时解析序号）与当前量化（吸附网格）。
         mAgentSideBarContentProvider.SetCurrentPartProvider(() => mPianoWindow.Part);
         mAgentSideBarContentProvider.SetQuantizationProvider(() => mPianoWindow.Quantization);
@@ -167,6 +169,8 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
 
         this.AddDock(mTrackWindow, Dock.Top);
         this.AddDock(mFunctionBar, Dock.Top);
+        mTransportBar.IsVisible = false;
+        this.AddDock(mTransportBar, Dock.Bottom);
         this.AddDock(mPianoWindow);
 
         MinHeight = mFunctionBar.Height;
@@ -179,6 +183,7 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         mFunctionBar.CollapsePropertiesAsked += show => mRightSideBar.IsVisible = show;
         mFunctionBar.GotoStartAsked += GotoStart;
         mFunctionBar.GotoEndAsked += GotoEnd;
+        mFunctionBar.TogglePianoWindowModeAsked += TogglePianoWindowMode;
         ProjectHolder.WillModify.Subscribe(OnProjectWillChange, s);
         ProjectHolder.Modified.Subscribe(OnProjectChanged, s);
         // 在编 part 被摘除（移动/重排会先 Remove 再 Insert）时暂存到 mDetachedEditingPart——SwitchEditingPart(null)
@@ -190,7 +195,7 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         ProjectHolder.When(project => project.Tracks.ItemAdded).Subscribe(track => { if (mDetachedEditingPart != null && track.Parts.Contains(mDetachedEditingPart)) { SwitchEditingPart(mDetachedEditingPart); mDetachedEditingPart = null; } mExportSideBarContentProvider.RefreshTrackList(); });
         ProjectHolder.When(project => project.Tracks.WhenAny(track => track.Name.Modified)).Subscribe(() => mExportSideBarContentProvider.RefreshTrackList());
         mPianoWindow.PartHolder.Modified.Subscribe(() => { mPianoWindow.IsVisible = mPianoWindow.Part != null; mNotePropertySideBarContentProvider.SetPart(mPianoWindow.Part); UpdatePartPanelTarget(); }, s);
-        // instrument 音源无颤音系统：编辑 part 切换 / 音源就地换种类时，颤音工具自动退回音符工具（工具栏按钮同步置灰，见 FunctionBar）。
+        // instrument 音源无颤音系统：编辑 part 切换 / 音源就地换种类时，颤音工具自动退回选择工具（工具栏按钮同步置灰，见 FunctionBar）。
         void EnsurePianoToolAvailable() { if (PianoTool.Value == UI.PianoTool.Vibrato && mPianoWindow.Part?.SoundSource.Kind == SourceKind.Instrument) PianoTool.Value = UI.PianoTool.Note; }
         mPianoWindow.PartHolder.Modified.Subscribe(EnsurePianoToolAvailable, s);
         mPianoWindow.PartHolder.When(part => part.SoundSource.Modified).Subscribe(EnsurePianoToolAvailable);
@@ -292,14 +297,19 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
     {
         mLastPart = mEditingPart;
         mEditingPart = part;
+        IMidiPart? midiPart = part as IMidiPart;
         if (part == null)
         {
             mPianoWindow.Part = null;
         }
-        else if (part is IMidiPart midiPart)
+        else if (midiPart != null)
         {
             mPianoWindow.Part = midiPart;
         }
+
+        // 分离窗拥有独立视觉树，不能跨 TopLevel 复用主窗控件；只同步当前编辑 part（数据层仍是同一份）。
+        if (mDetachedPianoView != null)
+            mDetachedPianoView.Part = midiPart;
     }
 
     // 焦点感知地把目标 part 集下发给 Part 侧栏；合并一拍内的多次触发（框选时每个 part 的 SelectionChanged 都触发）。
@@ -330,6 +340,128 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
     {
         mTrackWindow.Height = TrackWindowHeight;
         EditorState.TrackWindowHeight.Value = mTrackWindowHeight;
+    }
+
+    // 嵌入态的功能栏即两块编辑区之间的分隔条：拖动它会同时改变编排区和钢琴窗可用高度。
+    // 分离态不另造一套编辑器，而是把同一个 PianoWindow 重挂到独立 Window，选区、滚动和快捷键上下文均保留。
+    void TogglePianoWindowMode()
+    {
+        if (!mPianoWindowDetached)
+        {
+            if (mDetachedPianoWindow == null)
+            {
+                var window = new Window
+                {
+                    Title = "TuneLab - Piano",
+                    Width = Math.Max(640, EditorState.DetachedPianoWindowWidth.Value),
+                    Height = Math.Max(360, EditorState.DetachedPianoWindowHeight.Value),
+                    MinWidth = 480,
+                    MinHeight = 300,
+                    Background = Style.BACK.ToBrush(),
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                };
+                window.KeyDown += OnDetachedPianoWindowKeyDown;
+                window.Closing += (_, e) =>
+                {
+                    // 分离窗自身的关闭只表示退出分离模式，回嵌后保留主编辑器。
+                    if (mPianoWindowDetached)
+                    {
+                        e.Cancel = true;
+                        Dispatcher.UIThread.Post(AttachPianoWindow);
+                    }
+                };
+                window.GetObservable(TopLevel.ClientSizeProperty).Subscribe(size =>
+                {
+                    if (size.Width >= window.MinWidth)
+                        EditorState.DetachedPianoWindowWidth.Value = size.Width;
+                    if (size.Height >= window.MinHeight)
+                        EditorState.DetachedPianoWindowHeight.Value = size.Height;
+                });
+                mDetachedPianoWindow = window;
+            }
+
+            var detachedWindow = mDetachedPianoWindow;
+
+            if (mDetachedPianoView == null)
+            {
+                mDetachedPianoView = new PianoWindow(this);
+                mDetachedPianoView.Part = mPianoWindow.Part;
+                mDetachedFunctionBar = new FunctionBar(this) { SplitResizeEnabled = false };
+                mDetachedFunctionBar.GotoStartAsked += GotoStart;
+                mDetachedFunctionBar.GotoEndAsked += GotoEnd;
+                mDetachedFunctionBar.TogglePianoWindowModeAsked += TogglePianoWindowMode;
+                // 两个工具栏都能改量化，保持编排区与两个钢琴视图同一口径。
+                mDetachedFunctionBar.QuantizationChanged.Subscribe(mPianoWindow.Quantization.Set);
+                mDetachedFunctionBar.QuantizationChanged.Subscribe(mDetachedPianoView.Quantization.Set);
+                mDetachedFunctionBar.QuantizationChanged.Subscribe(mTrackWindow.Quantization.Set);
+                mFunctionBar.QuantizationChanged.Subscribe(mDetachedPianoView.Quantization.Set);
+
+                var pianoLayout = new DockPanel();
+                pianoLayout.AddDock(mDetachedFunctionBar, Dock.Top);
+                pianoLayout.AddDock(mDetachedPianoView);
+                detachedWindow.Content = pianoLayout;
+            }
+
+            // 主窗不移动任何控件：只隐藏嵌入编辑区，显示底部走带，让多轨使用全部剩余高度。
+            // DockPanel 的填充项由子项顺序决定；钢琴窗隐藏后，将多轨移到最后使其成为填充项。
+            mFunctionBar.IsVisible = false;
+            mPianoWindow.IsVisible = false;
+            mTransportBar.IsVisible = true;
+            mTrackWindow.Height = double.NaN;
+            Children.Remove(mTrackWindow);
+            Children.Add(mTrackWindow);
+            mPianoWindowDetached = true;
+            // 不设为主窗 Owner：Owner 关闭会先触发子窗的 Closing；该事件为支持“关闭即回嵌”而取消，
+            // 从而吞掉主窗的第一次关闭请求。退出时由 MainWindow_Closing 显式关闭本窗。
+            detachedWindow.Show();
+            return;
+        }
+
+        AttachPianoWindow();
+    }
+
+    void AttachPianoWindow()
+    {
+        var window = mDetachedPianoWindow;
+        if (window == null || !mPianoWindowDetached)
+            return;
+
+        // 独立窗与主窗没有共享 visual；回嵌只切换可见性，不触碰其内容树。
+        window.Hide();
+        mPianoWindowDetached = false;
+        mTransportBar.IsVisible = false;
+        mFunctionBar.IsVisible = true;
+        mPianoWindow.IsVisible = mPianoWindow.Part != null;
+        mTrackWindow.Height = TrackWindowHeight;
+        // 恢复嵌入态的 Dock 顺序：多轨固定在功能栏之前，钢琴窗继续承担剩余高度。
+        Children.Remove(mTrackWindow);
+        Children.Insert(Children.IndexOf(mFunctionBar), mTrackWindow);
+        mPianoWindow.Focus();
+    }
+
+    // 主窗口退出的第一步：无论工程是否有未保存修改，都先恢复单窗口布局，再由主窗口决定是否继续退出。
+    internal void AttachPianoWindowForMainWindowClose() => AttachPianoWindow();
+
+    // 独立 TopLevel 不会冒泡到主窗口，需在自身窗口补上主窗承担的全局/编辑域快捷键。
+    void OnDetachedPianoWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.IsHandledByTextBox())
+            return;
+
+        e.Handled = Keymap.TryHandle(KeyScope.Global, e) || Keymap.TryHandle(KeyScope.Editor, e);
+    }
+
+    // 主窗口退出时释放隐藏或显示中的独立 TopLevel，防止 Avalonia 事件循环因残留窗口继续存活。
+    internal void CloseDetachedPianoWindow()
+    {
+        if (mDetachedPianoWindow == null)
+            return;
+
+        mPianoWindowDetached = false; // 让 Closing 回调放行实际关闭。
+        mDetachedPianoWindow.Close();
+        mDetachedPianoWindow = null;
+        mDetachedPianoView = null;
+        mDetachedFunctionBar = null;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -369,12 +501,12 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         Keymap.Register(new() { Id = "view.toggleParameterPanel", DisplayName = () => "Toggle Parameter Panel".Tr(TC.Menu), Scope = KeyScope.Editor, DefaultGesture = new(Key.P, KeyBinding.PrimaryModifier), Execute = () => mPianoWindow.ToggleParameterPanel() });
 
         // 显示名沿用工具栏（FunctionBar）既有措辞，复用其翻译、与工具栏保持一致。
-        RegisterToolCommand("tool.note", "Note Tool", Key.D1, UI.PianoTool.Note);
-        RegisterToolCommand("tool.pitch", "Pitch Pen", Key.D2, UI.PianoTool.Pitch);
-        RegisterToolCommand("tool.anchor", "Anchor Tool", Key.D3, UI.PianoTool.Anchor);
-        // 显示名不带 Pitch：这支笔在音符区固定合成音高、在参数区固定配对回显，作用面不限于音高（见 SynthesisLock）。
-        RegisterToolCommand("tool.lock", "Locking Brush", Key.D4, UI.PianoTool.Lock);
-        RegisterToolCommand("tool.vibrato", "Vibrato Tool", Key.D5, UI.PianoTool.Vibrato);
+        RegisterToolCommand("tool.note", "Select Tool", Key.D1, UI.PianoTool.Note);
+        RegisterToolCommand("tool.pencil", "Pencil Tool", Key.D2, UI.PianoTool.Pencil);
+        RegisterToolCommand("tool.pitch", "Pitch Pen", Key.D3, UI.PianoTool.Pitch);
+        RegisterToolCommand("tool.anchor", "Anchor Tool", Key.D4, UI.PianoTool.Anchor);
+        RegisterToolCommand("tool.lock", "Pitch Locking Brush", Key.D5, UI.PianoTool.Lock);
+        RegisterToolCommand("tool.vibrato", "Vibrato Tool", Key.D6, UI.PianoTool.Vibrato);
     }
 
     void RegisterToolCommand(string id, string name, Key key, PianoTool tool)
@@ -1221,6 +1353,13 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         mPianoWindow.TickAxis.AnimateMoveTickToX(endTick, mPianoWindow.TickAxis.ViewLength);
     }
 
+    // 宿主版本号（例 1.6.0 → 0x00010600）：随桥接握手写入控制块，供插件侧识别宿主版本。
+    static uint HostAppVersion()
+    {
+        var v = AppInfo.Version;
+        return (uint)((Math.Clamp(v.Major, 0, 255) << 16) | (Math.Clamp(v.Minor, 0, 255) << 8) | Math.Clamp(v.Build, 0, 255));
+    }
+
     struct Description
     {
         public string name { get; set; }
@@ -1541,6 +1680,15 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         }
 
         {
+            var menuBarItem = new MenuItem { Foreground = Style.TEXT_LIGHT.ToBrush(), Focusable = false }.SetTrName("Bridge");
+            {
+                var menuItem = new MenuItem().SetTrName("Bridge Panel...").SetAction(() => BridgePanel.Open(this.Window(), HostAppVersion(), TuneLab.Audio.AudioBridgeProvider.Instance));
+                menuBarItem.Items.Add(menuItem);
+            }
+            menu.Items.Add(menuBarItem);
+        }
+
+        {
             var menuBarItem = new MenuItem { Foreground = Style.TEXT_LIGHT.ToBrush(), Focusable = false }.SetTrName("Help");
             {
                 var menuItem = new MenuItem().SetTrName("Open TuneLab Folder").SetAction(() => ProcessHelper.OpenUrl(PathManager.TuneLabFolder));
@@ -1649,6 +1797,11 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
     }
 
     double mTrackWindowHeight = 240;
+    Window? mDetachedPianoWindow;
+    bool mPianoWindowDetached;
+    PianoWindow? mDetachedPianoView;
+    FunctionBar? mDetachedFunctionBar;
+    readonly TransportBar mTransportBar;
     double TrackWindowHeight
     {
         get => mTrackWindowHeight.Limit(mTrackWindow.MinHeight, Bounds.Height - mFunctionBar.Bounds.Height);

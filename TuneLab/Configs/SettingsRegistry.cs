@@ -134,6 +134,15 @@ internal static class SettingsRegistry
         "Parameter Boundary Extension (tick)", SliderConfig.Integer(D.ParameterBoundaryExtension, 1, 60), D.ParameterBoundaryExtension);
     public static readonly SettingItem<bool> ParameterSyncMode = Bool("ParameterSyncMode", SettingTab.Editing,
         "Parameter Sync Mode", CheckBoxConfig.Create(D.ParameterSyncMode), D.ParameterSyncMode);
+    public static readonly SettingItem<bool> ShowAllPianoKeyLabels = Bool("ShowAllPianoKeyLabels", SettingTab.Editing,
+        "Show All Piano Key Labels", CheckBoxConfig.Create(D.ShowAllPianoKeyLabels), D.ShowAllPianoKeyLabels);
+    public static readonly SettingItem<string> PianoKeyLabelStyle = Str("PianoKeyLabelStyle", SettingTab.Editing,
+        "Piano Key Label Style", ComboBoxConfig.Create([
+            new ComboBoxItem(PropertyValue.Create("PitchName"), "CDEFGAB"),
+            new ComboBoxItem(PropertyValue.Create("Numbered"), "1234567"),
+        ]), D.PianoKeyLabelStyle);
+    public static readonly SettingItem<string> NumberedPianoKeyTonic = Str("NumberedPianoKeyTonic", SettingTab.Editing,
+        "Numbered Piano Key Tonic (1 =)", ComboBoxConfig.Create(["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]), D.NumberedPianoKeyTonic);
     // 编辑器层 G2P 的总闸（只作用于**录入歌词那一刻**的写入，不参与读取——见 Note.DataLyric.Set）。
     public static readonly SettingItem<bool> AutoGeneratePronunciation = Bool("AutoGeneratePronunciation", SettingTab.Editing,
         "Auto Generate Pronunciation", CheckBoxConfig.Create(D.AutoGeneratePronunciation), D.AutoGeneratePronunciation,
@@ -166,7 +175,7 @@ internal static class SettingsRegistry
         // Appearance
         InterfaceFontFamily, BackgroundImagePath, BackgroundImageOpacity, TrackHueChangeRate,
         // Editing
-        ParameterBoundaryExtension, ParameterSyncMode, AutoGeneratePronunciation,
+        ParameterBoundaryExtension, ParameterSyncMode, ShowAllPianoKeyLabels, PianoKeyLabelStyle, NumberedPianoKeyTonic, AutoGeneratePronunciation,
         // 仅存储（无设置窗行）
         AutoScrollTarget, AgentModelProvider, AgentAuthorization,
     ];

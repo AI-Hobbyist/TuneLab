@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TuneLab.Audio;
+using TuneLab.Configs;
 using TuneLab.Foundation;
 using TuneLab.SDK;
 using TuneLab.Data;
@@ -26,9 +27,16 @@ internal class FunctionBar : LayerPanel
     public event Action<bool>? CollapsePropertiesAsked;
     public event Action? GotoStartAsked;
     public event Action? GotoEndAsked;
+    public event Action? TogglePianoWindowModeAsked;
 
     public INotifiableProperty<PlayScrollTarget> PlayScrollTarget => mDependency.PlayScrollTarget;
     public IActionEvent<QuantizationBase, QuantizationDivision> QuantizationChanged => mQuantizationChanged;
+
+    // 嵌入态才作为多轨/钢琴窗之间的分隔条；分离态它只是钢琴窗顶部工具栏。
+    public bool SplitResizeEnabled
+    {
+        set => mMover.IsVisible = value;
+    }
 
     public interface IDependency
     {
@@ -43,9 +51,9 @@ internal class FunctionBar : LayerPanel
     {
         mDependency = dependency;
 
-        var mover = new Mover() { Margin = new(0, 1) };
-        mover.Moved.Subscribe(p => Moved?.Invoke(p.Y + Bounds.Y));
-        Children.Add(mover);
+        mMover = new Mover() { Margin = new(0, 1) };
+        mMover.Moved.Subscribe(p => Moved?.Invoke(p.Y + Bounds.Y));
+        Children.Add(mMover);
 
         var dockPanel = new DockPanel() { Margin = new(64, 0, 12, 0) };
         {
@@ -86,6 +94,14 @@ internal class FunctionBar : LayerPanel
                 SetupToolTip(gotoEndButton, "Go to End".Tr(this));
                 gotoEndButton.Clicked += () => { GotoEndAsked?.Invoke(); };
                 audioControlPanel.Children.Add(gotoEndButton);
+
+                // 同一编辑器实例可在主窗嵌入与独立窗口之间来回移动；独立后关闭窗口即回嵌。
+                var pianoWindowModeButton = new GUI.Components.Button() { Width = 36, Height = 36 }
+                    .AddContent(new() { Item = new BorderItem() { CornerRadius = 4 }, ColorSet = new() { HoveredColor = hoverBack, PressedColor = hoverBack } })
+                    .AddContent(new() { Item = new TextItem() { Text = "↗", FontSize = 20 }, ColorSet = new() { Color = Style.LIGHT_WHITE.Opacity(0.5), HoveredColor = Colors.White, PressedColor = Colors.White } });
+                SetupToolTip(pianoWindowModeButton, "Detach or attach piano window".Tr(this));
+                pianoWindowModeButton.Clicked += () => TogglePianoWindowModeAsked?.Invoke();
+                audioControlPanel.Children.Add(pianoWindowModeButton);
 
                 // 时间码：播放头位置的绝对时间。tick→秒依赖 tempo，故除播放头移动外还需跟 tempo 修改与工程切换刷新。
                 // 毫秒段单独小号浅色，与时分秒拉开主次。
@@ -153,6 +169,15 @@ internal class FunctionBar : LayerPanel
                 quantizationComboBox.SetConfig(ComboBoxConfig.Create(options.Select(option => (ComboBoxItem)option.option).ToList()).WithDefault(options[3].option));
                 quantizationComboBox.ValueCommitted.Subscribe(() => { var index = quantizationComboBox.Index; if ((uint)index >= options.Length) return; mQuantizationChanged.Invoke(options[index].quantizationBase, options[index].quantizationDivision); });
                 quantizationPanel.Children.Add(quantizationComboBox);
+
+                var numberedTonicLabel = new TextBlock() { Text = "1=", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Foreground = Style.TEXT_NORMAL.ToBrush() };
+                quantizationPanel.Children.Add(numberedTonicLabel);
+
+                var numberedTonicComboBox = new ComboBoxController() { Width = 72 };
+                numberedTonicComboBox.SetConfig(ComboBoxConfig.Create(NumberedTonicOptions.Select(o => (ComboBoxItem)o).ToList()).WithDefault(Settings.DefaultSettings.NumberedPianoKeyTonic));
+                numberedTonicComboBox.Bind(Settings.NumberedPianoKeyTonic, false, s);
+                numberedTonicComboBox.SetupToolTip("Numbered Piano Key Tonic".Tr(this), PlacementMode.Top, verticalOffset: -8);
+                quantizationPanel.Children.Add(numberedTonicComboBox);
             }
             dockPanel.AddDock(quantizationPanel, Dock.Right);
 
@@ -177,7 +202,8 @@ internal class FunctionBar : LayerPanel
                     OnPianoToolChanged();
                     return toggle;
                 }
-                AddButton(PianoTool.Note, Assets.Pointer, "Note Tool".Tr(this));
+                AddButton(PianoTool.Note, Assets.Pointer, "Select Tool".Tr(this));
+                AddButton(PianoTool.Pencil, Assets.Pencil, "Pencil Tool".Tr(this));
                 AddButton(PianoTool.Pitch, Assets.Pitch, "Pitch Pen".Tr(this));
                 AddButton(PianoTool.Anchor, Assets.Anchor, "Anchor Tool".Tr(this));
                 AddButton(PianoTool.Lock, Assets.Brush, "Locking Brush".Tr(this));
@@ -212,8 +238,10 @@ internal class FunctionBar : LayerPanel
     }
 
     readonly ActionEvent<QuantizationBase, QuantizationDivision> mQuantizationChanged = new();
+    static readonly string[] NumberedTonicOptions = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
     readonly DisposableManager s = new();
 
     readonly IDependency mDependency;
+    readonly Mover mMover;
 }

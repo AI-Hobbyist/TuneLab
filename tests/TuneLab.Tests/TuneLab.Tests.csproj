@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\TuneLab\TuneLab.csproj" />
+    <ProjectReference Include="..\..\TuneLab.Bridge\TuneLab.Bridge.csproj" />
   </ItemGroup>
 
 </Project>

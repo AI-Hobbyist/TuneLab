@@ -30,7 +30,7 @@ internal partial class TimelineView
 
         public Rect Rect()
         {
-            return new Rect(Left, 24, TimelineView.TempoWidth(Tempo), 24);
+            return new Rect(Left, 24, TimelineView.TempoWidth(TempoManager, Tempo), 24);
         }
 
         public override bool Raycast(Point point)
@@ -45,7 +45,7 @@ internal partial class TimelineView
                 context.FillRectangle(Style.BACK.ToBrush(), Rect());
             }
 
-            context.DrawString(TimelineView.BpmString(Tempo), Rect(), TextBrush, 12, Alignment.Center, Alignment.Center);
+            context.DrawString(TimelineView.BpmString(TempoManager, Tempo), Rect(), TextBrush, 12, Alignment.Center, Alignment.Center);
         }
 
         static readonly IBrush TextBrush = new Color(178, 255, 255, 255).ToBrush();

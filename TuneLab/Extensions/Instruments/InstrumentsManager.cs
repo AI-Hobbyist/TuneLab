@@ -59,6 +59,19 @@ internal static class InstrumentsManager
         return status != null && !string.IsNullOrEmpty(status.DisplayName) ? status.DisplayName : type;
     }
 
+    public static bool TryGetActivePackageId(string type, out string packageId)
+    {
+        var status = ActiveStatus(type);
+        if (status != null)
+        {
+            packageId = status.PackageId;
+            return true;
+        }
+
+        packageId = string.Empty;
+        return false;
+    }
+
     // 取某【特定包】该 instrument 的扩展设置接口（未实现 IExtensionSettings 则 null）；不触发 Init。
     public static IExtensionSettings? GetExtensionSettings(string packageId, string type)
     {

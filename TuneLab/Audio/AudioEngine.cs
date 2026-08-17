@@ -105,6 +105,40 @@ internal static class AudioEngine
         AudioGraph.RemoveTrack(track);
     }
 
+    // M1：桥接模式开关。开启时 SDL 播放回调输出静音（音频改由 BridgeRenderer 推给 DAW），
+    // 避免同一份数据在 TuneLab 设备与 DAW 双路出声。
+    // 桥接态下采样率变更只落到音频图与合成调度（跳过 SDL 设备重开/预览重建——那些必须走
+    // UI 线程路径）；退出桥接时由 SyncAfterBridgeExit 统一把设备/预览同步回当前采样率。
+    public static bool BridgeMode
+    {
+        get => mBridgeMode;
+        set
+        {
+            if (mBridgeMode == value)
+                return;
+            mBridgeMode = value;
+            if (!value)
+                SyncAfterBridgeExit();
+        }
+    }
+    static bool mBridgeMode;
+
+    // 退出桥接：把 SDL 播放设备与预览合成器同步回当前（可能已被 DAW 采样率改过的）图采样率。
+    // 须在 UI 线程调用（BridgePanel.StopRenderer 运行于 UI 线程）。
+    static void SyncAfterBridgeExit()
+    {
+        if (mAudioPlaybackHandler != null && mAudioPlaybackHandler.SampleRate != SampleRate.Value)
+            mAudioPlaybackHandler.SampleRate = SampleRate.Value;
+        RebuildPreviewSynthesizer();
+    }
+
+    // M1：供 AudioBridgeProvider 抓取当前音轨快照（对轨道列表加锁）。
+    internal static IAudioTrack[] GetTracksSnapshot() => AudioGraph.TracksSnapshot();
+
+    // M1：桥接渲染入口——把单轨 [position, endPosition) 按音量/声像叠加进 buffer（L/R 交错）。
+    internal static void MixBridgeData(IAudioTrack track, int position, int endPosition, float[] buffer, int offset)
+        => AudioGraph.AddData(track, position, endPosition, true, buffer, offset);
+
     public static void ExportTrack(string filePath, IAudioTrack track, bool isStereo)
     {
         ExportTrack(filePath, track, isStereo, SampleRate.Value, AudioEncodeSettings.Wav(16));
@@ -364,6 +398,8 @@ internal static class AudioEngine
 
     static void OnProgressChanged()
     {
+        if (BridgeMode)
+            return; // 桥接态 DAW 为 master：播放/暂停与位置全由传输同步驱动，TuneLab 不自行越界暂停。
         if (CurrentTime > AudioGraph.EndTime)
             Pause();
     }
@@ -371,6 +407,9 @@ internal static class AudioEngine
     static void OnSampleRateModified()
     {
         mAudioSampleProvider.SampleRate = SampleRate.Value;
+        if (BridgeMode)
+            return; // 桥接态：仅更新图/合成调度；SDL 设备与预览重建在退出桥接时补做（避免在非 UI 线程操作 SDL）。
+
         if (mAudioPlaybackHandler != null)
             mAudioPlaybackHandler.SampleRate = SampleRate.Value;
         if (mKeySamplesPath != null)
@@ -440,6 +479,13 @@ internal static class AudioEngine
 
         public void Read(float[] buffer, int offset, int count)
         {
+            if (BridgeMode)
+            {
+                // M1：桥接模式下 SDL 回调只补零（音频由 BridgeRenderer 推给 DAW）。
+                Array.Clear(buffer, offset, count * 2);
+                return;
+            }
+
             if (IsPlaying)
             {
                 lock (mSeekLockObject)

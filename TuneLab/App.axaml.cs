@@ -109,6 +109,10 @@ public partial class App : Application
 
                 mMainWindow = new MainWindow();
                 desktop.MainWindow = mMainWindow;
+                // 主窗口关闭即退出：默认 OnLastWindowClose 会被常驻的桥接面板窗口拦住——桥接面板
+                // "关闭即隐藏"从不真正关闭，主窗口关后应用仍活着（进程残留）。设为主窗口关闭即退出后，
+                // ShutdownRequested 会先放行桥接面板关闭并触发其清理（见 BridgePanel.Closed）。
+                desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose;
 
                 // 检测启动参数
                 var args = Environment.GetCommandLineArgs();
