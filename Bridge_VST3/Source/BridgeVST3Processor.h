@@ -9,8 +9,8 @@
 
 namespace BridgeVST3 {
 
-// M0：VSTi3 空壳。创建共享内存会话等待 TuneLab 连接；process() 暂输出静音，
-// 仅把 DAW 音频配置写入控制块（M1 接入逐轨环形缓冲拉取）。
+// M3：VSTi3 桥接处理器。创建共享内存会话等待 TuneLab 连接，按宿主轨道表动态启停输出总线，
+// process() 从各总线共享环实时拉取音频。
 class BridgeVST3Processor : public juce::AudioProcessor, public juce::Timer
 {
 public:
@@ -46,11 +46,14 @@ public:
 
 private:
     static juce::AudioProcessor::BusesProperties makeBuses();
+    void syncTrackBuses();
 
     BridgeSession mSession;
     juce::String mSessionId;
     std::atomic<bool> mLastConnected { false };
     uint32_t mLastLatency = 0;   // 已上报的延迟（避免每心跳重复 setLatencySamples）
+    uint64_t mLastBusMask = 0;
+    bool mHasBusMask = false;
 };
 
 } // namespace BridgeVST3

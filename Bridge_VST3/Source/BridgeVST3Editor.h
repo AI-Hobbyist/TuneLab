@@ -6,7 +6,7 @@
 
 namespace BridgeVST3 {
 
-// M0 插件界面（JUCE）：极简状态页——连接状态、会话 id、版本标识。
+// M3 插件界面（JUCE）：连接状态、会话 id、采样率/块大小与实际启用总线数。
 class BridgeVST3Editor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:

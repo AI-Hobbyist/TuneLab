@@ -18,7 +18,7 @@ BridgeVST3Editor::BridgeVST3Editor (BridgeVST3Processor& p)
     addAndMakeVisible (mVersionLabel);
     mVersionLabel.setJustificationType (juce::Justification::centred);
     mVersionLabel.setFont (juce::Font (11.0f));
-    mVersionLabel.setText ("TuneLab VST Bridge  (M1)", juce::dontSendNotification);
+    mVersionLabel.setText ("TuneLab VST Bridge  (M3)", juce::dontSendNotification);
 
     startTimer (TL_BRIDGE_HEARTBEAT_MS);
     timerCallback();

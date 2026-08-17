@@ -543,6 +543,69 @@ M2「传输同步」已实施，对应第 8 节里程碑表格的 M2 行。DAW �
 
 ---
 
+## 15. M3 分配与连接管理实施状态（2026-08-17，首版已完成，待用户手工验收）
+
+M3「分配与连接管理」首版已落地：桥接面板可编辑轨道到输出总线的分配及轨道桥接选项；TuneLab 渲染器按快照分组写环；VST3 插件按宿主轨道表动态启停实际使用的输出总线。
+
+**已交付：**
+
+| 位置 | 内容 |
+|---|---|
+| `TuneLab.Bridge/BridgeTrack.cs` + `IBridgeAudioProvider.cs` | 轨道快照补充 M3 总线数量约束与配置更新入口 |
+| `TuneLab/Audio/AudioBridgeProvider.cs` | 以宿主轨道对象引用保存运行期配置；配置更新生成新快照，避免渲染线程读到半更新状态 |
+| `TuneLab.Bridge/BridgePanel.axaml(.cs)` | 轨道列表、1-based 总线下拉、启用、Gain（跟随 TuneLab 音量/声像）、Mute（镜像静音/独奏）开关；每 250ms 检测轨道增删/重命名 |
+| `TuneLab.Bridge/BridgeRenderer.cs` | 抽出总线分组；多轨可叠加同一总线；禁用轨道和越界总线不参与渲染 |
+| `Bridge_VST3/Source/BridgeVST3Shared.h` | 读取宿主轨道路由表、回写实际启用总线数 |
+| `Bridge_VST3/Source/BridgeVST3Processor.cpp` | 心跳线程按路由表调用 JUCE `Bus::enable`；实时回调跳过禁用总线 |
+| `Bridge_VST3/Source/BridgeVST3Editor.cpp` | 状态页版本标记更新为 M3，并继续显示实际启用总线数 |
+| `tests/TuneLab.Tests/Bridge/BridgeTrackTests.cs` | 总线叠加、禁用轨道、越界路由专项测试 |
+
+**设计取舍：**
+
+- 配置当前按 TuneLab 轨道对象保存在运行期；工程/设置持久化留待后续，不改变现有工程文件格式。
+- UI 总线编号显示 1..64，协议和渲染器继续使用 0..63；插件总线名称保持 `Track 1..64`，避免动态重命名破坏 DAW 已建立的端口连接。
+- 插件启动时仍声明 64 条可选立体声总线；连接后按实际使用的 `busIndex` 启停，保证空轨不会占用活动总线。
+
+**验证：**
+
+- `dotnet build TuneLab.Bridge/TuneLab.Bridge.csproj -c Debug --no-restore` 成功（仅仓库既有 `BridgePanel.Content` 警告）。
+- `dotnet test tests/TuneLab.Tests/TuneLab.Tests.csproj -c Debug --no-restore --filter "FullyQualifiedName~BridgeTrackTests"` **1/1 通过**。
+- `dotnet test tests/TuneLab.Tests/TuneLab.Tests.csproj -c Debug --no-restore` **269/269 通过**。
+- `Bridge_VST3` Debug 构建成功；DAW 手工验收需重新部署产物并重启 DAW，重点检查：轨道互换总线、两轨叠加、禁用轨道、Gain/Mute 开关及增删轨刷新。
+
+---
+
+## 16. M4 稳定性基础实施状态（2026-08-17，首个小步）
+
+本次 M4 先处理两个会直接影响长时间运行和 DAW 热切换的边界：采样率切换后的旧环数据复用，以及渲染线程一次异常退出后的恢复。
+
+**已交付：**
+
+| 位置 | 内容 |
+|---|---|
+| `TuneLab.Bridge/BridgeRenderer.cs` | 采样率变化确认后，读取当前 DAW 绝对采样位置，将 64 条总线写位统一重置到该位置；重新计算 push-ahead，并清零 idle 回填计数，下一轮从当前位置重铺新采样率数据 |
+| `TuneLab.Bridge/BridgeRenderer.cs` | `Start()` 只在已有线程仍存活时返回；线程因异常退出后允许重新创建，保留现有异常捕获和日志路径 |
+| `TuneLab.Bridge/BridgePanel.axaml.cs` | 轨道刷新定时器在已连接但渲染线程停止时尝试启动，使一次性渲染异常不再要求用户手动断开/重连 |
+| `tests/TuneLab.Tests/Bridge/BridgeRingBufferTests.cs` | 覆盖采样率切换时所有总线写位复位 |
+| `tests/TuneLab.Tests/Bridge/BridgeRendererTests.cs` | 用 FakePlugin/FakeProvider 验证渲染线程异常退出后可以重新启动并继续渲染 |
+| `tests/TuneLab.Tests/Bridge/BridgeClientHandshakeTests.cs` | 验证插件会话停止并重新创建后，宿主保留连接意图并自动重新握手 |
+
+**设计取舍：**
+
+- 采样率切换只复位写位，不清零整块共享内存；写位回到当前 DAW 位置后，插件在新数据发布前自然下溢静音，避免在非实时路径额外扫描大内存。
+- 渲染器仍保持单写者模型；恢复由已有面板定时器触发，不在后台线程自我创建线程，避免生命周期所有权分散。
+- `BridgeClient` 的心跳超时仍进入断开状态，但不清除用户的连接意图；共享会话重新出现后由原有轮询自动重连。
+- 本小步未宣称完成 M4 的多 DAW 兼容、长时间下溢压力、崩溃跨进程恢复和性能调优，这些仍需后续实机验证。
+
+**验证：**
+
+- `dotnet test tests/TuneLab.Tests/TuneLab.Tests.csproj -c Debug --no-restore --filter "FullyQualifiedName~BridgeRingBufferTests.SampleRateSwitchResetsAllBusWritePositions"` **1/1 通过**。
+- `dotnet test tests/TuneLab.Tests/TuneLab.Tests.csproj -c Debug --no-restore --filter "FullyQualifiedName~BridgeRendererTests"` **1/1 通过**。
+- `dotnet test tests/TuneLab.Tests/TuneLab.Tests.csproj -c Debug --no-restore --filter "FullyQualifiedName~BridgeClientHandshakeTests.ReconnectsAfterPluginRestart"` **1/1 通过**。
+- 桥接相关回归测试 **23/23 通过**；全量测试 **273/273 通过**。
+
+---
+
 ## 附：参考资料位置
 
 - **插件与插件界面（JUCE）**：`THIRD_PARTY/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.cpp`（VST3 包装/总线对拍）、`juce_audio_processors/`（`AudioProcessor`、`AudioProcessorEditor`、`AudioPlayHead`、`BusesProperties`/`setBusesLayout`）、`juce_audio_processors_headless/`（无头测试）、`THIRD_PARTY/JUCE/examples/Plugins/`（AudioPluginHost 参考宿主）、`THIRD_PARTY/JUCE/docs/`（CMake `juce_add_plugin` 用法）。

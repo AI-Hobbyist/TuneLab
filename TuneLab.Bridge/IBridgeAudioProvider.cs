@@ -10,6 +10,10 @@ public interface IBridgeAudioProvider
     // 当前参与桥接的音轨快照（宿主每帧据此刷新控制块轨道表并做总线映射）。
     IReadOnlyList<BridgeTrack> GetTracks();
 
+    // 更新一条轨道的桥接配置。实现方应在下一次 GetTracks() 时返回新快照，避免渲染线程
+    // 读取配置时看到半更新状态。
+    void UpdateTrackConfiguration(BridgeTrack track, bool enabled, int busIndex, bool followGainPan, bool mirrorMuteSolo);
+
     // 把音轨 [position, endPosition) 的立体声渲染累加进 buffer（L/R 交错，自 offset 起）。
     // 按 track.FollowGainPan 决定是否叠加音量/声像；调用前 buffer 对应区须已清零。
     // 帧数 = endPosition - position（不足部分静音补零）。

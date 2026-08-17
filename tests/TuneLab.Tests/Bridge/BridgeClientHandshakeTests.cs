@@ -93,6 +93,29 @@ public class BridgeClientHandshakeTests
             $"state={client.CurrentState} err={client.ErrorMessage}");
     }
 
+    [Fact]
+    public void ReconnectsAfterPluginRestart()
+    {
+        var sessionId = "test-" + Guid.NewGuid().ToString("N");
+        using var client = new BridgeClient(sessionId);
+
+        using (var plugin = FakePlugin.Create(sessionId))
+        {
+            client.Connect();
+            Assert.True(WaitForState(client, BridgeClient.State.Connected));
+            plugin.StopHeartbeat();
+        }
+
+        Assert.True(WaitForState(client, BridgeClient.State.Disconnected,
+            timeoutMs: BridgeProtocol.HeartbeatTimeoutMs + 3000));
+
+        using var restartedPlugin = FakePlugin.Create(sessionId);
+        Assert.True(WaitForState(client, BridgeClient.State.Connected,
+            timeoutMs: BridgeProtocol.HeartbeatTimeoutMs + 3000),
+            $"state={client.CurrentState} err={client.ErrorMessage}");
+        Assert.True(restartedPlugin.IsConnected);
+    }
+
     static bool WaitForState(BridgeClient client, BridgeClient.State state, int timeoutMs = 5000)
     {
         var deadline = Environment.TickCount64 + timeoutMs;

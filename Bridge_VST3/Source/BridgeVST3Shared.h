@@ -140,6 +140,22 @@ public:
     uint32_t readLatencySamples() const noexcept { return mControl != nullptr ? mControl->latencySamples : 0; }
     uint32_t readActiveBuses() const noexcept { return mControl != nullptr ? mControl->activeBuses : 0; }
 
+    bool readTrackRoute (uint32_t track, uint32_t& enabled, uint32_t& busIndex) const noexcept
+    {
+        if (mControl == nullptr || track >= TL_BRIDGE_MAX_TRACKS)
+            return false;
+
+        enabled = mControl->tracks[track].enabled;
+        busIndex = mControl->tracks[track].busIndex;
+        return true;
+    }
+
+    void writeActiveBuses (uint32_t activeBuses) noexcept
+    {
+        if (mControl != nullptr)
+            mControl->activeBuses = activeBuses;
+    }
+
 private:
 #ifdef _WIN32
     HANDLE mMapping = nullptr;

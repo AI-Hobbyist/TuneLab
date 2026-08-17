@@ -44,8 +44,7 @@ BridgeVST3Processor::~BridgeVST3Processor()
 
 juce::AudioProcessor::BusesProperties BridgeVST3Processor::makeBuses()
 {
-    // M1：默认激活全部 TL_BRIDGE_MAX_TRACKS 条立体声输出总线，保证 DAW 始终能看到全部输出
-    // （空轨总线静音）；动态按轨启用/停用留待 M3。
+    // M3：声明最大数量的可选立体声输出总线；连接后由宿主轨道表动态启停实际使用的总线。
     auto buses = juce::AudioProcessor::BusesProperties();
     for (int i = 0; i < static_cast<int> (TL_BRIDGE_MAX_TRACKS); ++i)
         buses = buses.withOutput ("Track " + juce::String (i + 1), juce::AudioChannelSet::stereo(), true);
@@ -62,10 +61,49 @@ void BridgeVST3Processor::prepareToPlay (double sampleRate, int samplesPerBlock)
     mSession.writeAudioConfig (static_cast<uint32_t> (sampleRate), static_cast<uint32_t> (samplesPerBlock), activeBuses, latency);
     setLatencySamples (static_cast<int> (latency));
     mLastLatency = latency;
+    mHasBusMask = false;
 }
 
 void BridgeVST3Processor::releaseResources()
 {
+}
+
+void BridgeVST3Processor::syncTrackBuses()
+{
+    if (!mSession.isCreated() || !mSession.isConnected())
+        return;
+
+    bool usedBuses[TL_BRIDGE_MAX_TRACKS] = {};
+    for (uint32_t track = 0; track < TL_BRIDGE_MAX_TRACKS; ++track)
+    {
+        uint32_t enabled = 0;
+        uint32_t busIndex = 0;
+        if (mSession.readTrackRoute (track, enabled, busIndex)
+            && enabled != 0 && busIndex < TL_BRIDGE_MAX_TRACKS)
+            usedBuses[busIndex] = true;
+    }
+
+    uint64_t busMask = 0;
+    for (uint32_t bus = 0; bus < TL_BRIDGE_MAX_TRACKS; ++bus)
+        if (usedBuses[bus])
+            busMask |= (uint64_t (1) << bus);
+
+    if (mHasBusMask && busMask == mLastBusMask)
+        return;
+    mHasBusMask = true;
+    mLastBusMask = busMask;
+
+    uint32_t activeBuses = 0;
+    for (uint32_t bus = 0; bus < TL_BRIDGE_MAX_TRACKS; ++bus)
+    {
+        if (auto* outputBus = getBus (false, static_cast<int> (bus)))
+        {
+            outputBus->enable (usedBuses[bus]);
+            if (outputBus->isEnabled())
+                ++activeBuses;
+        }
+    }
+    mSession.writeActiveBuses (activeBuses);
 }
 
 void BridgeVST3Processor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -126,6 +164,10 @@ void BridgeVST3Processor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     const int numOutputBuses = getBusCount (false);
     for (int bus = 0; bus < numOutputBuses; ++bus)
     {
+        const auto* outputBus = getBus (false, bus);
+        if (outputBus == nullptr || !outputBus->isEnabled())
+            continue;
+
         const int chIndex = getChannelIndexInProcessBlockBuffer (false, bus, 0);
         if (chIndex < 0 || chIndex + 1 >= numChannels)
             continue;
@@ -172,6 +214,10 @@ void BridgeVST3Processor::timerCallback()
         mLastConnected.store (connected);
         // 编辑器通过自身 Timer 轮询 lastConnected，无需主动通知。
     }
+
+    // M3：宿主轨道表变化后，按实际使用的 busIndex 动态启停输出总线。
+    if (connected)
+        syncTrackBuses();
 
     // 宿主更新 push-ahead 延迟后同步给 DAW（setLatencySamples 会在运行时重建总线延迟）。
     const uint32_t latency = mSession.readLatencySamples();

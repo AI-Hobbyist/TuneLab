@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -18,27 +19,54 @@ internal sealed class AudioBridgeProvider : IBridgeAudioProvider
     public IReadOnlyList<BridgeTrack> GetTracks()
     {
         var tracks = AudioEngine.GetTracksSnapshot();
-        if (mCached != null && mCachedCount == tracks.Length && mCachedSignature == BuildSignature(tracks))
-            return mCached;
-
-        var list = new BridgeTrack[tracks.Length];
-        for (int i = 0; i < tracks.Length; i++)
+        string signature = BuildSignature(tracks);
+        lock (mConfigurationLock)
         {
-            list[i] = new BridgeTrack
-            {
-                Name = ((ITrack)tracks[i]).Name.Value,
-                Enabled = true,          // M1：全部轨道参与桥接（track[i]→bus[i]）
-                BusIndex = i,
-                FollowGainPan = true,
-                MirrorMuteSolo = true,
-                Source = tracks[i],
-            };
-        }
+            if (mCached != null && mCachedCount == tracks.Length && mCachedSignature == signature)
+                return mCached;
 
-        mCached = list;
-        mCachedCount = tracks.Length;
-        mCachedSignature = BuildSignature(tracks);
-        return mCached;
+            var list = new BridgeTrack[tracks.Length];
+            for (int i = 0; i < tracks.Length; i++)
+            {
+                var source = tracks[i];
+                if (!mConfigurations.TryGetValue(source, out var configuration))
+                {
+                    configuration = new(true, i, true, true);
+                    mConfigurations[source] = configuration;
+                }
+
+                list[i] = new BridgeTrack
+                {
+                    Name = ((ITrack)source).Name.Value,
+                    Enabled = configuration.Enabled,
+                    BusIndex = configuration.BusIndex,
+                    FollowGainPan = configuration.FollowGainPan,
+                    MirrorMuteSolo = configuration.MirrorMuteSolo,
+                    Source = source,
+                };
+            }
+
+            mCached = list;
+            mCachedCount = tracks.Length;
+            mCachedSignature = signature;
+            return mCached;
+        }
+    }
+
+    public void UpdateTrackConfiguration(BridgeTrack track, bool enabled, int busIndex, bool followGainPan, bool mirrorMuteSolo)
+    {
+        if (track.Source == null)
+            return;
+
+        lock (mConfigurationLock)
+        {
+            mConfigurations[track.Source] = new(
+                enabled,
+                Math.Clamp(busIndex, 0, BridgeTrack.MaxBusCount - 1),
+                followGainPan,
+                mirrorMuteSolo);
+            mCached = null;
+        }
     }
 
     public void RenderTrack(BridgeTrack track, int position, int endPosition, float[] buffer, int offset)
@@ -148,11 +176,16 @@ internal sealed class AudioBridgeProvider : IBridgeAudioProvider
     {
         var sb = new StringBuilder();
         for (int i = 0; i < tracks.Length; i++)
-            sb.Append(((ITrack)tracks[i]).Name.Value).Append('\u001f');
+            sb.Append(RuntimeHelpers.GetHashCode(tracks[i])).Append(':')
+                .Append(((ITrack)tracks[i]).Name.Value).Append('\u001f');
         return sb.ToString();
     }
 
+    readonly object mConfigurationLock = new();
+    readonly Dictionary<object, TrackConfiguration> mConfigurations = new(ReferenceEqualityComparer.Instance);
     BridgeTrack[]? mCached;
     int mCachedCount;
     string mCachedSignature = "";
+
+    readonly record struct TrackConfiguration(bool Enabled, int BusIndex, bool FollowGainPan, bool MirrorMuteSolo);
 }

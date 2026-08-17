@@ -134,6 +134,7 @@ public class BridgeTransportTests : IDisposable
         public List<double?> TempoCalls { get; } = [];
 
         public IReadOnlyList<BridgeTrack> GetTracks() => [];
+        public void UpdateTrackConfiguration(BridgeTrack track, bool enabled, int busIndex, bool followGainPan, bool mirrorMuteSolo) { }
         public void RenderTrack(BridgeTrack track, int position, int endPosition, float[] buffer, int offset) { }
         public bool IsMute(BridgeTrack track) => false;
         public bool IsSolo(BridgeTrack track) => false;

@@ -28,8 +28,9 @@ internal sealed class BridgeRenderer
 
     public void Start()
     {
-        if (mThread != null)
+        if (mThread is { IsAlive: true })
             return;
+        mCts?.Dispose();
         mCts = new CancellationTokenSource();
         mThread = new Thread(Loop) { IsBackground = true, Name = "TuneLab.Bridge.Renderer" };
         mThread.Start();
@@ -91,15 +92,19 @@ internal sealed class BridgeRenderer
 
         var accessor = mClient.Accessor!;
 
+        ulong dawPos = accessor.ReadUInt64(BridgeProtocol.Offset.SamplePos);
+
         // 采样率协商：跟随插件写回的 DAW 采样率（prepareToPlay 后非 0）。
+        // 采样率切换后，旧环数据对应的绝对位置已经不再可靠；从当前 DAW 位置重铺。
         uint dawSampleRate = accessor.ReadUInt32(BridgeProtocol.Offset.SampleRate);
         if (dawSampleRate != 0 && dawSampleRate != sampleRate && mProvider.ApplySampleRate((int)dawSampleRate))
         {
             sampleRate = (int)dawSampleRate;
             lead = LeadMs * sampleRate / 1000;
+            ResetRingPositions(ring, dawPos);
+            mIdleRefill = 0;
         }
 
-        ulong dawPos = accessor.ReadUInt64(BridgeProtocol.Offset.SamplePos);
         ulong target = dawPos + (ulong)lead;
 
         // M2 传输同步：DAW 播放/暂停/位置/曲速 → TuneLab（播放头跟随 + 时基覆盖）。
@@ -115,15 +120,7 @@ internal sealed class BridgeRenderer
         }
 
         // 总线映射：多轨可叠加到同一 bus（M1 默认 track[i]→bus[i]）。
-        var buses = new Dictionary<int, List<BridgeTrack>>();
-        foreach (var t in tracks)
-        {
-            if (!t.Enabled)
-                continue;
-            if (!buses.TryGetValue(t.BusIndex, out var list))
-                buses[t.BusIndex] = list = new List<BridgeTrack>();
-            list.Add(t);
-        }
+        var buses = BuildBusMap(tracks);
 
         bool advanced = false;
         bool playing = (accessor.ReadUInt64(BridgeProtocol.Offset.State) & BridgeProtocol.StatePlaying) != 0;
@@ -188,6 +185,26 @@ internal sealed class BridgeRenderer
             }
             Foundation.Log.Info($"Bridge renderer: dawPos={dawPos} target={target} bus0Write={w0} advanced={advanced} tracks={tracks.Count} tempo={tempo:0.0} peak={peak:0.0000} now={now:0.0000} map16={sb}");
         }
+    }
+
+    internal static Dictionary<int, List<BridgeTrack>> BuildBusMap(IReadOnlyList<BridgeTrack> tracks)
+    {
+        var buses = new Dictionary<int, List<BridgeTrack>>();
+        foreach (var track in tracks)
+        {
+            if (!track.Enabled || track.BusIndex < 0 || track.BusIndex >= BridgeProtocol.MaxTracks)
+                continue;
+            if (!buses.TryGetValue(track.BusIndex, out var list))
+                buses[track.BusIndex] = list = new List<BridgeTrack>();
+            list.Add(track);
+        }
+        return buses;
+    }
+
+    internal static void ResetRingPositions(BridgeRingBuffer ring, ulong position)
+    {
+        for (int bus = 0; bus < BridgeProtocol.MaxTracks; bus++)
+            ring.SetWritePos(bus, position);
     }
 
     // 回读 bus 环数据 [start, end) 的峰值（仅诊断；读到有效数据即宿主已产出非静音）。

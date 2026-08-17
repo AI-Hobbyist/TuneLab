@@ -4,6 +4,8 @@ namespace TuneLab.Bridge;
 // Source 为宿主对象的不透明句柄（TuneLab 侧实现据此取音频与属性），本程序集不解释其类型。
 public sealed class BridgeTrack
 {
+    public const int MaxBusCount = 64;
+
     public string Name { get; set; } = "";
     public bool Enabled { get; set; } = true;
     public int BusIndex { get; set; }

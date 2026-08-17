@@ -95,6 +95,19 @@ public class BridgeRingBufferTests : IDisposable
     }
 
     [Fact]
+    public void SampleRateSwitchResetsAllBusWritePositions()
+    {
+        for (int bus = 0; bus < BridgeProtocol.MaxTracks; bus++)
+            mRing.SetWritePos(bus, (ulong)(bus + 1));
+
+        const ulong position = 987654UL;
+        BridgeRenderer.ResetRingPositions(mRing, position);
+
+        for (int bus = 0; bus < BridgeProtocol.MaxTracks; bus++)
+            Assert.Equal(position, mRing.GetWritePos(bus));
+    }
+
+    [Fact]
     public void BusesDoNotOverlap()
     {
         var a = new float[2] { 1f, 2f };
