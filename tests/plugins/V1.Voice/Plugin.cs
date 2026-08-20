@@ -40,9 +40,9 @@ public sealed class TestVoiceEngine : IVoiceSynthesisEngine
         var packageDir = System.IO.Path.GetDirectoryName(typeof(TestVoiceEngine).Assembly.Location) ?? "";
         var staticPortrait = System.IO.Path.Combine(packageDir, "portrait.webp");
         var animatedPortrait = System.IO.Path.Combine(packageDir, "portrait-anim.webp");
-        mVoiceInfos.Add("v1-alice", new VoiceSourceInfo { Name = "Alice (V1 Test)", Description = "Test voice Alice", Portrait = new FileImageResource(staticPortrait) });
+        mVoiceInfos.Add("v1-alice", new VoiceSourceInfo { Name = "Alice (V1 Test)", Description = "Test voice Alice", Avatar = new FileImageResource(staticPortrait) });
         mVoiceInfos.Add("v1-bob", new VoiceSourceInfo { Name = "Bob (V1 Test)", Description = "Test voice Bob" });
-        mVoiceInfos.Add("v1-carol", new VoiceSourceInfo { Name = "Carol (V1 Test)", Description = "Test voice Carol", Portrait = new FileImageResource(animatedPortrait) });
+        mVoiceInfos.Add("v1-carol", new VoiceSourceInfo { Name = "Carol (V1 Test)", Description = "Test voice Carol", Avatar = new FileImageResource(animatedPortrait) });
         // 量程端点描述文本（验证 SliderConfig Min/MaxLabel：滑条两端 + 上参数面板后 lane 上下界同源显示）。
         mNoteProperties.Add("tension", SliderConfig.Linear(0, -1, 1).WithMinLabel("Relaxed").WithMaxLabel("Tense"));
         // 整数滑条（验证吸附标度经属性 lane 全链路：侧栏滑条吸附 + 钉上参数面板后拖写同吸附整数格）。

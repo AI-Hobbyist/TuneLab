@@ -2,12 +2,14 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using TuneLab.Audio;
+using TuneLab.Extensions.Voices;
 using TuneLab.Foundation;
 using TuneLab.GUI;
 using TuneLab.GUI.Components;
@@ -36,7 +38,18 @@ internal class TrackHead : DockPanel
 {
     public TrackHead()
     {
+        mAvatar = new Border
+        {
+            Width = 28,
+            Height = 28,
+            CornerRadius = new(14),
+            ClipToBounds = true,
+            Margin = new(0, 0, 8, 0),
+            Child = mAvatarImage,
+        };
         mName.Bind(mTrackHolder.Select(track => track.Name), s);
+        mTrackHolder.When(track => track.Parts.MembershipModified).Subscribe(LoadAvatar, s);
+        mTrackHolder.When(track => track.Parts.WhenAny(part => part.Modified)).Subscribe(LoadAvatar, s);
         mGainSlider.SetRange(-24, 6);
         mGainSlider.Select((double value) => value <= mGainSlider.MinValue ? double.NegativeInfinity : value).Bind(mTrackHolder.Select(track => track.Gain), s);
         mPanSlider.SetRange(-1, 1);
@@ -65,6 +78,7 @@ internal class TrackHead : DockPanel
         {
             topArea.AddDock(mSoloToggle, Dock.Right);
             topArea.AddDock(mMuteToggle, Dock.Right);
+            topArea.AddDock(mAvatar, Dock.Left);
             topArea.AddDock(mName);
         }
         this.AddDock(topArea, Dock.Top);
@@ -438,7 +452,27 @@ internal class TrackHead : DockPanel
             mIndexLabel.Background = Track.GetColor().ToBrush();
             mIndexPanel.Background = Track.GetColor().ToBrush();
         }
+        LoadAvatar();
         UpdateSelectionVisual();
+    }
+
+    void LoadAvatar()
+    {
+        var source = Track?.Parts.OfType<IMidiPart>()
+            .Select(part => part.SoundSource)
+            .FirstOrDefault(source => source.Kind == SourceKind.Voice);
+        string path = source != null && VoicesManager.TryGetVoiceInfo(source.Type, source.ID, out var voiceInfo)
+            && (voiceInfo.Avatar ?? voiceInfo.Portrait) is FileImageResource avatar
+            && System.IO.File.Exists(avatar.Path)
+            ? avatar.Path
+            : System.IO.Path.Combine(AppContext.BaseDirectory, "avatar.png");
+
+        if (path == mAvatarPath)
+            return;
+
+        mAvatarPath = path;
+        try { mAvatarImage.Source = new Bitmap(path); }
+        catch { mAvatarImage.Source = null; }
     }
 
     private void AudioEngine_PlayStateChanged()
@@ -482,6 +516,9 @@ internal class TrackHead : DockPanel
     readonly LayerPanel mIndexPanel = new() { Background = Style.ITEM.ToBrush(), Width = 24, Margin = new(0, 0, 0, 1) };
     readonly EditableLabel mIndexLabel = new() { MinWidth = 16, Foreground = Brushes.Black, CornerRadius = new(0), Padding = new(0), FontSize = 12, VerticalAlignment =Avalonia.Layout.VerticalAlignment.Center,HorizontalAlignment=Avalonia.Layout.HorizontalAlignment.Center, HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center };
     readonly EditableLabel mName = new() { FontSize = 12, CornerRadius = new(0), Padding = new(0), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Foreground = Style.LIGHT_WHITE.ToBrush(), Background = Style.INTERFACE.ToBrush(), InputBackground = Style.BACK.ToBrush(), Height = 16 };
+    readonly Image mAvatarImage = new() { Width = 28, Height = 28, Stretch = Stretch.UniformToFill };
+    readonly Border mAvatar;
+    string? mAvatarPath;
     readonly GainSlider mGainSlider = new() { Height = 12 };
     readonly PanSlider mPanSlider = new() { Width = 40, Height = 12, Margin = new(8, 0, 0, 0) };
     readonly Toggle mMuteToggle = new() { Width = 16, Height = 16, Margin = new(8, 0, 0, 0) };

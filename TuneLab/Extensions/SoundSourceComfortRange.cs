@@ -183,7 +183,7 @@ internal sealed class SoundSourceComfortRange
     static string? PortraitDirectory(ISoundSource source)
     {
         ImageResource? portrait = source.Kind == SourceKind.Voice
-            ? (VoicesManager.TryGetVoiceInfo(source.Type, source.ID, out var voiceInfo) ? voiceInfo.Portrait : null)
+            ? (VoicesManager.TryGetVoiceInfo(source.Type, source.ID, out var voiceInfo) ? voiceInfo.Avatar ?? voiceInfo.Portrait : null)
             : (InstrumentsManager.TryGetInstrumentInfo(source.Type, source.ID, out var instrumentInfo) ? instrumentInfo.Portrait : null);
 
         if (portrait is FileImageResource fileImage && File.Exists(fileImage.Path))

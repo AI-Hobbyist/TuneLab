@@ -11,5 +11,7 @@ public sealed class VoiceSourceInfo
 {
     public required string Name { get; init; }
     public required string Description { get; init; }
+    // 多轨等紧凑视图使用的声库头像；null 时宿主显示默认 avatar.png。
+    public ImageResource? Avatar { get; init; }
     public ImageResource? Portrait { get; init; }   // 可选立绘（显示在钢琴窗）；null = 无
 }

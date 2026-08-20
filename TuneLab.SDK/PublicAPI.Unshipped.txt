@@ -1,1 +1,3 @@
 #nullable enable
+TuneLab.SDK.VoiceSourceInfo.Avatar.get -> TuneLab.Foundation.ImageResource?
+TuneLab.SDK.VoiceSourceInfo.Avatar.init -> void
