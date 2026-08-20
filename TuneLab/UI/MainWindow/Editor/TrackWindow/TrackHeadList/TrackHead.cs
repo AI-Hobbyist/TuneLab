@@ -461,18 +461,24 @@ internal class TrackHead : DockPanel
         var source = Track?.Parts.OfType<IMidiPart>()
             .Select(part => part.SoundSource)
             .FirstOrDefault(source => source.Kind == SourceKind.Voice);
+        string defaultPath = System.IO.Path.Combine(AppContext.BaseDirectory, "avatar.png");
         string path = source != null && VoicesManager.TryGetVoiceInfo(source.Type, source.ID, out var voiceInfo)
-            && (voiceInfo.Avatar ?? voiceInfo.Portrait) is FileImageResource avatar
+            && voiceInfo.Avatar is FileImageResource avatar
             && System.IO.File.Exists(avatar.Path)
             ? avatar.Path
-            : System.IO.Path.Combine(AppContext.BaseDirectory, "avatar.png");
+            : defaultPath;
 
         if (path == mAvatarPath)
             return;
 
         mAvatarPath = path;
         try { mAvatarImage.Source = new Bitmap(path); }
-        catch { mAvatarImage.Source = null; }
+        catch
+        {
+            mAvatarPath = defaultPath;
+            try { mAvatarImage.Source = new Bitmap(defaultPath); }
+            catch { mAvatarImage.Source = null; }
+        }
     }
 
     private void AudioEngine_PlayStateChanged()

@@ -1423,7 +1423,7 @@ internal partial class PianoScrollView : View, IPianoScrollView
 
         var source = part.SoundSource;
         ImageResource? portrait = source.Kind == SourceKind.Voice
-            ? (VoicesManager.TryGetVoiceInfo(source.Type, source.ID, out var voiceInfo) ? voiceInfo.Avatar ?? voiceInfo.Portrait : null)
+            ? (VoicesManager.TryGetVoiceInfo(source.Type, source.ID, out var voiceInfo) ? voiceInfo.Portrait : null)
             : (InstrumentsManager.TryGetInstrumentInfo(source.Type, source.ID, out var instrumentInfo) ? instrumentInfo.Portrait : null);
 
         return portrait is FileImageResource fileImage && File.Exists(fileImage.Path) ? fileImage.Path : null;
