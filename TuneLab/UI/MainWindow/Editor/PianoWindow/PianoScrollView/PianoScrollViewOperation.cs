@@ -168,7 +168,7 @@ internal partial class PianoScrollView
     }
 
     static string ComfortRangeText(SoundSourceComfortRange range)
-        => MusicTheory.PitchName(range.MinPitch) + "-" + MusicTheory.PitchName(range.MaxPitch);
+        => PitchRangesText(range.ComfortPitches);
 
     static string AvailableRangeText(SoundSourceComfortRange range)
         => PitchRangesText(range.AvailablePitches);

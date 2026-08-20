@@ -22,13 +22,23 @@ internal sealed class SoundSourceComfortRange
 {
     public int MinPitch { get; }
     public int MaxPitch { get; }
+    public IReadOnlySet<int> ComfortPitches => mComfortPitches;
     public IReadOnlySet<int> AvailablePitches => mAvailablePitches;
     public IReadOnlySet<int> WeakPitches => mWeakPitches;
 
-    public SoundSourceComfortRange(int minPitch, int maxPitch, IReadOnlySet<int> availablePitches, IReadOnlySet<int> weakPitches)
+    public SoundSourceComfortRange(IReadOnlySet<int> comfortPitches, IReadOnlySet<int> availablePitches, IReadOnlySet<int> weakPitches)
     {
-        MinPitch = Math.Min(minPitch, maxPitch);
-        MaxPitch = Math.Max(minPitch, maxPitch);
+        int minPitch = int.MaxValue;
+        int maxPitch = int.MinValue;
+        foreach (int pitch in comfortPitches)
+        {
+            minPitch = Math.Min(minPitch, pitch);
+            maxPitch = Math.Max(maxPitch, pitch);
+        }
+
+        MinPitch = minPitch;
+        MaxPitch = maxPitch;
+        mComfortPitches = comfortPitches;
         mAvailablePitches = availablePitches;
         mWeakPitches = weakPitches;
     }
@@ -37,7 +47,7 @@ internal sealed class SoundSourceComfortRange
     {
         if (mWeakPitches.Contains(pitch))
             return ComfortPitchLevel.Weak;
-        if (pitch >= MinPitch && pitch <= MaxPitch)
+        if (mComfortPitches.Contains(pitch))
             return ComfortPitchLevel.Comfortable;
         return mAvailablePitches.Contains(pitch) ? ComfortPitchLevel.Available : ComfortPitchLevel.Outside;
     }
@@ -63,10 +73,12 @@ internal sealed class SoundSourceComfortRange
         {
             using var stream = File.OpenRead(path);
             var file = JsonSerializer.Deserialize<ComfortJson>(stream, sJsonOptions);
-            if (file == null || string.IsNullOrWhiteSpace(file.Comfort))
+            if (file == null)
                 return null;
 
-            if (!TryParsePitchRange(file.Comfort, out int min, out int max))
+            HashSet<int> comfort = [];
+            AddPitchOrRanges(file.Comfort, comfort);
+            if (comfort.Count == 0)
                 return null;
 
             HashSet<int> available = [];
@@ -75,22 +87,13 @@ internal sealed class SoundSourceComfortRange
             HashSet<int> weak = [];
             AddPitchOrRanges(file.Weak, weak);
 
-            return new SoundSourceComfortRange(min, max, available, weak);
+            return new SoundSourceComfortRange(comfort, available, weak);
         }
         catch (Exception ex)
         {
             Log.Warning("Failed to load comfort range '" + path + "': " + ex.Message);
             return null;
         }
-    }
-
-    static void AddPitchOrRanges(List<string>? ranges, HashSet<int> pitches)
-    {
-        if (ranges == null)
-            return;
-
-        foreach (var item in ranges)
-            AddPitchOrRange(item, pitches);
     }
 
     static void AddPitchOrRanges(JsonElement ranges, HashSet<int> pitches)
@@ -116,8 +119,11 @@ internal sealed class SoundSourceComfortRange
         if (string.IsNullOrWhiteSpace(text))
             return;
 
-        if (TryParsePitchRange(text, out int min, out int max))
+        foreach (var item in text.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
+            if (!TryParsePitchRange(item, out int min, out int max))
+                continue;
+
             for (int pitch = min; pitch <= max; pitch++)
                 pitches.Add(pitch);
         }
@@ -256,9 +262,9 @@ internal sealed class SoundSourceComfortRange
 
     sealed class ComfortJson
     {
-        public string? Comfort { get; set; }
+        public JsonElement Comfort { get; set; }
         public JsonElement Available { get; set; }
-        public List<string>? Weak { get; set; }
+        public JsonElement Weak { get; set; }
     }
 
     sealed class CacheEntry
@@ -305,6 +311,7 @@ internal sealed class SoundSourceComfortRange
     };
     static readonly Dictionary<string, CacheEntry> mCache = new();
 
+    readonly IReadOnlySet<int> mComfortPitches;
     readonly IReadOnlySet<int> mAvailablePitches;
     readonly IReadOnlySet<int> mWeakPitches;
 }
