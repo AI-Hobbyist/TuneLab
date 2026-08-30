@@ -25,6 +25,7 @@
 "This shortcut is already used by \"{0}\". Reassign it?" = "Αυτή η συντόμευση χρησιμοποιείται ήδη από το \"{0}\". Επανεκχώρηση;"
 "Press keys…" = "Πατήστε πλήκτρα…"
 "Unbound" = "Χωρίς αντιστοίχιση"
+"Clear" = "Εκκαθάριση"
 "No matching commands." = "Δεν βρέθηκαν εντολές."
 "Keybindings" = "Συντομεύσεις"
 "Interface Font" = "Γραμματοσειρά διεπαφής"
@@ -164,8 +165,9 @@
 "Update" = "Ενημέρωση"
 "About TuneLab" = "Σχετικά με το TuneLab"
 "An extensible singing voice synthesis editor." = "Ένας επεκτάσιμος επεξεργαστής σύνθεσης τραγουδιστικής φωνής."
+"Licenses" = "Άδειες"
 "Downloading update…" = "Λήψη ενημέρωσης…"
-"Update failed. Please try again later." = "Η ενημέρωση απέτυχε. Παρακαλώ δοκιμάστε ξανά αργότερα."
+"Automatic update failed. Opening the download page…" = "Η αυτόματη ενημέρωση απέτυχε. Άνοιγμα της σελίδας λήψης…"
 "No updates at the moment." = "Δεν υπάρχουν ενημερώσεις αυτή τη στιγμή."
 "Check update failed" = "Ο Έλεγχος Ενημέρωσης απέτυχε."
 "An error occurred while checking for updates. Please check the log for more details." = "Παρουσιάστηκε σφάλμα κατά τον έλεγχο για ενημερώσεις.\n Παρακαλώ, ελέγξτε το αρχείο καταγραφής για περισσότερες λεπτομέρειες."
@@ -193,6 +195,9 @@
 "Enable or disable this extension. Takes effect after restarting TuneLab." = "Ενεργοποιήστε ή απενεργοποιήστε αυτή την επέκταση. Ισχύει μετά την επανεκκίνηση του TuneLab."
 "Enable or disable this capability. Takes effect after restarting TuneLab." = "Ενεργοποιήστε ή απενεργοποιήστε αυτή τη δυνατότητα. Ισχύει μετά την επανεκκίνηση του TuneLab."
 "The whole extension is disabled, so its capabilities cannot be turned on individually." = "Ολόκληρη η επέκταση είναι απενεργοποιημένη, γι' αυτό οι δυνατότητές της δεν μπορούν να ενεργοποιηθούν ξεχωριστά."
+"User Manual" = "Εγχειρίδιο χρήσης"
+"The user manual is not bundled with this build." = "Αυτή η έκδοση δεν περιλαμβάνει το εγχειρίδιο χρήσης."
+"This manual is not available in the current language yet; showing the {0} edition." = "Το εγχειρίδιο δεν είναι ακόμη διαθέσιμο στην τρέχουσα γλώσσα· εμφανίζεται η έκδοση {0}."
 
 [Property]
 "Properties" = "Ιδιότητες"
@@ -331,6 +336,7 @@
 "Set Instrument" = "Επιλογή Οργάνου"
 "About TuneLab" = "Σχετικά με το TuneLab"
 "Locking Brush" = "Πινέλο σταθεροποίησης"
+"User Manual" = "Εγχειρίδιο χρήσης"
 
 [AgentSideBarContentProvider]
 "Agent" = "Agent"
@@ -373,6 +379,7 @@
 "Auto" = "Αυτόματο"
 "Ignore" = "Παράβλεψη"
 "Reject" = "Απόρριψη"
+"Rejected" = "Απορρίφθηκε"
 "Retry" = "Επανάληψη"
 "Continue" = "Συνέχεια"
 "Submit answer" = "Υποβολή απάντησης"
@@ -387,6 +394,7 @@
 "The agent wants to change the extension setting \"{0}\" to {1}." = "Ο agent θέλει να αλλάξει τη ρύθμιση επέκτασης «{0}» σε {1}."
 "The agent wants to delete the saved script \"{0}\". This can't be undone." = "Ο agent θέλει να διαγράψει το αποθηκευμένο script «{0}». Αυτό δεν μπορεί να αναιρεθεί."
 "The agent wants to overwrite the saved script \"{0}\". This can't be undone." = "Ο agent θέλει να αντικαταστήσει το αποθηκευμένο script «{0}». Αυτό δεν μπορεί να αναιρεθεί."
+"A file already exists there and will be replaced. This can't be undone." = "Υπάρχει ήδη αρχείο εκεί και θα αντικατασταθεί. Αυτό δεν μπορεί να αναιρεθεί."
 "The agent wants \"{1}\" to be the package that provides \"{0}\" (takes effect after a restart)." = "Ο agent θέλει το «{1}» να είναι το πακέτο που παρέχει το «{0}» (ισχύει μετά από επανεκκίνηση)."
 "The agent wants to enable the extension \"{0}\" (takes effect after a restart)." = "Ο agent θέλει να ενεργοποιήσει την επέκταση «{0}» (ισχύει μετά από επανεκκίνηση)."
 "The agent wants to disable the extension \"{0}\" (takes effect after a restart)." = "Ο agent θέλει να απενεργοποιήσει την επέκταση «{0}» (ισχύει μετά από επανεκκίνηση)."

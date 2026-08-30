@@ -10,7 +10,10 @@ namespace TuneLab.Utils;
 public class UpdateInfo
 {
     public Version? version;
+    // 面向用户的下载页（用浏览器打开），语义自 1.x 起未变：可能是 release 页面而非安装包。
     public string? url;
+    // 安装器直链，供自动更新直接下载。服务端按平台匹配得到才给；给不出即该平台没有可自更新的包。
+    public string? installerUrl;
     public string? description;
     public DateTime publishedAt;
 }
@@ -83,31 +86,45 @@ internal static class AppUpdateManager
 
     /// <summary>
     /// 下载整包安装器到临时目录，按 Content-Length 回报进度（0–1）。返回下载到的文件路径。
+    /// 内容不是 Windows 可执行文件时抛 <see cref="InvalidDataException"/>，由调用方降级为「浏览器打开下载页」。
     /// </summary>
     public static async Task<string> DownloadInstallerAsync(string url, IProgress<double>? progress, CancellationToken ct)
     {
         var dir = Path.Combine(Path.GetTempPath(), "TuneLab.Update");
         Directory.CreateDirectory(dir);
-        var fileName = TryGetFileName(url) ?? "TuneLab-Setup.exe";
-        var destPath = Path.Combine(dir, fileName);
+        var destPath = Path.Combine(dir, GetInstallerFileName(url));
 
         using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMinutes(10) };
         using var resp = await http.GetAsync(url, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, ct);
         resp.EnsureSuccessStatusCode();
 
-        long? total = resp.Content.Headers.ContentLength;
-        await using var src = await resp.Content.ReadAsStreamAsync(ct);
-        await using var dst = File.Create(destPath);
+        // 网页当安装器下载是真实发生过的事故（链接指向 release 页面、CDN/代理错误页都是 200 + HTML）。
+        // 先按 Content-Type 挡一道，下载完再验一次文件头，两道都不信任服务端给的链接。
+        var mediaType = resp.Content.Headers.ContentType?.MediaType;
+        if (mediaType != null && mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Expected an installer but the server returned '{mediaType}': {url}");
 
-        var buffer = new byte[81920];
-        long done = 0;
-        int read;
-        while ((read = await src.ReadAsync(buffer, ct)) > 0)
+        long? total = resp.Content.Headers.ContentLength;
+        await using (var src = await resp.Content.ReadAsStreamAsync(ct))
+        await using (var dst = File.Create(destPath))
         {
-            await dst.WriteAsync(buffer.AsMemory(0, read), ct);
-            done += read;
-            if (total is > 0)
-                progress?.Report((double)done / total.Value);
+            var buffer = new byte[81920];
+            long done = 0;
+            int read;
+            while ((read = await src.ReadAsync(buffer, ct)) > 0)
+            {
+                await dst.WriteAsync(buffer.AsMemory(0, read), ct);
+                done += read;
+                if (total is > 0)
+                    progress?.Report((double)done / total.Value);
+            }
+        }
+
+        if (!IsWindowsExecutable(destPath))
+        {
+            // 留着只会在退出时被 shell 按扩展名打开（曾表现为「选择一个应用以打开此 .1 文件」），直接删掉。
+            try { File.Delete(destPath); } catch (Exception ex) { Log.Warning($"Failed to delete invalid installer: {ex.Message}"); }
+            throw new InvalidDataException($"Downloaded file is not a Windows executable: {url}");
         }
 
         return destPath;
@@ -116,26 +133,58 @@ internal static class AppUpdateManager
     /// <summary>
     /// 拉起下载好的安装器进入静默更新模式：覆盖当前安装目录并重启 TuneLab。
     /// 调用方随后应退出本进程以释放文件锁（安装器会等锁释放）。
+    /// 返回是否已拉起：文件在下载后被换掉/损坏时返回 false，调用方应改为让用户手动下载。
     /// </summary>
-    public static void LaunchInstallerUpdate(string installerPath)
+    public static bool LaunchInstallerUpdate(string installerPath)
     {
+        // 下载时已验过一次；这里再验，防的是落盘之后文件被替换或损坏——
+        // 绝不把不是程序的东西交给 shell 执行。
+        if (!IsWindowsExecutable(installerPath))
+        {
+            Log.Error($"Refused to launch a non-executable installer: {installerPath}");
+            return false;
+        }
+
         // 去掉结尾分隔符：BaseDirectory 以 '\' 结尾，朴素加引号时结尾 \" 会把闭合引号转义掉，
         // 导致安装器收到的目标路径尾部混入一个 " 而建目录失败。
         var installDir = AppDomain.CurrentDomain.BaseDirectory
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         ProcessHelper.CreateProcess(installerPath, ["-update", installDir]);
+        return true;
     }
 
-    static string? TryGetFileName(string url)
+    /// <summary>
+    /// 文件头是否为 PE 的 "MZ" 魔数。用于拒绝把网页/错误页当安装器执行。
+    /// </summary>
+    static bool IsWindowsExecutable(string path)
     {
         try
         {
+            using var stream = File.OpenRead(path);
+            return stream.ReadByte() == 'M' && stream.ReadByte() == 'Z';
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to inspect installer file: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 取安装器落盘用的文件名。只认 URL 末段本身就是 .exe 的情况，
+    /// 否则用固定名兜底——URL 末段当文件名会带出无扩展名/怪扩展名（如 "v2.0.1" → 扩展名 ".1"）。
+    /// </summary>
+    static string GetInstallerFileName(string url)
+    {
+        const string fallback = "TuneLab-Setup.exe";
+        try
+        {
             var name = Path.GetFileName(new Uri(url).AbsolutePath);
-            return string.IsNullOrWhiteSpace(name) ? null : name;
+            return name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? name : fallback;
         }
         catch
         {
-            return null;
+            return fallback;
         }
     }
 }

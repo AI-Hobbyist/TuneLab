@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 文档截图用的示例插件（不进 TuneLab.sln，由 tools/ScreenshotBot/shoot.ps1 构建）。
+       输出落 demo-plugins/out/DemoVoice/，截图工具再把它装进沙盒的 Extensions。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DemoVoice</AssemblyName>
+    <RootNamespace>TuneLab.DocsPlugins.DemoVoice</RootNamespace>
+    <OutputPath>$(MSBuildThisFileDirectory)..\out\DemoVoice\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\TuneLab.Foundation\TuneLab.Foundation.csproj" Private="false" />
+    <ProjectReference Include="..\..\..\..\TuneLab.SDK\TuneLab.SDK.csproj" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Introduction.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

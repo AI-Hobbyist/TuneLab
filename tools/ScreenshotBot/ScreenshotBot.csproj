@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 文档截图工具：用 Avalonia headless 窗口系统 + 真 Skia 渲染，把真实的 TuneLab 界面
+       渲染成 PNG。不在 TuneLab.sln 里（同 tools/ 下其它工具），按需 dotnet run。 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>TuneLab.ScreenshotBot</AssemblyName>
+    <RootNamespace>TuneLab.ScreenshotBot</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- demo-plugins 是独立编译的示例插件工程（见其各自 csproj），不属于本工程的源码。 -->
+    <Compile Remove="demo-plugins\**" />
+    <None Remove="demo-plugins\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="11.3.15" />
+    <ProjectReference Include="..\..\TuneLab\TuneLab.csproj" />
+  </ItemGroup>
+
+</Project>

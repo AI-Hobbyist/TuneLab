@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -149,6 +149,9 @@ internal sealed class AgentSideBarContentProvider
                 // 问用户：在【本轮之内】等到答案再继续，免得把任务切成两轮、丢掉已有进展。不改工程状态、
                 // 纯为 agent 自身决策服务，故归工具面（也因为等卡片必须 async，脚本同步跑在 UI 线程会自死锁）。
                 new AskUserQuestionTool(RequestUserAnswerAsync),
+                // 用户手册（随包、与软件同版本）：回答「怎么操作 / 在哪儿」时的依据。按需取节，不常驻 prompt。
+                // 与 list_settings / list_keybindings 分工：那两个报此刻这台机器上的值，手册讲功能本身怎么用。
+                new GetManualTool(),
             };
         }
         else
@@ -1595,132 +1598,8 @@ internal sealed class AgentSideBarContentProvider
 
     // 点击会话中的图片 → 盖满主窗的 lightbox：半透明黑底居中显示大图，支持滚轮（以光标为锚点）缩放、中键拖拽平移；
     // 点背景（图片以外区域）或按 Esc 关闭。挂在 OverlayLayer 上以覆盖整窗（非仅侧栏）。
-    void ShowImagePreview(Avalonia.Media.Imaging.Bitmap bmp)
-    {
-        var layer = Avalonia.Controls.Primitives.OverlayLayer.GetOverlayLayer(mRoot);
-        if (layer == null)
-            return;
-
-        // 单实例守卫：已开则先关旧的（点不同图片即替换，同时复位缩放/平移）。
-        if (mImagePreview != null)
-            layer.Children.Remove(mImagePreview);
-
-        const double MinScale = 0.1, MaxScale = 10;
-        var scale = new ScaleTransform(1, 1);
-        var translate = new TranslateTransform(0, 0);
-        var image = new Avalonia.Controls.Image
-        {
-            Source = bmp,
-            Stretch = Stretch.None, // 默认按原始尺寸显示、居中（滚轮再缩放）
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            RenderTransformOrigin = Avalonia.RelativePoint.TopLeft, // 配合下方公式：缩放绕图片左上角，平移用视口像素
-            RenderTransform = new TransformGroup { Children = { scale, translate } },
-        };
-
-        var backdrop = new Border
-        {
-            Background = new SolidColorBrush(Colors.Black, 0.85),
-            ClipToBounds = true, // 放大平移后超出视口的部分裁掉
-            Focusable = true,    // 接收 Esc
-            Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Arrow),
-            Child = image,
-        };
-        mImagePreview = backdrop;
-
-        void Close()
-        {
-            layer.Children.Remove(backdrop);
-            if (ReferenceEquals(mImagePreview, backdrop))
-                mImagePreview = null;
-        }
-
-        // OverlayLayer 继承自 Canvas，不拉伸子项——须把 backdrop 尺寸显式设为 layer 尺寸才能盖满主窗。
-        void SyncSize()
-        {
-            backdrop.Width = layer.Bounds.Width;
-            backdrop.Height = layer.Bounds.Height;
-        }
-        SyncSize();
-        EventHandler<Avalonia.AvaloniaPropertyChangedEventArgs> onLayerBounds = (_, e) =>
-        {
-            if (e.Property == Avalonia.Visual.BoundsProperty)
-                SyncSize();
-        };
-        layer.PropertyChanged += onLayerBounds;
-
-        // 滚轮缩放：以光标位置为锚点（公式 t1 = c - A - f·(c - A - t0)，A=图片布局左上角，f=新旧缩放比）。
-        backdrop.PointerWheelChanged += (_, e) =>
-        {
-            e.Handled = true;
-            // 触控板双指横滑（横向分量占优）在预览里没有对应动作，直接吃掉：不忽略的话 Delta.Y==0 会落进
-            // 下面的三元判断被当成"向下滚"、横滑一下图就缩小一档。
-            if (Math.Abs(e.Delta.X) > Math.Abs(e.Delta.Y))
-                return;
-
-            var s0 = scale.ScaleX;
-            var s1 = Math.Clamp(s0 * (e.Delta.Y > 0 ? 1.15 : 1 / 1.15), MinScale, MaxScale);
-            if (s1 == s0)
-                return;
-            var f = s1 / s0;
-            var c = e.GetPosition(backdrop);
-            var a = image.Bounds.Position; // 居中布局后的左上角（不受 RenderTransform 影响）
-            translate.X = c.X - a.X - f * (c.X - a.X - translate.X);
-            translate.Y = c.Y - a.Y - f * (c.Y - a.Y - translate.Y);
-            scale.ScaleX = scale.ScaleY = s1;
-        };
-
-        // 左键/中键拖拽平移；未拖动的点击（窗口任意处，含图片本身）关闭预览。
-        var pressed = false;
-        var dragged = false;
-        var start = default(Avalonia.Point);
-        var last = default(Avalonia.Point);
-        backdrop.PointerPressed += (_, e) =>
-        {
-            var p = e.GetCurrentPoint(backdrop).Properties;
-            if (!p.IsLeftButtonPressed && !p.IsMiddleButtonPressed)
-                return;
-            pressed = true;
-            dragged = false;
-            start = last = e.GetPosition(backdrop);
-            e.Pointer.Capture(backdrop);
-            e.Handled = true;
-        };
-        backdrop.PointerMoved += (_, e) =>
-        {
-            if (!pressed)
-                return;
-            var now = e.GetPosition(backdrop);
-            translate.X += now.X - last.X;
-            translate.Y += now.Y - last.Y;
-            last = now;
-            if (Math.Abs(now.X - start.X) + Math.Abs(now.Y - start.Y) > 4)
-                dragged = true; // 超阈值算拖拽，松手不关闭
-            e.Handled = true;
-        };
-        backdrop.PointerReleased += (_, e) =>
-        {
-            if (!pressed)
-                return;
-            pressed = false;
-            e.Pointer.Capture(null);
-            e.Handled = true;
-            if (!dragged)
-                Close(); // 点击（未拖动）任意处关闭
-        };
-        backdrop.KeyDown += (_, e) =>
-        {
-            if (e.Key == Avalonia.Input.Key.Escape)
-            {
-                e.Handled = true;
-                Close();
-            }
-        };
-        backdrop.DetachedFromVisualTree += (_, _) => layer.PropertyChanged -= onLayerBounds;
-
-        layer.Children.Add(backdrop);
-        backdrop.Focus(); // 让 Esc 立即生效
-    }
+    // 点缩略图放大：走共享的 lightbox 浮层（手册窗/扩展详情窗的 markdown 插图同一套手感）。
+    void ShowImagePreview(Avalonia.Media.Imaging.Bitmap bmp) => ImagePreviewOverlay.Show(mRoot, bmp);
 
     // ───────────────── 图片附件 ─────────────────
 
@@ -3160,7 +3039,6 @@ internal sealed class AgentSideBarContentProvider
     // 轮边界插话 chip（钉在输入框上方）：mPendingChip=容器、mPendingPreview=文本预览。内容来自 mActive.PendingText（见 RefreshPendingChip）。
     readonly Border mPendingChip = new();
     readonly TextBlock mPendingPreview = new();
-    Control? mImagePreview; // 当前打开的图片 lightbox 浮层（单实例守卫：再点图片先关旧的）
     TuneLab.GUI.Components.Button mAttachButton = null!;
     // 标题：复用轨道名同款 EditableLabel（双击就地改名、Enter/失焦提交），与全局改名交互一致。
     readonly EditableLabel mTitleLabel = new()

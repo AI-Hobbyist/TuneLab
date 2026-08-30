@@ -59,6 +59,9 @@ $stageDir = Join-Path $work 'stage'       # app + 向导，共享一份 Avalonia
 $stubDir  = Join-Path $work 'stub'        # 外层解压器单文件发布目录
 $zipPath  = Join-Path $work 'payload.zip'
 
+# 这个命名是对外契约：更新接口按「TuneLab-Setup-{platform}-v{version}.exe」在 release assets
+# 里找安装器，据此决定要不要给客户端 installerUrl。改名会让自动更新静默退化成手动下载，
+# 详见 .github/workflows/upload-release.yml 里 asset_name 处的说明。
 if (-not $OutputPath) {
     $installerDir = Join-Path $repoRoot 'TuneLab.Setup\bin\installer'
     $OutputPath = Join-Path $installerDir "TuneLab-Setup-$runtime-v$Version.exe"

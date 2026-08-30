@@ -25,6 +25,7 @@
 "This shortcut is already used by \"{0}\". Reassign it?" = "Bu kısayol zaten \"{0}\" tarafından kullanılıyor. Yeniden atansın mı?"
 "Press keys…" = "Tuşlara basın…"
 "Unbound" = "Atanmamış"
+"Clear" = "Temizle"
 "No matching commands." = "Eşleşen komut yok."
 "Keybindings" = "Kısayollar"
 "Interface Font" = "Arayüz Yazı Tipi"
@@ -164,8 +165,9 @@
 "Update" = "Güncelle"
 "About TuneLab" = "TuneLab Hakkında"
 "An extensible singing voice synthesis editor." = "Genişletilebilir bir şarkı sesi sentezi düzenleyicisi."
+"Licenses" = "Lisanslar"
 "Downloading update…" = "Güncelleme indiriliyor…"
-"Update failed. Please try again later." = "Güncelleme başarısız. Lütfen daha sonra tekrar deneyin."
+"Automatic update failed. Opening the download page…" = "Otomatik güncelleme başarısız. İndirme sayfası açılıyor…"
 "No updates at the moment." = "Şu anda güncelleme yok."
 "Check update failed" = "Güncelleme kontrolü başarısız oldu"
 "An error occurred while checking for updates. Please check the log for more details." = "Güncellemeleri kontrol ederken bir hata oluştu. Daha fazla detay için lütfen günlüğü kontrol edin."
@@ -193,6 +195,9 @@
 "Enable or disable this extension. Takes effect after restarting TuneLab." = "Bu uzantıyı etkinleştirin veya devre dışı bırakın. TuneLab yeniden başlatıldıktan sonra geçerli olur."
 "Enable or disable this capability. Takes effect after restarting TuneLab." = "Bu yeteneği etkinleştirin veya devre dışı bırakın. TuneLab yeniden başlatıldıktan sonra geçerli olur."
 "The whole extension is disabled, so its capabilities cannot be turned on individually." = "Uzantının tamamı devre dışı olduğundan yetenekleri tek tek açılamaz."
+"User Manual" = "Kullanım kılavuzu"
+"The user manual is not bundled with this build." = "Bu derlemede kullanım kılavuzu bulunmuyor."
+"This manual is not available in the current language yet; showing the {0} edition." = "Kılavuzun geçerli dilde sürümü yok; {0} sürümü gösteriliyor."
 
 [Property]
 "Properties" = "Özellikler"
@@ -331,6 +336,7 @@
 "Set Instrument" = "Enstrüman Ayarla"
 "About TuneLab" = "TuneLab Hakkında"
 "Locking Brush" = "Sabitleme fırçası"
+"User Manual" = "Kullanım kılavuzu"
 
 [AgentSideBarContentProvider]
 "Agent" = "Aracı"
@@ -373,6 +379,7 @@
 "Auto" = "Otomatik"
 "Ignore" = "Yok Say"
 "Reject" = "Reddet"
+"Rejected" = "Reddedildi"
 "Retry" = "Yeniden dene"
 "Continue" = "Devam et"
 "Submit answer" = "Yanıtı gönder"
@@ -387,6 +394,7 @@
 "The agent wants to change the extension setting \"{0}\" to {1}." = "Aracı “{0}” uzantı ayarını {1} olarak değiştirmek istiyor."
 "The agent wants to delete the saved script \"{0}\". This can't be undone." = "Aracı kaydedilmiş “{0}” betiğini silmek istiyor. Bu işlem geri alınamaz."
 "The agent wants to overwrite the saved script \"{0}\". This can't be undone." = "Aracı kaydedilmiş “{0}” betiğinin üzerine yazmak istiyor. Bu işlem geri alınamaz."
+"A file already exists there and will be replaced. This can't be undone." = "Orada zaten bir dosya var ve değiştirilecek. Bu işlem geri alınamaz."
 "The agent wants \"{1}\" to be the package that provides \"{0}\" (takes effect after a restart)." = "Aracı “{0}” işlevini sağlayan paketin “{1}” olmasını istiyor (yeniden başlatıldıktan sonra geçerli olur)."
 "The agent wants to enable the extension \"{0}\" (takes effect after a restart)." = "Aracı “{0}” uzantısını etkinleştirmek istiyor (yeniden başlatıldıktan sonra geçerli olur)."
 "The agent wants to disable the extension \"{0}\" (takes effect after a restart)." = "Aracı “{0}” uzantısını devre dışı bırakmak istiyor (yeniden başlatıldıktan sonra geçerli olur)."

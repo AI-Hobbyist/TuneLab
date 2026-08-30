@@ -1,0 +1,13 @@
+{
+  "id": "com.tunelab.docs.instrument",
+  "name": "示例乐器",
+  "version": "1.0.0",
+  "author": "TuneLab",
+  "description": "文档示例用的乐器音源，同一片段内可奏和声。",
+  "introduction": "Introduction.md",
+  "sdk-version": "1.0",
+  "type": "instrument",
+  "engine": "DemoInstrument",
+  "class": "TuneLab.DocsPlugins.DemoInstrument.DemoInstrumentEngine",
+  "assembly": "DemoInstrument.dll"
+}

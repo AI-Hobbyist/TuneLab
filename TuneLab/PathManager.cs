@@ -10,7 +10,11 @@ namespace TuneLab;
 internal static class PathManager
 {
     public static string AppDataFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
-    public static string TuneLabFolder => Path.Combine(AppDataFolder, "TuneLab");
+    // 用户数据根目录（配置/扩展/脚本/日志/自动保存）。默认 %APPDATA%\TuneLab；
+    // TUNELAB_DATA_DIR 置位时改指它——文档截图工具（tools/ScreenshotBot）用它把整套数据隔离到
+    // 一个干净沙盒里，既不读到真实环境（截图会带上个人设置与已装的第三方插件），也不写坏它。
+    public static string TuneLabFolder => Environment.GetEnvironmentVariable("TUNELAB_DATA_DIR") is { Length: > 0 } dir
+        ? dir : Path.Combine(AppDataFolder, "TuneLab");
     // History 子目录由 AutoSaveStore 自己拥有（它按对复制与轮换），不在此另立一个会与之重复的定义。
     public static string AutoSaveFolder => Path.Combine(TuneLabFolder, "AutoSave");
     public static string LogsFolder => Path.Combine(TuneLabFolder, "Logs");
@@ -35,6 +39,8 @@ internal static class PathManager
     public static string ResourcesFolder => Path.Combine(ExcutableFolder, "Resources");
     public static string TranslationsFolder => Path.Combine(ResourcesFolder, "Translations");
     public static string ScriptDocFolder => Path.Combine(ResourcesFolder, "ScriptDoc");
+    // 用户手册（随包发布的 docs/user-manual.*.md 与其插图），按文化码取文件，见 ManualLibrary。
+    public static string ManualFolder => Path.Combine(ResourcesFolder, "Manual");
 
     public static void MakeSureExist(string folder)
     {

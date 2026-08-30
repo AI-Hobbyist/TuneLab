@@ -1,4 +1,4 @@
-# Agent 工具集设计
+﻿# Agent 工具集设计
 
 TuneLab 内置 AI Agent 通过"工具"读取与编辑当前工程。**核心理念：单一动作面（CodeAct）**——编辑工程一律由模型写 JavaScript 经 `run_script` 表达（对象式 `tl` API），读取只保留一个"定向总览"，其余读取也走脚本。曾经的细粒度读写工具（`transpose_notes`/`apply_edits`/`get_part_notes`…）与其门面 `IAgentProjectEditor` 已全部退役——同一件事多条路只会降模型选择准确率、堆 prompt。本文面向维护者，也作为编写工具描述（喂模型）时的一致性参考。
 
@@ -8,7 +8,7 @@ TuneLab 内置 AI Agent 通过"工具"读取与编辑当前工程。**核心理�
 - **护栏**：一切**工程状态的修改**天然属"用户会要的"，恒走 `tl`，绝不因"只 agent 需要"另开专用工程写工具——否则碎掉单一撤销单位 + 授权闸门 + 模型动作词汇。
 - **SSOT 约束的是执行面、不是工具数**：多道工具门可以（`run_script` 内联、`run_saved_script` 按名），只要都汇进同一受闸门执行面（`ScriptWriteExecutor` → `ScriptContext` 那次 `Commit`）。库管理工具（`save/list/read/delete_script`）不改工程状态、也非 `tl` 可脚本，故为工具。
 
-## 工具全集（25 个）
+## 工具全集（26 个）
 
 三个面：**操作工程** + **管理脚本库** + **环境感知（只读为主，含设置/快捷键助手的写口）**（外加一个**探测沙箱** `run_in_sandbox`，可丢弃工程里探静态读够不着的东西）。
 
@@ -17,6 +17,7 @@ TuneLab 内置 AI Agent 通过"工具"读取与编辑当前工程。**核心理�
 | `get_project_overview` | 操作 | 唯一只读"定向"：PPQ、tempo、拍号、各轨(1-based 编号/名/静音独奏/增益声像/part 数/音符数)。直接读 `IProject`，不经门面。 |
 | `run_script` | 操作 | 写一段 JS（对象式 `tl`）做任意读/算/改，整段 = 一个可撤销单位、出错原子回退。 |
 | `get_script_api` | 操作 | `run_script` 的按需文档（渐进式披露）：完整 `tl` API + 句柄/tick/收口规则 + 工具脚本约定。写第一段脚本前调一次。 |
+| `get_manual` | 感知 | 随包**用户手册**的按需查阅（渐进式披露）：无参给目录、`query` 检索、`section` 取整章。回答「怎么操作 / 在哪儿」的依据。见下「用户手册」节。 |
 | `export_project` | 操作 | 把当前工程写成一个文件（`importTracks` 的对偶）。格式由扩展名定（tlp/tlpx 全保真；mid/midi 内置但只承载 musical 部分；再加已装格式插件）。**恒过授权闸门**（路径任意 = 能写用户磁盘任何地方）；**不是"保存"**（不改工程保存路径、不清未保存态）；**不能导出音频**。 |
 | `save_script` | 库 | 把功能写成**工具脚本**(定义 getScriptInfo+main)存库 → 自动注册进菜单复用。只存不执行；声明了 getScriptInfo 则先预校验。 |
 | `list_scripts` | 库 | 列库内脚本，标出工具(+context)/普通，并标注哪些**带入参**(定义了 getInputConfig)。 |
@@ -47,6 +48,7 @@ TuneLab 内置 AI Agent 通过"工具"读取与编辑当前工程。**核心理�
         │                      ├─► ScriptWriteExecutor（授权闸门/预览/收口）──► ScriptRunner ──► Jint + 对象式 API ──► IProject
         ├─ run_saved_script ───┘         （run_saved_script 先按名读库源码 + 解析入参再进闸门）
         ├─ get_script_api ─────────────────────► ScriptApiReference.Text
+        ├─ get_manual ─────────────────────────► ManualLibrary（随包 Resources/Manual/{文化码}.md，按章切分、剥插图）
         ├─ export_project ─────────────────────► FormatsManager.SerializeNative ──► ToolAuthorization ──► FileStream（序列化先于闸门：失败不打扰用户）
         ├─ get_script_inputs ──────────────────► ScriptRunner.GetInputConfig + ScriptInputMemory（只读）
         ├─ save/list/read/delete_script ───────► ScriptLibrary / ScriptTools
@@ -239,6 +241,17 @@ RunScriptTool (Agent 层，薄) ──► ScriptRunner ──► Jint 引擎 + �
 - **边界**：`agent-model` 的 provider 设置也存在同一文件里，但它的 UI 在 agent 侧栏、不进设置窗扩展页，故 `ExtensionSettingsManager.GetEntries()` 不含它 → 这对工具也看不到它（刻意：agent 不配置自己的模型连接，见 `AgentModelProvider` 的 `AgentWritable=false`）。
 - **format 也在列**（桶键 `<kind>:<两方向后缀并集按声明序用 `|` 拼接>`，如双向 `format:mid|midi`、只导出 `format-export:midi`；kind 由作者填了哪几个后缀字段**推出**，manifest 里的 `type` 恒为 `format`）：它与三种引擎的结构差异是注册的是**工厂**而非长驻实例，故 `GetEntries()` 拿到的是 `FormatsManager` 的**探测实例**（只用来问 schema / 存取值），真正干活的实例在导入导出时现 new、由 `FormatsManager` 就地回喂。对 agent 完全无感：`set` 后照旧立即生效（下次导入/导出的实例就会拿到），回报里那句"可能要重启"对 format 反而不适用但无害。**身份是条目不是后缀**——多后缀格式只出现一行，`extension` 传拼接串或显示名均可；同一后缀的导入与导出若由两个类实现（那是两个条目），则是**两行、两个桶**，得分别设。
 - **顺手修的宿主漏洞**：`GetEntries()` 此前只收 effect + voice，**漏了 instrument**（其管理器同样有不触发 Init 的 `GetExtensionSettings`）——声明了设置的 instrument 插件既不在设置窗渲染、也拿不到 `ApplyPersisted` 回喂。已补一行 `Collect(…, "instrument", …)`，故本对工具与设置窗扩展页同时受益（新增 `instrument:` 桶键，此前从未写过任何值，无迁移问题）。
+
+## 用户手册（`get_manual`）
+
+「怎么画颤音」「导出选区在哪」这类**用法**问题，此前只能靠模型的既有印象答——那是它读到的别家软件与旧版本的混合物，而且无从核对。手册随包发布后，这类问题有了与**当前这个版本**同步的依据。
+
+- **单一真相源**：`docs/user-manual.{文化码}.md`（权威版是 `zh-CN`）。`TuneLab.csproj` 以 `Link` 把它连同 `docs/images/manual/*.png` 落进输出目录的 `Resources\Manual\`——**仓库里不留第二份副本**，故手册与软件恒同版本。
+- **渐进式披露**（同 `get_script_api`）：全文 3 万余字符，常驻 prompt 太贵。无参 → 章节目录（id + 标题 + 子节）；`query=<词>` → 逐行检索并报出命中所在章；`section=<id>` → 取整章。章 id 由手册里每个 `##` 前的 `<!-- section: id -->` 注释给出（标题可改、章号可变，id 不变）。
+- **喂模型的文本剥掉插图与 HTML 注释**（`ManualLibrary.ForModel`）：图对模型是纯噪声。
+- **与自省工具的分工**（写进了工具描述，避免模型混用）：`list_settings` / `list_keybindings` 报的是「此刻这台机器上是什么值、在设置窗哪一页哪一行」；手册讲的是「这个功能是什么、怎么和别的功能配合」。问「颤音怎么画」查手册，问「我的颤音工具快捷键现在是什么」查注册表。
+- **语言回退**（同 `Resources/ScriptDoc` 范式）：界面语言 → `en-US` → 目录里任意一份。用的不是界面语言那一版时，回报头部**如实注明**并要求模型仍用用户的语言作答。
+- **同一份切分逻辑供人也供模型**：应用内手册窗（帮助 → 用户手册，`F1`）用 `ManualLibrary` 的同一套章节建左侧目录。若两边各切一套，用户照着窗里的章节提问、agent 却按另一套章节回答。
 
 ## 探测沙箱（`run_in_sandbox`）
 

@@ -500,6 +500,9 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
         // 域 = view（显示层开关）。参数面板折叠/恢复与拖到最低等价；在 Editor 分发以便钢琴窗/编排区焦点下均可触发。
         Keymap.Register(new() { Id = "view.toggleParameterPanel", DisplayName = () => "Toggle Parameter Panel".Tr(TC.Menu), Scope = KeyScope.Editor, DefaultGesture = new(Key.P, KeyBinding.PrimaryModifier), Execute = () => mPianoWindow.ToggleParameterPanel() });
 
+        // 用户手册（随包发布，见 ManualLibrary）。F1 是「帮助」的通行约定；Global 作用域 = 任何区域按下都开。
+        Keymap.Register(new() { Id = "app.manual", DisplayName = () => "User Manual".Tr(TC.Menu), Scope = KeyScope.Global, DefaultGesture = new(Key.F1), Execute = () => ManualWindow.Open(this.Window()) });
+
         // 显示名沿用工具栏（FunctionBar）既有措辞，复用其翻译、与工具栏保持一致。
         RegisterToolCommand("tool.note", "Select Tool", Key.D1, UI.PianoTool.Note);
         RegisterToolCommand("tool.pencil", "Pencil Tool", Key.D2, UI.PianoTool.Pencil);
@@ -1506,9 +1509,13 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
     private void StartUpdate(UpdateDialog announcement, UpdateInfo info)
     {
         announcement.Close();
-        if (string.IsNullOrEmpty(info.url))
+
+        // 自更新只在拿到安装器直链时走。服务端给不出这个字段（该平台没有安装器、或服务端尚未提供），
+        // 就退回 1.x 的行为：浏览器打开下载页，用户自己下载安装。
+        // 另：安装器的 -update 静默覆盖模式目前是 Windows 专属，其它平台一律走下载页。
+        if (!OperatingSystem.IsWindows() || string.IsNullOrEmpty(info.installerUrl))
         {
-            ProcessHelper.OpenUrl("https://tunelab.app");
+            OpenDownloadPage(info);
             return;
         }
 
@@ -1523,21 +1530,28 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
             var progress = new Progress<double>(p => { window.SetProgress(p); window.SetStatus($"{p:P0}"); });
             try
             {
-                var path = await AppUpdateManager.DownloadInstallerAsync(info.url!, progress, cts.Token);
+                var path = await AppUpdateManager.DownloadInstallerAsync(info.installerUrl!, progress, cts.Token);
                 if (cts.IsCancellationRequested) { window.Close(); return; }
                 window.Close();
-                (this.Window() as MainWindow)?.RequestUpdateRestart(path);
+                (this.Window() as MainWindow)?.RequestUpdateRestart(path, DownloadPageUrl(info));
             }
             catch (OperationCanceledException) { window.Close(); }
             catch (Exception ex)
             {
+                // 下载不成（网络、或拿到的根本不是安装器）不是死路：让用户去下载页手动装。
                 Log.Error($"Update download failed: {ex}");
                 window.Close();
-                await this.ShowMessage("Update".Tr(TC.Dialog), "Update failed. Please try again later.".Tr(TC.Dialog));
+                await this.ShowMessage("Update".Tr(TC.Dialog), "Automatic update failed. Opening the download page…".Tr(TC.Dialog));
+                OpenDownloadPage(info);
             }
         };
         window.Show(this.Window());
     }
+
+    // 更新公告里那条给人看的下载页；服务端没给就退到官网。
+    private static string DownloadPageUrl(UpdateInfo info) => string.IsNullOrEmpty(info.url) ? "https://tunelab.app" : info.url;
+
+    private static void OpenDownloadPage(UpdateInfo info) => ProcessHelper.OpenUrl(DownloadPageUrl(info));
 
     public async void CheckUpdate(bool IsAutoCheck = true)
     {
@@ -1690,6 +1704,10 @@ internal class Editor : DockPanel, PianoWindow.IDependency, TrackWindow.IDepende
 
         {
             var menuBarItem = new MenuItem { Foreground = Style.TEXT_LIGHT.ToBrush(), Focusable = false }.SetTrName("Help");
+            {
+                var menuItem = new MenuItem().SetTrName("User Manual").SetCommand("app.manual");
+                menuBarItem.Items.Add(menuItem);
+            }
             {
                 var menuItem = new MenuItem().SetTrName("Open TuneLab Folder").SetAction(() => ProcessHelper.OpenUrl(PathManager.TuneLabFolder));
                 menuBarItem.Items.Add(menuItem);

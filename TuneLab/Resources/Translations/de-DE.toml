@@ -25,6 +25,7 @@
 "This shortcut is already used by \"{0}\". Reassign it?" = "Dieses Tastenkürzel wird bereits von \"{0}\" verwendet. Neu zuweisen?"
 "Press keys…" = "Tasten drücken…"
 "Unbound" = "Nicht belegt"
+"Clear" = "Löschen"
 "No matching commands." = "Keine passenden Befehle."
 "Keybindings" = "Tastenkürzel"
 "Interface Font" = "Oberflächenschriftart"
@@ -164,8 +165,9 @@
 "Update" = "Aktualisieren"
 "About TuneLab" = "Über TuneLab"
 "An extensible singing voice synthesis editor." = "Ein erweiterbarer Editor für Gesangsstimmen-Synthese."
+"Licenses" = "Lizenzen"
 "Downloading update…" = "Update wird heruntergeladen…"
-"Update failed. Please try again later." = "Update fehlgeschlagen. Bitte versuche es später erneut."
+"Automatic update failed. Opening the download page…" = "Automatisches Update fehlgeschlagen. Die Downloadseite wird geöffnet…"
 "No updates at the moment." = "Keine Updates verfügbar."
 "Check update failed" = "Suche nach Updates fehlgeschlagen"
 "An error occurred while checking for updates. Please check the log for more details." = "Ein Fehler ist aufgetreten während des suchen nach Updates. Bitte überprüfe den Log für Details."
@@ -193,6 +195,9 @@
 "Enable or disable this extension. Takes effect after restarting TuneLab." = "Diese Erweiterung aktivieren oder deaktivieren. Wird nach einem Neustart von TuneLab wirksam."
 "Enable or disable this capability. Takes effect after restarting TuneLab." = "Diese Funktion aktivieren oder deaktivieren. Wird nach einem Neustart von TuneLab wirksam."
 "The whole extension is disabled, so its capabilities cannot be turned on individually." = "Die gesamte Erweiterung ist deaktiviert, daher können ihre Funktionen nicht einzeln aktiviert werden."
+"User Manual" = "Benutzerhandbuch"
+"The user manual is not bundled with this build." = "Dieser Build enthält kein Benutzerhandbuch."
+"This manual is not available in the current language yet; showing the {0} edition." = "Das Handbuch ist in der aktuellen Sprache noch nicht verfügbar; angezeigt wird die Ausgabe {0}."
 
 [Property]
 "Properties" = "Eigenschaften"
@@ -331,6 +336,7 @@
 "Set Instrument" = "Instrument setzen"
 "About TuneLab" = "Über TuneLab"
 "Locking Brush" = "Fixierpinsel"
+"User Manual" = "Benutzerhandbuch"
 
 [AgentSideBarContentProvider]
 "Agent" = "Agent"
@@ -373,6 +379,7 @@
 "Auto" = "Automatisch"
 "Ignore" = "Ignorieren"
 "Reject" = "Ablehnen"
+"Rejected" = "Abgelehnt"
 "Retry" = "Wiederholen"
 "Continue" = "Fortsetzen"
 "Submit answer" = "Antwort senden"
@@ -387,6 +394,7 @@
 "The agent wants to change the extension setting \"{0}\" to {1}." = "Der Agent möchte die Erweiterungseinstellung „{0}“ auf {1} ändern."
 "The agent wants to delete the saved script \"{0}\". This can't be undone." = "Der Agent möchte das gespeicherte Skript „{0}“ löschen. Das kann nicht rückgängig gemacht werden."
 "The agent wants to overwrite the saved script \"{0}\". This can't be undone." = "Der Agent möchte das gespeicherte Skript „{0}“ überschreiben. Das kann nicht rückgängig gemacht werden."
+"A file already exists there and will be replaced. This can't be undone." = "Dort existiert bereits eine Datei und sie wird ersetzt. Das kann nicht rückgängig gemacht werden."
 "The agent wants \"{1}\" to be the package that provides \"{0}\" (takes effect after a restart)." = "Der Agent möchte „{1}“ als das Paket festlegen, das „{0}“ bereitstellt (wird nach einem Neustart wirksam)."
 "The agent wants to enable the extension \"{0}\" (takes effect after a restart)." = "Der Agent möchte die Erweiterung „{0}“ aktivieren (wird nach einem Neustart wirksam)."
 "The agent wants to disable the extension \"{0}\" (takes effect after a restart)." = "Der Agent möchte die Erweiterung „{0}“ deaktivieren (wird nach einem Neustart wirksam)."

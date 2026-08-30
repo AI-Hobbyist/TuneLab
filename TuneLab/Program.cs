@@ -81,6 +81,21 @@ class Program
             return;
         }
 
+        // 初始化各配置/翻译/插件上下文（截图工具 tools/ScreenshotBot 复用同一入口，保证与真实启动同路径）。
+        InitCoreServices();
+
+        // event loop
+        BuildAvaloniaApp()
+        .StartWithClassicDesktopLifetime(args);
+
+        // exit
+        lockFile.Dispose();
+        Log.Shutdown();
+    }
+
+    // Main 与截图工具共用的初始化：配置、翻译、插件上下文。须早于任何 Avalonia/插件调用。
+    internal static void InitCoreServices()
+    {
         // init setting
         Settings.Init(PathManager.SettingsFilePath);
         EditorState.Init(PathManager.EditorStateFilePath);
@@ -99,23 +114,21 @@ class Program
 
         // 注入插件可读的全局 host context（语言 + 按 ALC 自动前缀的日志器）。须在加载插件之前。
         TuneLabContext.Global = new TuneLabContextGlobal();
-
-        // event loop
-        BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
-
-        // exit
-        lockFile.Dispose();
-        Log.Shutdown();
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()
     {
+        return ConfigureAppCommon(AppBuilder.Configure<App>().UsePlatformDetect());
+    }
+
+    // 与窗口系统无关的那一半配置（渲染后端、字体、回退链）。截图工具换的只是窗口系统（headless），
+    // 这套配置必须共用，否则渲染出来的画面与用户看到的不是同一个。
+    internal static AppBuilder ConfigureAppCommon(AppBuilder builder)
+    {
         GC.KeepAlive(typeof(Avalonia.Svg.Skia.SvgImageExtension).Assembly);
         GC.KeepAlive(typeof(Avalonia.Svg.Skia.Svg).Assembly);
-        return AppBuilder.Configure<App>()
-            .UsePlatformDetect()
+        return builder
             .UseSkia()
             .WithInterFont()
             .LogToTrace()

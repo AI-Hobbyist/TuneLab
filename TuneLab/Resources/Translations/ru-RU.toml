@@ -25,6 +25,7 @@
 "This shortcut is already used by \"{0}\". Reassign it?" = "Это сочетание уже используется \"{0}\". Переназначить?"
 "Press keys…" = "Нажмите клавиши…"
 "Unbound" = "Не назначено"
+"Clear" = "Очистить"
 "No matching commands." = "Нет подходящих команд."
 "Keybindings" = "Сочетания клавиш"
 "Interface Font" = "Шрифт интерфейса"
@@ -164,8 +165,9 @@
 "Update" = "Обновить"
 "About TuneLab" = "О TuneLab"
 "An extensible singing voice synthesis editor." = "Расширяемый редактор синтеза певческого голоса."
+"Licenses" = "Лицензии"
 "Downloading update…" = "Загрузка обновления…"
-"Update failed. Please try again later." = "Не удалось обновить. Пожалуйста, повторите попытку позже."
+"Automatic update failed. Opening the download page…" = "Не удалось выполнить автоматическое обновление. Открываем страницу загрузки…"
 "No updates at the moment." = "Сейчас нет доступных обновлений."
 "Check update failed" = "Проверка обновлений не удалась"
 "An error occurred while checking for updates. Please check the log for more details." = "Произошла ошибка при проверке обновлений. Пожалуйста, проверьте лог для получения подробной информации."
@@ -193,6 +195,9 @@
 "Enable or disable this extension. Takes effect after restarting TuneLab." = "Включить или отключить это расширение. Вступит в силу после перезапуска TuneLab."
 "Enable or disable this capability. Takes effect after restarting TuneLab." = "Включить или отключить эту возможность. Вступит в силу после перезапуска TuneLab."
 "The whole extension is disabled, so its capabilities cannot be turned on individually." = "Всё расширение отключено, поэтому его возможности нельзя включить по отдельности."
+"User Manual" = "Руководство пользователя"
+"The user manual is not bundled with this build." = "В этой сборке нет руководства пользователя."
+"This manual is not available in the current language yet; showing the {0} edition." = "Руководства на текущем языке пока нет; показана версия {0}."
 
 [Property]
 "Properties" = "Характеристики"
@@ -331,6 +336,7 @@
 "Set Instrument" = "Поставить инструмент"
 "About TuneLab" = "О TuneLab"
 "Locking Brush" = "Кисть фиксации"
+"User Manual" = "Руководство пользователя"
 
 [AgentSideBarContentProvider]
 "Agent" = "Агент"
@@ -373,6 +379,7 @@
 "Auto" = "Автоматически"
 "Ignore" = "Игнорировать"
 "Reject" = "Отклонить"
+"Rejected" = "Отклонено"
 "Retry" = "Повторить"
 "Continue" = "Продолжить"
 "Submit answer" = "Отправить ответ"
@@ -387,6 +394,7 @@
 "The agent wants to change the extension setting \"{0}\" to {1}." = "Агент хочет изменить настройку расширения «{0}» на {1}."
 "The agent wants to delete the saved script \"{0}\". This can't be undone." = "Агент хочет удалить сохранённый скрипт «{0}». Это действие нельзя отменить."
 "The agent wants to overwrite the saved script \"{0}\". This can't be undone." = "Агент хочет перезаписать сохранённый скрипт «{0}». Это действие нельзя отменить."
+"A file already exists there and will be replaced. This can't be undone." = "Там уже есть файл, он будет заменён. Это действие нельзя отменить."
 "The agent wants \"{1}\" to be the package that provides \"{0}\" (takes effect after a restart)." = "Агент хочет, чтобы «{1}» стал пакетом, предоставляющим «{0}» (вступит в силу после перезапуска)."
 "The agent wants to enable the extension \"{0}\" (takes effect after a restart)." = "Агент хочет включить расширение «{0}» (вступит в силу после перезапуска)."
 "The agent wants to disable the extension \"{0}\" (takes effect after a restart)." = "Агент хочет отключить расширение «{0}» (вступит в силу после перезапуска)."

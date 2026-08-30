@@ -25,6 +25,7 @@
 "This shortcut is already used by \"{0}\". Reassign it?" = "Det här kortkommandot används redan av \"{0}\". Tilldela om?"
 "Press keys…" = "Tryck på tangenter…"
 "Unbound" = "Ej tilldelad"
+"Clear" = "Rensa"
 "No matching commands." = "Inga matchande kommandon."
 "Keybindings" = "Kortkommandon"
 "Interface Font" = "Gränssnittsteckensnitt"
@@ -164,8 +165,9 @@
 "Update" = "Uppdatera"
 "About TuneLab" = "Om TuneLab"
 "An extensible singing voice synthesis editor." = "En utbyggbar editor för sångröstsyntes."
+"Licenses" = "Licenser"
 "Downloading update…" = "Laddar ner uppdatering…"
-"Update failed. Please try again later." = "Uppdateringen misslyckades. Försök igen senare."
+"Automatic update failed. Opening the download page…" = "Automatisk uppdatering misslyckades. Öppnar nedladdningssidan…"
 "No updates at the moment." = "Inga uppdateringar för närvarande."
 "Check update failed" = "Kontrolleringen av uppdateringar misslyckades"
 "An error occurred while checking for updates. Please check the log for more details." = "Ett fel inträffade vid kontrollen av uppdateringar. Se loggen för mer information."
@@ -193,6 +195,9 @@
 "Enable or disable this extension. Takes effect after restarting TuneLab." = "Aktivera eller inaktivera detta tillägg. Börjar gälla efter omstart av TuneLab."
 "Enable or disable this capability. Takes effect after restarting TuneLab." = "Aktivera eller inaktivera denna funktion. Börjar gälla efter omstart av TuneLab."
 "The whole extension is disabled, so its capabilities cannot be turned on individually." = "Hela tillägget är inaktiverat, så dess funktioner kan inte slås på var för sig."
+"User Manual" = "Användarhandbok"
+"The user manual is not bundled with this build." = "Den här versionen innehåller ingen användarhandbok."
+"This manual is not available in the current language yet; showing the {0} edition." = "Handboken finns ännu inte på det aktuella språket; visar {0}-utgåvan."
 
 [Property]
 "Properties" = "Egenskaper"
@@ -331,6 +336,7 @@
 "Set Instrument" = "Välj instrument"
 "About TuneLab" = "Om TuneLab"
 "Locking Brush" = "Låspensel"
+"User Manual" = "Användarhandbok"
 
 [AgentSideBarContentProvider]
 "Agent" = "Agent"
@@ -373,6 +379,7 @@
 "Auto" = "Automatiskt"
 "Ignore" = "Ignorera"
 "Reject" = "Avvisa"
+"Rejected" = "Avvisad"
 "Retry" = "Försök igen"
 "Continue" = "Fortsätt"
 "Submit answer" = "Skicka svar"
@@ -387,6 +394,7 @@
 "The agent wants to change the extension setting \"{0}\" to {1}." = "Agenten vill ändra tilläggsinställningen ”{0}” till {1}."
 "The agent wants to delete the saved script \"{0}\". This can't be undone." = "Agenten vill ta bort det sparade skriptet ”{0}”. Det går inte att ångra."
 "The agent wants to overwrite the saved script \"{0}\". This can't be undone." = "Agenten vill skriva över det sparade skriptet ”{0}”. Det går inte att ångra."
+"A file already exists there and will be replaced. This can't be undone." = "Det finns redan en fil där och den kommer att ersättas. Det går inte att ångra."
 "The agent wants \"{1}\" to be the package that provides \"{0}\" (takes effect after a restart)." = "Agenten vill att ”{1}” ska vara paketet som tillhandahåller ”{0}” (börjar gälla efter en omstart)."
 "The agent wants to enable the extension \"{0}\" (takes effect after a restart)." = "Agenten vill aktivera tillägget ”{0}” (börjar gälla efter en omstart)."
 "The agent wants to disable the extension \"{0}\" (takes effect after a restart)." = "Agenten vill inaktivera tillägget ”{0}” (börjar gälla efter en omstart)."

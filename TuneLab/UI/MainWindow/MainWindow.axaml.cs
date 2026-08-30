@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private bool isCloseConfirm;
     // 下载好待应用的更新安装器路径：走正常关闭流程退出时才拉起它（覆盖+重启），取消退出则清除。
     private string? mPendingUpdateInstaller;
+    private string? mPendingUpdateFallbackUrl;
     private bool mApplyingSavedWindowPlacement;
     private TextBlock TitleLabel;
     private Button maximizeButton;
@@ -246,9 +247,11 @@ public partial class MainWindow : Window
     }
 
     // 下载完更新后由 Editor 调用：记下安装器、走正常关闭流程（含未保存提示）。取消退出则不更新。
-    public void RequestUpdateRestart(string installerPath)
+    // fallbackUrl 是安装器最终拉不起来时给用户手动下载的页面。
+    public void RequestUpdateRestart(string installerPath, string fallbackUrl)
     {
         mPendingUpdateInstaller = installerPath;
+        mPendingUpdateFallbackUrl = fallbackUrl;
         Close();
     }
 
@@ -281,8 +284,10 @@ public partial class MainWindow : Window
         mEditor.ClearAutoSaveFile();
 
         // 有待应用的更新：在真正退出前拉起安装器（它会等本进程退出释放锁，再覆盖并重启）。
-        if (mPendingUpdateInstaller != null)
-            AppUpdateManager.LaunchInstallerUpdate(mPendingUpdateInstaller);
+        // 拉不起来（文件已不是可执行文件）时不能静默退出了事——那样用户只会看到软件自己关了，
+        // 改为打开下载页，让他知道要手动装。
+        if (mPendingUpdateInstaller != null && !AppUpdateManager.LaunchInstallerUpdate(mPendingUpdateInstaller))
+            ProcessHelper.OpenUrl(mPendingUpdateFallbackUrl ?? "https://tunelab.app");
     }
 
     void ApplySavedWindowPlacement()

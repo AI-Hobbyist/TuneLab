@@ -25,6 +25,7 @@
 "This shortcut is already used by \"{0}\". Reassign it?" = "Deze sneltoets wordt al gebruikt door \"{0}\". Opnieuw toewijzen?"
 "Press keys…" = "Druk op toetsen…"
 "Unbound" = "Niet toegewezen"
+"Clear" = "Wissen"
 "No matching commands." = "Geen overeenkomende opdrachten."
 "Keybindings" = "Sneltoetsen"
 "Interface Font" = "Interface-lettertype"
@@ -164,8 +165,9 @@
 "Update" = "Bijwerken"
 "About TuneLab" = "Over TuneLab"
 "An extensible singing voice synthesis editor." = "Een uitbreidbare editor voor zangstemsynthese."
+"Licenses" = "Licenties"
 "Downloading update…" = "Update downloaden…"
-"Update failed. Please try again later." = "Update mislukt. Probeer het later opnieuw."
+"Automatic update failed. Opening the download page…" = "Automatische update mislukt. De downloadpagina wordt geopend…"
 "No updates at the moment." = "Geen updates op dit moment."
 "Check update failed" = "Controle update mislukt"
 "An error occurred while checking for updates. Please check the log for more details." = "Er is een fout opgetreden tijdens het controleren op updates. Controleer het logboek voor meer details."
@@ -193,6 +195,9 @@
 "Enable or disable this extension. Takes effect after restarting TuneLab." = "Deze extensie in- of uitschakelen. Wordt van kracht na het herstarten van TuneLab."
 "Enable or disable this capability. Takes effect after restarting TuneLab." = "Deze mogelijkheid in- of uitschakelen. Wordt van kracht na het herstarten van TuneLab."
 "The whole extension is disabled, so its capabilities cannot be turned on individually." = "De hele extensie is uitgeschakeld, dus haar mogelijkheden kunnen niet afzonderlijk worden aangezet."
+"User Manual" = "Gebruikershandleiding"
+"The user manual is not bundled with this build." = "Deze build bevat geen gebruikershandleiding."
+"This manual is not available in the current language yet; showing the {0} edition." = "De handleiding is nog niet beschikbaar in de huidige taal; de {0}-editie wordt weergegeven."
 
 [Property]
 "Properties" = "Eigenschappen"
@@ -331,6 +336,7 @@
 "Set Instrument" = "Instrument instellen"
 "About TuneLab" = "Over TuneLab"
 "Locking Brush" = "Vastzetpenseel"
+"User Manual" = "Gebruikershandleiding"
 
 [AgentSideBarContentProvider]
 "Agent" = "Agent"
@@ -373,6 +379,7 @@
 "Auto" = "Automatisch"
 "Ignore" = "Negeren"
 "Reject" = "Weigeren"
+"Rejected" = "Geweigerd"
 "Retry" = "Opnieuw proberen"
 "Continue" = "Doorgaan"
 "Submit answer" = "Antwoord verzenden"
@@ -387,6 +394,7 @@
 "The agent wants to change the extension setting \"{0}\" to {1}." = "De agent wil de extensie-instelling '{0}' wijzigen naar {1}."
 "The agent wants to delete the saved script \"{0}\". This can't be undone." = "De agent wil het opgeslagen script '{0}' verwijderen. Dit kan niet ongedaan worden gemaakt."
 "The agent wants to overwrite the saved script \"{0}\". This can't be undone." = "De agent wil het opgeslagen script '{0}' overschrijven. Dit kan niet ongedaan worden gemaakt."
+"A file already exists there and will be replaced. This can't be undone." = "Daar bestaat al een bestand en het wordt vervangen. Dit kan niet ongedaan worden gemaakt."
 "The agent wants \"{1}\" to be the package that provides \"{0}\" (takes effect after a restart)." = "De agent wil dat '{1}' het pakket wordt dat '{0}' levert (wordt van kracht na een herstart)."
 "The agent wants to enable the extension \"{0}\" (takes effect after a restart)." = "De agent wil de extensie '{0}' inschakelen (wordt van kracht na een herstart)."
 "The agent wants to disable the extension \"{0}\" (takes effect after a restart)." = "De agent wil de extensie '{0}' uitschakelen (wordt van kracht na een herstart)."

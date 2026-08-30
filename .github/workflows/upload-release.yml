@@ -75,6 +75,11 @@ jobs:
           shell: pwsh
           run: ./CIUtils/pack-installer.ps1 -Version ${{ steps.ver.outputs.version }}
 
+        # asset_name 是对外契约，不是随手起的名字：更新接口 /api/app/get-update 按
+        # 「TuneLab-Setup-{platform}-v{version}.exe」在 release assets 里找安装器，匹配到才把
+        # installerUrl 发给客户端。改了这里的命名，服务端就匹配不到，应用内的自动更新会**静默**
+        # 退化成「打开下载页让用户手动装」——不报错、不告警，只是功能悄悄没了。
+        # 真要改命名，先同步改服务端的匹配规则。
         - name: Upload installer to release
           uses: actions/upload-release-asset@v1
           env:

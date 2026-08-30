@@ -1,4 +1,4 @@
-# TuneLab — notes for AI coding assistants
+﻿# TuneLab — notes for AI coding assistants
 
 ## Build & test
 
@@ -39,6 +39,24 @@ Related invariants: `AssemblyVersion` of both assemblies is pinned to 2.0.0.0 fo
 csproj comments — do not "align" it with the release version); the manifest `sdk-version`
 gate (`ExtensionManager.SdkVersion`) is a separate version axis and must be bumped when
 shipping new API.
+
+## 用户手册
+
+`docs/user-manual.zh-CN.md` 是**唯一真相源**，同时有三个消费者，改它要意识到这几件事：
+
+- **随软件发布**：`TuneLab.csproj` 用 `Link` 把它与 `docs/images/manual/*.png` 落进输出目录的 `Resources\Manual\`（仓库里不留副本）。
+- **应用内手册窗**（帮助 → 用户手册 / `F1`，`TuneLab/UI/Manual/ManualWindow.cs`）与 **agent 的 `get_manual` 工具**共用 `TuneLab/Docs/ManualLibrary.cs` 的章节切分。
+- **章节锚点**：每个 `##` 前的 `<!-- section: id -->` 注释是稳定引用（标题/章号可变，id 不变）。删改锚点会让 `ManualLibraryTests` 失败——那是防漂移的哨兵，不是障碍。
+
+插图与快捷键表都是生成物，不是手工截屏：
+
+```powershell
+pwsh tools/ScreenshotBot/shoot.ps1     # -> docs/images/manual/*.png + docs/generated/keybindings.md
+```
+
+它用 Avalonia headless + 真 Skia 渲染跑真实的 `App`/`MainWindow`（不开真窗口），数据目录经 `TUNELAB_DATA_DIR`
+重定向到临时沙盒（不读也不写开发机的 `%APPDATA%\TuneLab`）。**改了界面就重跑一次。**
+原理、怎么加图、已知的坑见 [tools/ScreenshotBot/README.md](tools/ScreenshotBot/README.md)。
 
 ## Conventions
 

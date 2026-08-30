@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -15,6 +15,7 @@ using Markdig.Extensions.TaskLists;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using TuneLab.GUI;
+using TuneLab.GUI.Components;
 using TuneLab.I18N;
 using TuneLab.Utils;
 
@@ -428,24 +429,58 @@ internal static class ChatMarkdownRenderer
             if (!File.Exists(path))
                 return null;
 
+            bool isSvg = Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase);
             IImage source;
-            if (Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase))
+            if (isSvg)
                 source = new SvgImage { Source = SvgSource.LoadFromSvg(File.ReadAllText(path)) };
             else
             {
+                // 正文里最宽也就 640 逻辑像素，界面截图却常有 1600 宽：按 960 解码（= 640 × 1.5，覆盖常见
+                // HiDPI 缩放）。解码时间与内存都按像素数走，一页几十张时这一步就是"打开卡不卡"的主因
+                // （实测手册整篇 26 张，1280 宽解码要八百多毫秒）。点开放大时再从磁盘取全分辨率。
                 using var stream = File.OpenRead(path);
-                source = new Bitmap(stream);
+                source = Bitmap.DecodeToWidth(stream, 960, BitmapInterpolationMode.HighQuality);
             }
 
-            return new Image
+            var image = new Image
             {
                 Source = source,
                 Stretch = Stretch.Uniform,
                 MaxWidth = block ? 640 : 480,
                 MaxHeight = block ? 640 : 320,
                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
-                Margin = block ? new(0, 4) : new(0),
             };
+
+            // 界面截图与正文底色往往是同一套配色，不描边就分不清哪里是图、哪里是页面（手册插图尤其）。
+            // 故块级插图一律套一层细边框；行内小图不套（会把行高撑歪）。
+            // 点击放大：正文里缩到 640px 的界面截图看不清细节，点开走与 Agent 图片附件同一个 lightbox。
+            var frame = new Border
+            {
+                Child = image,
+                Margin = block ? new(0, 6) : new(0),
+                BorderBrush = Style.LINE.ToBrush(),
+                BorderThickness = new(block ? 1 : 0),
+                CornerRadius = new(block ? 4 : 0),
+                ClipToBounds = true,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
+            };
+            // 放大用的是磁盘上的原图（正文里那份为省内存已降采样解码）：截图的细节全在原分辨率里。
+            frame.AddHandler(Avalonia.Input.Gestures.TappedEvent, (_, _) =>
+            {
+                IImage full = source;
+                if (!isSvg)
+                {
+                    try
+                    {
+                        using var stream = File.OpenRead(path);
+                        full = new Bitmap(stream);
+                    }
+                    catch { /* 原图读不到就退回正文那份，放大总比不放大好 */ }
+                }
+                ImagePreviewOverlay.Show(frame, full);
+            });
+            return frame;
         }
         catch
         {
