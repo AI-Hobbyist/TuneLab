@@ -1,0 +1,152 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "DiffSingerForTuneLab/1.0.0": {
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.DirectML": "1.23.0",
+          "OpenUtau.Core": "1.0.0",
+          "System.IO.Hashing": "8.0.0",
+          "YamlDotNet": "18.0.0"
+        },
+        "runtime": {
+          "DiffSingerForTuneLab.dll": {}
+        }
+      },
+      "Microsoft.ML.OnnxRuntime.DirectML/1.23.0": {
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.23.0"
+        },
+        "runtimeTargets": {
+          "runtimes/win-arm64/native/onnxruntime.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "1.23.25.926"
+          },
+          "runtimes/win-arm64/native/onnxruntime.lib": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-arm64/native/onnxruntime_providers_shared.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "1.23.25.926"
+          },
+          "runtimes/win-x64/native/onnxruntime.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.23.25.926"
+          },
+          "runtimes/win-x64/native/onnxruntime.lib": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/onnxruntime_providers_shared.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.23.25.926"
+          }
+        }
+      },
+      "Microsoft.ML.OnnxRuntime.Managed/1.23.0": {
+        "dependencies": {
+          "System.Numerics.Tensors": "9.0.0"
+        },
+        "runtime": {
+          "lib/net8.0/Microsoft.ML.OnnxRuntime.dll": {
+            "assemblyVersion": "1.23.0.0",
+            "fileVersion": "1.23.0.0"
+          }
+        }
+      },
+      "System.IO.Hashing/8.0.0": {
+        "runtime": {
+          "lib/net8.0/System.IO.Hashing.dll": {
+            "assemblyVersion": "8.0.0.0",
+            "fileVersion": "8.0.23.53103"
+          }
+        }
+      },
+      "System.Numerics.Tensors/9.0.0": {
+        "runtime": {
+          "lib/net8.0/System.Numerics.Tensors.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52809"
+          }
+        }
+      },
+      "YamlDotNet/18.0.0": {
+        "runtime": {
+          "lib/net8.0/YamlDotNet.dll": {
+            "assemblyVersion": "18.0.0.0",
+            "fileVersion": "18.0.0.0"
+          }
+        }
+      },
+      "OpenUtau.Core/1.0.0": {
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.DirectML": "1.23.0"
+        },
+        "runtime": {
+          "OpenUtau.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "DiffSingerForTuneLab/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.ML.OnnxRuntime.DirectML/1.23.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-zABy69z74iSy05blZpfFsm+3IETjJniH1hDwzAkSyrjKW96yHnEQ1zd1P+LNmuQWqnLkx5LOKQQ487ndsxTX6g==",
+      "path": "microsoft.ml.onnxruntime.directml/1.23.0",
+      "hashPath": "microsoft.ml.onnxruntime.directml.1.23.0.nupkg.sha512"
+    },
+    "Microsoft.ML.OnnxRuntime.Managed/1.23.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-YsvYcS/Xp9QW/cN+FqC7iX66eIaV1hDeNLgCjNzY/4HU3J9+ABk5QVqpP1YgcSmOouVq0+/IBR0FYKvLYQi+4g==",
+      "path": "microsoft.ml.onnxruntime.managed/1.23.0",
+      "hashPath": "microsoft.ml.onnxruntime.managed.1.23.0.nupkg.sha512"
+    },
+    "System.IO.Hashing/8.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ne1843evDugl0md7Fjzy6QjJrzsjh46ZKbhf8GwBXb5f/gw97J4bxMs0NQKifDuThh/f0bZ0e62NPl1jzTuRqA==",
+      "path": "system.io.hashing/8.0.0",
+      "hashPath": "system.io.hashing.8.0.0.nupkg.sha512"
+    },
+    "System.Numerics.Tensors/9.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-hyJB4UlpAi19Xr9AXzu2NuagKC4lPfHObNMEAA0HmqFz2rX7wKgzeYzO/jM/eBHDhnUGFFEjk5cOoJaxqg5J4A==",
+      "path": "system.numerics.tensors/9.0.0",
+      "hashPath": "system.numerics.tensors.9.0.0.nupkg.sha512"
+    },
+    "YamlDotNet/18.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ptHVgcYmLejGuWXV7RMFoEqFKYMXnieOlWLPzEslfDtzZ9ngMhjYwykfqjBN2+fMEAEyobozkj07lKEpR4dssA==",
+      "path": "yamldotnet/18.0.0",
+      "hashPath": "yamldotnet.18.0.0.nupkg.sha512"
+    },
+    "OpenUtau.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

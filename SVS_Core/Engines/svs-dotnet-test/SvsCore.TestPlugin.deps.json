@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "SvsCore.TestPlugin/1.0.0": {
+        "dependencies": {
+          "SvsCore.Sdk": "1.0.0"
+        },
+        "runtime": {
+          "SvsCore.TestPlugin.dll": {}
+        }
+      },
+      "SvsCore.Sdk/1.0.0": {
+        "runtime": {
+          "SvsCore.Sdk.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "SvsCore.TestPlugin/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "SvsCore.Sdk/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

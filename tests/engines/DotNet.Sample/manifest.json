@@ -1,0 +1,10 @@
+{
+  "id": "svs-dotnet-test",
+  "name": "SVS .NET Test Engine",
+  "version": "1.0.0",
+  "sdk-version": "1.0",
+  "type": "voice",
+  "runtime": "dotnet",
+  "assembly": "SvsCore.TestPlugin.dll",
+  "class": "SvsCore.TestPlugin.Entry"
+}

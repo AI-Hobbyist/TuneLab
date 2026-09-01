@@ -1,0 +1,8 @@
+{
+  "id": "svs-native-test",
+  "name": "SVS Native Test Engine",
+  "version": "1.0.0",
+  "sdk-version": "1.0",
+  "type": "voice",
+  "library": "svs_native_test_engine.dll"
+}
