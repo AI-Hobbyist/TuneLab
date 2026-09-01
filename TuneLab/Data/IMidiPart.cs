@@ -618,67 +618,105 @@ internal static class IMidiPartExtension
         }
     }
 
-    internal static MidiPartInfo MergePartInfos(MidiPartInfo[] SortedPartInfos)
+    // 合并多个 midi part 为一个：内容 rebase 到首段锚点，几何取各段可见区间的包络。
+    // 取内容的判据一律是**可见区间**（Pos + StartOffset ~ Pos + EndOffset）而非锚点：part 携带的内容可以超出
+    // 可见区间（拖边缘只改偏移、不裁内容），锚点外的历史内容不属于合并结果。段间重叠时后段覆盖前段
+    // ——当前段的上界收到下一段的可见起点。
+    // 破坏式：直接改写入参 info 的内容坐标，调用方须传自己持有的 info 快照。
+    internal static MidiPartInfo MergePartInfos(MidiPartInfo[] partInfos)
     {
-        double PosAxisTrans(PartInfo curPart, double pos)
+        // 按可见起点自排序，不依赖调用方的排序键（"后段覆盖前段"仅在此序下成立）。
+        var sortedPartInfos = partInfos.OrderBy(p => p.Pos + p.StartOffset).ToArray();
+        var basePart = sortedPartInfos[0];
+        var anchor = basePart.Pos;
+        var ret = new MidiPartInfo
         {
-            var startPos = SortedPartInfos[0].Pos;
-            var absPos = pos + curPart.Pos;
-            return absPos - startPos;
-        }
-        var ret = new MidiPartInfo();
-        var basePart = SortedPartInfos[0];
-        // 合并后锚点 = 首段锚点（内容据此 rebase）；起点保留首段起点、终点取末段终点，均换算到该锚点。
-        ret.Pos = SortedPartInfos.First().Pos;
-        ret.StartOffset = SortedPartInfos.First().StartOffset;
-        ret.EndOffset = SortedPartInfos.Last().Pos + SortedPartInfos.Last().EndOffset - ret.Pos;
-        ret.SoundSource = basePart.SoundSource;
-        ret.Gain = basePart.Gain;
-        ret.Name = basePart.Name;
-        ret.Properties = basePart.Properties;
+            // 合并后锚点 = 首段锚点（内容据此 rebase）；可见区间 = 各段可见区间的包络，换算到该锚点。
+            Pos = anchor,
+            StartOffset = sortedPartInfos.Min(p => p.Pos + p.StartOffset) - anchor,
+            EndOffset = sortedPartInfos.Max(p => p.Pos + p.EndOffset) - anchor,
+            SoundSource = basePart.SoundSource,
+            Gain = basePart.Gain,
+            Name = basePart.Name,
+            Properties = basePart.Properties,
+            // effect 链取首段（逐段的链无从叠加）；非首段 vibrato 对自家 effect 轨的影响随之成孤儿（既有语义）。
+            Effects = basePart.Effects,
+        };
 
-        for (int i = 0; i < SortedPartInfos.Length; i++)
+        for (int i = 0; i < sortedPartInfos.Length; i++)
         {
-            var curPart = SortedPartInfos[i];
-            var curPartPos = PosAxisTrans(curPart, 0);
-            var nextPartPos = i + 1 < SortedPartInfos.Length ? PosAxisTrans(SortedPartInfos[i + 1], 0) : double.MaxValue;
-            foreach(var item in curPart.Notes)
+            var curPart = sortedPartInfos[i];
+            // 本段贡献内容的绝对区间 [lower, upper)：可见区间与下一段可见起点的交。被后段完全覆盖时为空区间。
+            var lower = curPart.Pos + curPart.StartOffset;
+            var upper = curPart.Pos + curPart.EndOffset;
+            if (i + 1 < sortedPartInfos.Length)
+                upper = Math.Min(upper, sortedPartInfos[i + 1].Pos + sortedPartInfos[i + 1].StartOffset);
+
+            // 本段 local 坐标 → 合并后坐标（相对 ret 锚点）；null = 落在贡献区间外，丢弃。
+            double? Rebase(double localPos)
             {
-                item.Pos=PosAxisTrans(curPart,item.Pos);
-                if (item.Pos < curPartPos) continue;
-                if (item.Pos >= nextPartPos) break;
+                var absPos = localPos + curPart.Pos;
+                if (absPos < lower || absPos >= upper)
+                    return null;
+
+                return absPos - anchor;
+            }
+
+            // 分段折线（音高 / 分段轨）：逐段取落在贡献区间内的点，交集为空的段整段丢弃（不留空 segment）。
+            List<List<TuneLab.Foundation.Point>> ClipSegments(List<List<TuneLab.Foundation.Point>> segments)
+            {
+                var clipped = new List<List<TuneLab.Foundation.Point>>();
+                foreach (var segment in segments)
+                {
+                    var line = new List<TuneLab.Foundation.Point>();
+                    foreach (var point in segment)
+                    {
+                        if (Rebase(point.X) is not double x)
+                            continue;
+
+                        line.Add(new TuneLab.Foundation.Point(x, point.Y));
+                    }
+                    if (line.Count > 0)
+                        clipped.Add(line);
+                }
+                return clipped;
+            }
+
+            foreach (var item in curPart.Notes)
+            {
+                if (Rebase(item.Pos) is not double pos)
+                    continue;
+
+                item.Pos = pos;
                 ret.Notes.Add(item);
             }
             foreach (var item in curPart.Vibratos)
             {
-                item.Pos = PosAxisTrans(curPart, item.Pos);
-                if (item.Pos < curPartPos) continue;
-                if (item.Pos >= nextPartPos) break;
+                if (Rebase(item.Pos) is not double pos)
+                    continue;
+
+                item.Pos = pos;
                 ret.Vibratos.Add(item);
             }
-            foreach (var item in curPart.Pitch.Segments)
-            {
-                List<TuneLab.Foundation.Point> line= new List<TuneLab.Foundation.Point>();
-                foreach (var point in item)
-                {
-                    var X = PosAxisTrans(curPart, point.X);
-                    if (X < curPartPos) continue;
-                    if (X >= nextPartPos) break;
-                    line.Add(new TuneLab.Foundation.Point(X, point.Y));
-                }
-                ret.Pitch.Segments.Add(line);
-            }
+            ret.Pitch.Segments.AddRange(ClipSegments(curPart.Pitch.Segments));
             foreach (var kvp in curPart.Automations)
             {
                 if (!ret.Automations.ContainsKey(kvp.Key)) { ret.Automations.Add(kvp.Key, new AutomationInfo() { DefaultValue = kvp.Value.DefaultValue, Points = new List<TuneLab.Foundation.Point>() }); }
 
                 foreach (var point in kvp.Value.Points)
                 {
-                    var X = PosAxisTrans(curPart, point.X);
-                    if (X < curPartPos) continue;
-                    if (X >= nextPartPos) break;
-                    ret.Automations[kvp.Key].Points.Add(new TuneLab.Foundation.Point(X, point.Y));
+                    if (Rebase(point.X) is not double x)
+                        continue;
+
+                    ret.Automations[kvp.Key].Points.Add(new TuneLab.Foundation.Point(x, point.Y));
                 }
+            }
+            // 分段轨与音高同为分段折线，判据同上；键取各段并集。
+            foreach (var kvp in curPart.PiecewiseAutomations)
+            {
+                if (!ret.PiecewiseAutomations.ContainsKey(kvp.Key)) { ret.PiecewiseAutomations.Add(kvp.Key, new PiecewiseAutomationInfo()); }
+
+                ret.PiecewiseAutomations[kvp.Key].Segments.AddRange(ClipSegments(kvp.Value.Segments));
             }
         }
         return ret;

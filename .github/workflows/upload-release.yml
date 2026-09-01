@@ -25,6 +25,9 @@ jobs:
         contents: write
 
       steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
         - name: Generate release notes
           id: notes
           uses: RedCrafter07/release-notes-action@v1.0.0
@@ -32,6 +35,28 @@ jobs:
             tag-name: ${{ github.ref }}
             token: ${{ secrets.GITHUB_TOKEN }}
             branch: 'master'
+
+        # 自动生成的正文是 commit message 拼出来的，反引号很容易混进去。而 1.5.10 / 1.6.0
+        # 渲染 Markdown 代码元素会崩溃、老用户一开软件就闪退（见 CIUtils/check-release-notes.py）。
+        # 这份文案没人斟酌过，剥掉代码语法不损语义，所以这里直接净化而不是卡住发版；人手编辑
+        # 正文那条路由 check-release-notes.yml 硬拦。
+        - name: Sanitize release notes
+          id: safe_notes
+          shell: bash
+          env:
+            NOTES: ${{ steps.notes.outputs.release-notes }}
+          run: |
+            python3 -m pip install --quiet markdown-it-py
+            printf '%s\n' "$NOTES" > notes.md
+            python3 CIUtils/check-release-notes.py notes.md --fix > notes.safe.md
+            {
+              echo 'notes<<TUNELAB_NOTES_EOF'
+              cat notes.safe.md
+              # 兜底换行：正文末尾若不带换行，分隔符会被拼到最后一行尾巴上，GitHub 报
+              # "Matching delimiter not found"，整个发版就停在建 release 之前。
+              echo ''
+              echo 'TUNELAB_NOTES_EOF'
+            } >> "$GITHUB_OUTPUT"
 
         - name: Create release
           id: create_release
@@ -41,7 +66,7 @@ jobs:
           with:
             tag_name: ${{ github.ref }}
             release_name: TuneLab ${{ github.ref }}
-            body: ${{ steps.notes.outputs.release-notes }}
+            body: ${{ steps.safe_notes.outputs.notes }}
             draft: false
             prerelease: false
     

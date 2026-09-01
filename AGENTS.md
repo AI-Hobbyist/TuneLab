@@ -58,6 +58,22 @@ pwsh tools/ScreenshotBot/shoot.ps1     # -> docs/images/manual/*.png + docs/gene
 重定向到临时沙盒（不读也不写开发机的 `%APPDATA%\TuneLab`）。**改了界面就重跑一次。**
 原理、怎么加图、已知的坑见 [tools/ScreenshotBot/README.md](tools/ScreenshotBot/README.md)。
 
+## Release notes 不能出现代码语法
+
+应用内的更新弹窗直接渲染 GitHub release 正文（服务端 /api/app/get-update 把**最新** release
+的 body 原样转发给客户端）。1.5.10 和 1.6.0 这两版客户端渲染任何 Markdown 代码元素——行内
+反引号、三反引号围栏、四空格缩进块——都会当场抛异常，而弹窗建在 async void 里没人接管异常，
+进程直接退出：老用户一开软件就闪退，且崩在弹窗渲染前，连「忽略此版本」都点不到。这些客户端
+在用户机器上，改不了，只能约束我们写的正文。
+
+所以写 release notes（以及任何会被搬进 release 正文的文案）时不要用代码语法，把 .tlx、F1、
+WAVE_FORMAT_EXTENSIBLE 这类词直接写成正文。其余 Markdown 语法（标题、粗体、列表、表格、
+链接、图片、emoji）都验证过是安全的。
+
+两道闸：`CIUtils/check-release-notes.py` 用 CommonMark 解析判定（嵌套列表的四空格缩进不会
+误报）；`.github/workflows/check-release-notes.yml` 在 release 发布或正文被编辑时跑它，
+`upload-release.yml` 则对 CI 自动生成的正文用 `--fix` 就地净化。
+
 ## Conventions
 
 - Code comments may be written in Chinese; log messages, assertions and exception messages

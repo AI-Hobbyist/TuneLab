@@ -788,7 +788,7 @@ internal partial class TrackScrollView : View
     }
 
     // 合并待处理组：逐轨收集与选区 tick 区间相交的 MidiPart（横跨边界的也算，稍后裁到选区内），按起点升序
-    // （满足 MergePartInfos 的有序前提）；每轨 ≥1 个即纳入——单个 part 也算（合并=裁到选区、选区即结果边界）。音频 part 被 OfType 滤除。
+    // （裁剪按此序推进）；每轨 ≥1 个即纳入——单个 part 也算（合并=裁到选区、选区即结果边界）。音频 part 被 OfType 滤除。
     List<(ITrack Track, MidiPart[] Parts)> CollectRegionMergeGroups(RegionSelection selection)
     {
         var groups = new List<(ITrack, MidiPart[])>();
@@ -843,7 +843,7 @@ internal partial class TrackScrollView : View
 
             foreach (var oldPart in parts)
                 track.RemovePart(oldPart);
-            // insideInfos 按 part 起点升序（parts 已排序、裁剪起点单调）→ 满足 MergePartInfos 有序前提。
+            // 各片已裁到选区内（锚点 = 片起点、StartOffset = 0），MergePartInfos 自按可见起点排序；片间若有重叠则后片覆盖前片。
             track.InsertPart(track.CreatePart(IMidiPartExtension.MergePartInfos(insideInfos.ToArray())));
             foreach (var leftover in leftovers)
                 track.InsertPart(track.CreatePart(leftover));

@@ -1,0 +1,54 @@
+name: Check release notes
+
+# 应用内的更新弹窗直接渲染 release 正文（服务端 /api/app/get-update 把**最新** release 的
+# body 原样转发给客户端），而 1.5.10 / 1.6.0 渲染任何 Markdown 代码元素都会当场崩溃、
+# 一开软件就闪退（详见 CIUtils/check-release-notes.py 的开头说明）。那些客户端改不了，
+# 只能约束我们写的正文——所以每次 release 发布或正文被编辑，都在这里过一道闸。
+#
+# 注意：tag 触发的 upload-release.yml 用 GITHUB_TOKEN 建 release，按 GitHub 的防递归规则
+# **不会**触发本 workflow；那条路上的自动生成正文由 upload-release.yml 自己净化。这里管的是
+# 人手编辑正文的场景，也正是历来出事的那条路。
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要检查的 tag（留空则检查 latest release）'
+        required: false
+        default: ''
+
+jobs:
+  check:
+    name: Check release notes
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install checker dependency
+        run: python3 -m pip install --quiet markdown-it-py
+
+      - name: Fetch release body
+        env:
+          # 经 env 传递，别把正文插值进 shell 命令里
+          RELEASE_BODY: ${{ github.event.release.body }}
+          INPUT_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            printf '%s' "$RELEASE_BODY" > body.md
+          elif [ -n "$INPUT_TAG" ]; then
+            gh release view "$INPUT_TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > body.md
+          else
+            gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body > body.md
+          fi
+          wc -c body.md
+
+      - name: Check for code syntax
+        run: python3 CIUtils/check-release-notes.py body.md
