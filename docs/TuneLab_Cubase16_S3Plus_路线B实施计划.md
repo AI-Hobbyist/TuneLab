@@ -1,6 +1,6 @@
 # TuneLab 深度集成 Cubase 16 的 S3+ 路线 B 实施计划
 
-日期：2026-11-14。状态：实施中，M0–M2已完成并推送，M3自主实施与非GUI验收完成，Git检查点完成后进入M4；M4–M6未开始。
+日期：2026-11-14。状态：实施中，M0–M2已完成并推送，M3自主实施与非GUI验收完成且功能检查点已推送确认；下一阶段M4尚未开始。
 
 本计划交付两个插件：**TuneLab VST3 Instrument（VSTi3）**和 **TuneLab ARA Bridge**。采用路线 B，在 Cubase 进程内通过原生 C++ 插件壳加载 .NET 与 Avalonia，复用 TuneLab 钢琴窗，使其既能嵌入 VST3 插件界面，也能通过 ARA 工作流进入 Cubase Extension 编辑器。最终目标是 S3+，包括 Cubase Key Editor 歌词输入同步、合成播放、编辑和工程恢复。
 
@@ -358,3 +358,7 @@ SDK首bar signature对应bar 1并向前外推；私有ABI14已将宿主拍号送
 ### M3 最终自主验收（2026-11-14）
 
 M3逐项审计与必要回归完成，见[cubase-m3-validation.md](cubase-m3-validation.md)。最后补齐Bridge source-local播放位置：mailbox、region源秒、当前/待恢复文档tempo换算，私有ABI15；实际Bridge双连接顺序/失效context和分段pending时钟通过。解决方案build PASS，主测试843/843、legacy13/13，双validator各47/0，actual Bridge/Instrument本机声库回归通过。人工项仍SKIPPED。M3实施/非GUI验收完成，提交推送检查点待执行并确认后才进入M4；完整S3+目标未完成。
+
+### M3 Git检查点（2026-11-14）
+
+功能提交32433224c724b404866ef113f2ad4b5ec7fbac7f已独立提交并推送至origin/cubase_16_full_ara，ls-remote实际返回相同SHA，上游同名关系已确认。M3完成自主实施/非GUI验收及阶段检查点；当前只补记文档，随后按顺序进入M4。保留原.gitignore、.codegraph、out及三份参考文档。人工项继续SKIPPED，完整S3+目标未完成。

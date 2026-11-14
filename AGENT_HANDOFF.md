@@ -8,19 +8,19 @@
 - M1完成并已推送：1cb004e144e435b7f915f6110c877cb36c2d7873。
 - M2自主实施与非GUI验收完成，功能检查点9b1ec32917c89f659ac4dbfd621fd56ebe5b8886已推送origin/cubase_16_full_ara，HEAD/上游一致已实际确认。本次文档提交补记结果，随后可进入M3。
 - M2文档补记999ab39d也已推送并确认HEAD/上游一致。
-- M3已开始，M4–M6未开始。完整目标仍为路线B S3+，不得标记目标完成。
+- M3自主实施/非GUI验收完成，功能检查点32433224c724b404866ef113f2ad4b5ec7fbac7f已提交并推送，ls-remote确认一致。M4–M6未开始，完整目标ACTIVE。
 - 正式计划：docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md。
 - M2逐项验收与命令/证据：docs/cubase-m2-validation.md。
 
 ## 已完成实现
 
-M3进行中（当前状态，2026-11-14）：生产ARA modification拥有独立EditorDocument，clone深复制；TLARA001按SDK筛选器归档/部分恢复/持久ID重映射及活动managed handle回滚已接入。Editor角色选择经实际Bridge组件/SDK ConnectionProxy/私有令牌关联到IPlugView，覆盖双连接顺序、断连与重连；真实窗口仍SKIPPED。
+M3已完成自主实施/非GUI验收（2026-11-14）：生产ARA modification拥有独立EditorDocument，clone深复制；TLARA001按SDK筛选器归档/部分恢复/持久ID重映射及活动managed handle回滚已接入。Editor角色选择经实际Bridge组件/SDK ConnectionProxy/私有令牌关联到IPlugView，覆盖双连接顺序、断连与重连；真实窗口仍SKIPPED。
 
 source note内容、版本1身份匹配、musical context tempo/meter与region秒/quarter映射已实现；source音符/tempo经私有ABI进入TuneLab工程，v2 state保存baseline/current ID/原点，旧v1保持兼容。三方合并已接入更新回调，保留歌词、固定音素与用户覆盖；Busy保护未提交编辑，并由现有编辑轮询重新读取最新managed状态后重试，region销毁使待重试安全失效。核心托管18/18、完整verify-host、双validator各47/0及Busy/销毁夹具通过。最新日志见下文各补记。
 
 source身份与计数器已通过TLARA002按筛选器归档恢复和新文档ID重映射。Bridge已支持区域合成、变速、裁剪/偏移/重叠、活动host/editor更新、宿主编辑通知及合成完成通知；immutable Plan保证音频线程不释放worker。真实本机声库CLI路径和双validator通过，证据见下文最新补记。
 
-当前私有ABI15：配对共享状态read/apply及共享视图lease/provider已接入，Bridge注册同一EditorDocument的原生视图所有者；跨实际插件包协议验证所有者一致、缩放/焦点、端点移除保活及关闭重试通过。本地proxy句柄已分派标准Create/Destroy/Resize/Focus，跨包验证通过；Instrument controller已按Pairing.State选择该proxy，processor在Bind/Unlink后主动发送状态；对端删除主动通知和控制线程待发/失败重试已接入并通过CLI协议；配对码UI已编译接入；配对意图/输出设置持久化与恢复后显式重新绑定已接入；拍号原点已接入并通过相关自动验证；多region源时间重投影已修复并通过恒速/分段速度与持久化往返；M3审计及完整回归通过；下一最小任务是M3独立提交推送检查点，确认后进入M4。M3未完成，全部M3修改尚未提交/推送；M4–M6未开始。真实Cubase/GUI仍SKIPPED，不得把CLI夹具称为S3+实机通过。
+当前私有ABI15：ARA源数据/tempo/拍号原点、版本化关联/归档、区域合成/试听、source-local播放位置及显式配对均已实现。跨包共享文档与视图lease、唯一正式输出、配对码UI、PeerMissing意图保存恢复，以及多region源时间重投影有对应自动证据。M3验收记录见docs/cubase-m3-validation.md；解决方案build、主843/843、legacy13/13、双validator各47/0和本机SVS CLI回归通过。功能检查点32433224c724b404866ef113f2ad4b5ec7fbac7f已提交推送并经远端确认。下一阶段M4尚未开始。真实GUI/Cubase保持SKIPPED，不称实机S3+通过。
 
 M1钢琴窗与CLR基础保持：每实例ProjectDocument、局部动作/撤销/剪贴板、共享controller/view文档所有权；包内hostfxr/nethost及Avalonia嵌入根，显式视图清理。
 
@@ -33,7 +33,7 @@ M2包括：
 - VSTi3标准Bypass（ParamID0，可自动化、离散两态），逐样本队列处理；component state后附可选TLVSTP01/12字节参数尾部，旧状态默认false，坏版本/截断拒绝。editor快照消息只恢复工程，不清宿主参数。Bridge暂不暴露该参数。
 - 非音频transport消息反馈工程/试听准备状态及耗时，私有callback接内嵌状态栏；HostTimeMailbox一致采集当前块sample/rate、音乐位置、tempo、拍号/bar及flags。尚未将其写成完整速度表。
 
-## 已验证
+## 已验证（M2历史基线，M3见首段与最终检查点）
 
 - 解决方案Debug构建PASS：m2-solution-build.log。
 - 主测试818/818：m2-full-tests.log；legacy13/13：m2-legacy-tests.log。
@@ -50,17 +50,17 @@ M2包括：
 
 试听是当前声源/歌词的一秒note加尾音缓存，不是无限延音/实时连续歌唱。原生cache miss起音40–109ms是在已有引擎/磁盘缓存的本机测量，不是首次冷启动指标。tuning数值保留但未应用。真实引擎并发调用、确定性复音夹具与真实Cubase调度分别记录，不互相冒充。
 
-完整tempo表/变速重合成、ARA对象/region/selection/archive/角色与显式配对归M3；M4双容器工具与生命周期，M5原生歌词协议，M6部署/许可/最终回归。Cubase原生歌词协议仍未证实，不得把自有消息或手动输入称为Key Editor歌词同步。Bridge区域渲染和归档实现已在上文M3进度记录，不再是M0仅静态探针。
+完整tempo表/变速重合成、ARA对象/region/selection/archive/角色与显式配对已完成M3自主实施/非GUI验收；M4双容器工具与生命周期，M5原生歌词协议，M6部署/许可/最终回归。Cubase原生歌词协议仍未证实，不得把自有消息或手动输入称为Key Editor歌词同步。Bridge区域渲染和归档实现已在上文M3进度记录，不再是M0仅静态探针。
 
 ## Git与工作区
 
-M2功能代码与验收记录已提交并确认推送；本次仅补记检查点状态。不得把用户预先存在的以下内容stage：.gitignore、.codegraph/、out/、三份未跟踪参考文档（Cubase16_SVS_接入静态分析.md、S3+_交付与接口清单分析.md、TuneLab_接入Cubase16_方案分析.md）。所有模型、测试生成工程/音频、日志均不分发。没有改动third_party源码或冻结公共API文件。
+M3功能提交32433224已完成并确认推送；本次仅补记检查点状态。不得把用户预先存在的以下内容stage：.gitignore、.codegraph/、out/、三份未跟踪参考文档（Cubase16_SVS_接入静态分析.md、S3+_交付与接口清单分析.md、TuneLab_接入Cubase16_方案分析.md）。所有模型、测试生成工程/音频、日志均不分发。没有改动third_party源码或冻结公共API文件。
 
 ## 下一步顺序
 
-1. M2功能与文档检查点均已确认推送，当前按上文M3最小未完成项继续。
-2. 继续优先主仓及third_party/ARA_SDK各自CodeGraph，完整实施M3对象、时间、归档、编辑/渲染及显式配对，不跳到M4。
-3. 每阶段完成所需自动验证后更新记录、检查diff、独立提交推送确认，再进入下一阶段；不积压已完成阶段。
+1. M3功能检查点32433224已提交推送且远端确认；本次仅补记检查点文档。
+2. 按原计划开始M4，先CodeGraph核对双容器编辑工具、状态呈现及所有权/释放，再执行范围内最小必要实现和非GUI验证；不得跳到M5。
+3. 每阶段实施/自动验收完成后更新计划与本手册、检查diff、独立提交推送确认。全部真实GUI/宿主/人工项SKIPPED，不等待、不作为blocked。
 
 ## 环境与约束
 
@@ -462,3 +462,10 @@ BridgeAudioModification::pairEndpoint懒注册对应文档provider：读已提�
 - 旧exec会话37755已从工具注册表消失；本机完整日志确认解决方案、主测试及legacy命令均报告成功，没有盲目重启。新增分段时钟断言最终明确进入重新编译的probe并输出PASS。
 - 当前分支cubase_16_full_ara，M3尚未提交/推送。下一操作：仅stage M3源码/测试/计划/验收记录，排除原.gitignore/.codegraph/out/三份参考文档与本机模型/日志；检查暂存diff与空白，独立提交M3并推送，核实同名远端SHA；更新实际Git状态后才进入M4。
 - M4按原计划核对双容器工具、状态呈现/焦点和资源释放。M5原生歌词通道尚未实现；不能把手工歌词保存称为Cubase原生歌词同步。
+
+## 2026-11-14 M3 检查点已推送确认
+
+- M3功能提交32433224c724b404866ef113f2ad4b5ec7fbac7f，消息feat(cubase): complete M3 ARA documents and paired playback。git push --set-upstream origin cubase_16_full_ara成功；git ls-remote refs/heads/cubase_16_full_ara返回相同完整SHA，确认上游同名且提交已到远端。
+- 提交63个M3源码/测试/计划/验收文件；git diff --cached --check通过，未纳入原.gitignore/.codegraph/out/三份参考文档。功能提交后工作区仅保留这些原有内容。本次文档补记不涉及产品代码。
+- 当前任务状态：M0–M3自主实施和非GUI验收完成；M4–M6未开始，完整目标继续ACTIVE。下一最小实施是原计划M4双容器编辑工具与资源所有权核对。没有M3剩余自主实施；真实Cubase/GUI人工清单仍SKIPPED（用户决定，未执行，需人工验证），不作为受阻。
+- 上文分日期过程记录中“进行中/未提交”是历史状态，当前以本检查点和首段摘要为准。
