@@ -12,6 +12,7 @@ namespace TuneLab.Tests;
 // `project open` 的封条。这条命令的价值几乎全在**它什么时候拒绝**：它换掉的是用户此刻正看着的
 // 那份文档，一次判断失手就是把人家没保存的活儿扔了。故这里钉四条拒绝路径的顺序与措辞：
 // 没有编辑器 → 文件不在 / 格式没人读 → **有未保存改动**（早于授权，不靠一次确认糊过去）→ 授权。
+[Collection("FormatRegistry")]
 public class ProjectOpenCommandTests
 {
     static readonly ProjectOpenCommand Command = new();

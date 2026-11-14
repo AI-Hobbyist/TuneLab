@@ -37,7 +37,12 @@ internal static class PathManager
     public static string LockFilePath => Path.Combine(TuneLabFolder, "TuneLab.lock");
     public static string LogFilePath { get { mLogFilePath ??= Path.Combine(LogsFolder, "TuneLab_" + DateTime.Now.ToString("yyyy-MM-dd_hh-mm-ss") + ".log"); return mLogFilePath; } }
     public static string ExcutableFolder => AppDomain.CurrentDomain.BaseDirectory;
-    public static string ResourcesFolder => Path.Combine(ExcutableFolder, "Resources");
+    // Embedded hosts have their own executable directory. Resources belong to
+    // this assembly; a single-file standalone build keeps its executable root.
+    public static string ResourcesFolder => Path.Combine(
+        Path.GetDirectoryName(typeof(PathManager).Assembly.Location) is { Length: > 0 } directory
+            ? directory : ExcutableFolder,
+        "Resources");
     public static string TranslationsFolder => Path.Combine(ResourcesFolder, "Translations");
     public static string ScriptDocFolder => Path.Combine(ResourcesFolder, "ScriptDoc");
     // 用户手册（随包发布的 docs/user-manual.*.md 与其插图），按文化码取文件，见 ManualLibrary。

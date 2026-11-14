@@ -13,6 +13,9 @@ namespace TuneLab.Tests;
 // 这三条的措辞里，两类话绝对不能丢：
 //  · 【重启才生效】它们都是"存下了，但这次运行不算数"——不说清楚，用户会以为没生效而重复操作；
 //  · 【关掉意味着什么】整包关掉 = 它的能力这次运行一个都不存在；单个能力关掉 ≠ 整包关掉。
+// ProjectOpenCommandTests registers the same process-wide format list that
+// extension settings enumerate. Keep those operations in one test collection.
+[Collection("FormatRegistry")]
 public class ExtensionWriteCommandsTests
 {
     // ── extension set-routing

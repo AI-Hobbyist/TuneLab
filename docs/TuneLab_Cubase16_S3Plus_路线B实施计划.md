@@ -1,6 +1,6 @@
 # TuneLab 深度集成 Cubase 16 的 S3+ 路线 B 实施计划
 
-日期：2026-11-15。状态：实施中，M0–M5已完成自主实施、非GUI验收及推送检查点；M6交付审计中，完整S3+目标仍ACTIVE。
+日期：2026-11-15。状态：实施中，M0–M5已完成自主实施、非GUI验收及推送检查点；M6自主实施与非GUI验收完成，待提交推送及正式源码包检查点，完整S3+目标仍ACTIVE。
 
 本计划交付两个插件：**TuneLab VST3 Instrument（VSTi3）**和 **TuneLab ARA Bridge**。采用路线 B，在 Cubase 进程内通过原生 C++ 插件壳加载 .NET 与 Avalonia，复用 TuneLab 钢琴窗，使其既能嵌入 VST3 插件界面，也能通过 ARA 工作流进入 Cubase Extension 编辑器。最终目标是 S3+，包括 Cubase Key Editor 歌词输入同步、合成播放、编辑和工程恢复。
 
@@ -290,7 +290,7 @@ GUI 验证当前默认跳过。只有用户后续明确要求执行时，才采�
 | M3 ARA Bridge闭环 | 自主实施/非GUI验收及推送检查点完成，功能提交32433224；见 [M3验收记录](cubase-m3-validation.md)；GUI SKIPPED |
 | M4 双容器钢琴窗 | 自主实施/非GUI验收及推送检查点完成，功能提交78c7f251；见 [M4验收记录](cubase-m4-validation.md) |
 | M5 S3+宿主歌词 | 自主实施与非GUI验收及推送检查点完成（420c11ae）：标准文本入口、稳定ID/事务/冲突、真实SVS及缓存、版本/归档；Cubase实机供给SKIPPED，见 [M5证据](cubase-m5-validation.md) |
-| M6 发布候选 | IN PROGRESS：M5检查点已推送确认，开始部署/许可/交付材料审计 |
+| M6 发布候选 | 自主实施与非GUI验收完成，待提交/推送及正式源码包：双插件Release、重定位/依赖/许可、手册/夹具、892+13测试；人工项SKIPPED，见 [交付记录](cubase-delivery.md) |
 
 M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy歌声引擎复用、完整版本化component state和Bypass参数状态、controller文档快照消息/恢复、异步代次缓存、整曲宿主播放和离线process、MIDI短音歌声缓存试听、样本级NoteOff/Bypass、float/double、状态反馈，以及当前块时间信息接收。
 
@@ -423,3 +423,9 @@ M5增量合成补记（2026-11-15）：Bridge已按region生命周期复用worke
 M5事务回归补记（2026-11-15）：新增复制不继承source ID、删除撤销后更新、保存重开、未知版本不破坏当前状态及宿主复制/删除/撤销快照关联验证。定向37/37、全主测试890/890、legacy13/13、完整verify-host/ABI20/双validator47/0通过。仍需带歌词的实际ARA归档组合及source-only恢复对排队文本修订影响的定向审计，M5未提交未完成，M6未开始。
 
 M5归档补记（2026-11-15）：带歌词的实际ARA克隆/部分归档恢复及managed baseline一致性通过。source-only身份恢复接纳旧排队歌词已实际RED复现并以私有ABI21 InvalidatePairSource修复，GREEN同时验证新事件更新新ID99；完整verify-host/双validator47/0通过。下一步为M5既定DoD最终审计和独立提交推送检查点，尚未进入M6；不称Cubase实机S3+通过。
+
+M6首包补记（2026-11-15）：新增Windows Release打包和包检查脚本，首个ZIP解压重定位后358文件哈希/必要资源/许可/PE64、双validator47/0与跨包CLR协议通过。发现宿主ResourcesFolder定位需最小修复，另待许可/手册/最终回归；首包非最终发布，M6未完成未提交。见cubase-m6-validation.md。
+
+M6资源补记（2026-11-15）：ResourcesFolder宿主定位缺陷已通过独立程序集加载RED→GREEN修复；资源/手册17/17、全部主测试892/892，rc02 Windows Release构建与ZIP重定位363文件/双validator47/0/CLR协议通过。待用户手册、测试工程/许可精确核对及最终检查点，M6未完成未提交。
+
+M6文档/夹具补记（2026-11-15）：用户手册第18章与A01–A16人工清单已补，手册15/15；无声库tlpx/state往返和SMF独立解析通过。nethost二进制/头文件/许可统一同一现存8.0.26 NuGet包；rc03 Release/解压重定位368文件、双validator47/0及CLR通过。后续新增版本说明/SDK pin字段待最终包重生成，继续M6原定最终验收与检查点，未完成未提交。

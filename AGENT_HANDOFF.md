@@ -1,45 +1,39 @@
 # 当前任务交接
 
-更新时间：2026-11-15。持续目标 ACTIVE。分支 cubase_16_full_ara。
+更新时间：2026-11-15。分支cubase_16_full_ara。M0–M6自主实施与非GUI验收已完成；本轮正在完成M6独立提交/推送及正式源码对应包，持续目标在收尾前保持ACTIVE。真实Cubase S3+实机验收未通过验证，全部人工步骤按用户决定SKIPPED。
 
-## 当前阶段
+## 已完成
 
-按 docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md 的 M0→M6 交付 VSTi3 + ARA Bridge、路线B进程内钢琴窗、合成/时间/音符/歌词关联、工程恢复与发布材料。M0–M4 已完成自主实施、非 GUI 验收及提交推送。M5 自主实施与非 GUI 验收及独立提交/推送检查点已完成，M6 进入部署与交付材料审计。真实 Cubase S3+ 未实机验证。
+- 路线B、VSTi3+ARA Bridge、进程内.NET/Avalonia钢琴窗、引擎/歌手选择、显式配对与单一输出owner、时间/音符/歌词/版本化工程和ARA归档。SDK/Foundation冻结公共ABI未改，无新增引擎必需API。
+- 标准VST3文本入口、持久音符匹配、覆盖冲突、来源修订失效、实际本机fu2_ning2_na4重合成；持久RenderSession与region worker/generation隔离，未改乐句cache保留。私有ABI21。
+- M6：Windows Release打包/ZIP/hash/版本/许可/依赖资产检查、主手册第18章、无模型MIDI/tlpx/state夹具、A01–A16人工清单及升级卸载说明。
+- 资源路径宿主缺陷已RED→GREEN最小修复，ResourcesFolder按TuneLab.dll目录定位，保留普通独立版布局、可执行根和用户数据路径。
+- 最后全量暴露格式表注册/枚举测试竞态，只将ProjectOpenCommandTests与ExtensionWriteCommandsTests归入FormatRegistry集合，生产格式注册器未改，正常默认调度完整测试通过。
 
-## 已完成与已验证
+## 最新验证
 
-- M5：标准 VST3 kTextTypeID 文本入口，有界 UTF16 队列、主线程消费，运行时 NoteOn 起点/pitch 到 ARA baseline 持久ID关联，歧义/旧修订拒绝。
-- 歌词属性事务、单次settled通知、本地词/发音/固定音素覆盖冲突保护；跨包配对代理、owner状态共享与实例隔离；状态行展示已实现，视觉未验证。
-- CubaseRenderSession 保留工程和引擎会话；Bridge按region生命周期复用worker，每份计划固定generation，旧计划不读取新修订音频。
-- fu2_ning2_na4本机CLI验证实际Instrument→Bridge歌词更新与音频变化；未改乐句的AudioSegment/CommitVersion/样本/波形引用保留，冷暖最大采样误差0。
-- 复制不继承source ID、删除撤销恢复关联、重开更新、未知版本保持原状态；带歌词ARA clone/partial restore和managed baseline一致性。
-- source-only身份恢复接纳旧队列文本的缺陷已RED复现并修复；私有ABI21 InvalidatePairSource，成功提交时使受影响owner旧文本失效，fresh runtime note505仍更新新ID99。
-- SDK/Foundation冻结公共ABI未修改；没有新增既有引擎必需接口，没有分发测试模型。
+正式交付矩阵docs/cubase-delivery.md，M6逐项证据docs/cubase-m6-validation.md；M0/M2–M5记录仍有效。
 
-## 验证记录
+- m6-final-main-isolation-tests.log：892/892通过；m6-final-legacy-tests.log：13/13；m6-final-solution-build.log：0错误。
+- 原失败m6-final-main-parallel-failure.log：891/1；全局串行试验m6-final-main-serial-tests.log：94失败，未当PASS。最终通过来自默认调度+精确集合隔离，没有跳过用例。
+- m6-package-rc04.log及m6-package-dependency-verification.log：Release打包/解压重定位，369文件哈希/PE64/手册/许可/夹具，deps.json全部runtime/native资产，双validator47/0和跨包CLR协议通过。
+- m6-package-real-lyrics.log：实际包内Instrument SDK歌词更新到新音频，旧cache静音，波形变化0.0337584，有限非零。
+- m6-package-processor-regression.log：实际包内Instrument状态/seek-loop/64–512块/格式/旁路/配对/多实例通过；该次CLI冷预览51ms。
+- M5真实Bridge配对/归档/来源身份恢复RED→GREEN及真实未改乐句cache、冷暖误差0见M5日志与正式记录。
+- 主手册15项检查、native/state往返和独立MIDI解析通过；未生成.cpr。
 
-正式逐项审计：docs/cubase-m5-validation.md。日志在out/cubase/m5（本地，不纳入版本库）。
+## Git与最后操作
 
-- m5-solution-build.log：Windows解决方案构建0错误。
-- m5-full-tests.log：主测试890/890通过。
-- m5-legacy-tests.log：旧引擎兼容13/13通过。
-- m5-abi21-host-verification.log：完整verify-host退出0，ABI21、双validator各47/0，实际双包/CLR/ARA/歌词协议通过。
-- m5-source-only-archive-red.log退出1→m5-source-only-archive-green.log退出0；后者包含带歌词归档组合与fresh ID99验证。
-- m5-real-cache-retention.log：真实声库片段缓存及冷暖等价通过；可重复探针integrations/cubase/probes/RenderCacheProbe。
-- m5-retained-region-synthesis.log：worker复用、旧计划隔离、并发替换和实际Bridge输出回归通过。
-- git diff --check通过。已有编译/依赖警告未作为本阶段修复范围。
+当前HEAD ed882bffcf5be7d304daa3955467621c38279b58，M5功能420c11aea36b52d84c26609853942fbce744f58f及文档ed882bff均已推送确认。M6修改待独立commit/push。
 
-## Git 状态与下一步
+剩余最小操作：stage仅M6文件→cached diff/check→commit→push同名分支→ls-remote确认；再从正式提交生成最终ZIP、解压检查并记录源码提交/ZIP SHA256；更新本手册和交付记录并推送补记。没有新的开发阶段或产品功能待启动。
 
-M5功能提交 420c11aea36b52d84c26609853942fbce744f58f 已推送 origin/cubase_16_full_ara，并由git ls-remote确认同SHA、上游同名。本次文档补记仅记录已核实检查点。M6下一最小任务：核对现有打包/部署入口与依赖许可、按原验收补齐离线部署检查和使用文档；完成后再独立commit/push。
+保留原有.gitignore修改、.codegraph/、out/及三份未跟踪参考文档，不stage：docs/Cubase16_SVS_接入静态分析.md、docs/S3+_交付与接口清单分析.md、docs/TuneLab_接入Cubase16_方案分析.md。实际状态以git status为准。
 
-保留且不stage原有.gitignore修改、.codegraph/、out/及三份用户参考文档：docs/Cubase16_SVS_接入静态分析.md、docs/S3+_交付与接口清单分析.md、docs/TuneLab_接入Cubase16_方案分析.md。实际文件状态以git status为准。
+## 未验证与约束
 
-## 未验证事项及约束
-
-- 所有开软件、真实Cubase/V7、GUI、安装/硬件/试听及用户配合验收一律SKIPPED（用户决定，未执行，需人工验证）；不启动、不等待、不作为blocked、不冒充PASS。
-- 只支持本机Windows原生工具链；禁止任何WSL探测/启动及本地非Windows构建。16GB内存，dotnet -m:1 /nodeReuse:false，native --parallel 1。
-- CodeGraph优先，主仓及third_party各自索引。不要初始化索引。所有构建/测试/打包前台PowerShell 2>&1 | Tee-Object build.log，立即检查LASTEXITCODE并读失败日志。
-- 不扩大范围、不机会重构、不改冻结公共ABI。可选补充API不得破坏已有引擎。每阶段独立commit/push确认才进入下一阶段。
-- 普通开发未授权subagent；可靠额度<=2%时仅交接文档可委派Luna。最近可靠used58%，ordinaryUsageAllowed=true，无阈值交接。
-- M6下一步按原计划核对部署脚本、运行时/依赖许可、发行包和手册，继续保留真实宿主协议证据缺口。
+- 所有Cubase/V7启动、真实GUI/IME/DPI、安装/升级/卸载实机、硬件、宿主长时播放、保存重开和试听，均SKIPPED（用户决定，未执行，需人工验证）；不作为blocked、不等待、不冒称PASS。以后仅在用户明确要求时按docs/cubase-manual-checklist.md执行。SDK夹具与MIDI meta歌词不能证明Cubase原生供给。
+- nethost/DLL/头文件/许可来自同一本机已有NuGet Host.win-x64 8.0.26，要求另装系统.NET8 x64与VC++；不安装运行时，不分发测试声库。
+- 只用Windows原生工具链，禁止任何WSL调用/探测及本地非Windows构建。16GB内存，dotnet -m:1 /nodeReuse:false，native --parallel 1。
+- CodeGraph优先。构建/测试/打包前台PowerShell Tee-Object build.log并立即检查LASTEXITCODE。GUI验证严禁Qt offscreen或伪造真实窗口结论。
+- 不扩大范围、不机会重构、保留用户修改；每阶段独立commit/push确认。可靠额度最近used58%，无需Luna阈值交接。普通开发不使用子agent。

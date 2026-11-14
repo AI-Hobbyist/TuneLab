@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- Use the existing test friend assembly to serialize real project files. -->
+    <AssemblyName>TuneLab.Tests</AssemblyName>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../TuneLab/TuneLab.csproj" />
+  </ItemGroup>
+</Project>
