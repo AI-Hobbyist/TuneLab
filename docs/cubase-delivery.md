@@ -1,6 +1,15 @@
 # Cubase 16 集成候选版交付记录
 
-日期：2026-11-15。M0–M6自主实施与非GUI验收已完成，M6提交推送及正式提交对应ZIP待记录。按用户要求，所有需打开软件、GUI、实机、安装及试听的验收默认SKIPPED，不作为收尾阻塞，不记为PASS。真实Cubase原生歌词供给与完整S3+实机验收尚未验证。
+日期：2026-11-15。M0–M6自主实施、非GUI验收和阶段检查点已完成。M6功能提交1619711d42c15781608fdb4bbed02d78a01bc5e1已推送origin/cubase_16_full_ara并核对远端同SHA；本记录为交付补记。按用户要求，所有需打开软件、GUI、实机、安装及试听的验收默认SKIPPED，不作为收尾阻塞，不记为PASS。真实Cubase原生歌词供给与完整S3+实机验收尚未验证。
+
+## 最终包与版本
+
+- 源码提交：1619711d42c15781608fdb4bbed02d78a01bc5e1；分支cubase_16_full_ara。
+- 最终本地ZIP：[out/cubase/packages/m6-final-1619711d/TuneLab-Cubase-win-x64.zip](../out/cubase/packages/m6-final-1619711d/TuneLab-Cubase-win-x64.zip)，51411806字节，含两个Release插件及369个清单文件。
+- ZIP SHA256：11991d563abc8ce8261b347279ddaf8de4237f4b898e933913830cb251ec0eb8；同目录提供.zip.sha256旁车文件。
+- 私有ABI21；原生插件版本0.1.0，Windows x64，nethost包8.0.26；运行时与声库按随包说明另行准备。
+- m6-final-package-build.log、m6-final-package-verification.log、m6-final-package-real-lyrics.log均退出0：正式提交重建、ZIP重定位/全部依赖资产/双validator47/0/CLR协议、实际歌声重合成通过。
+- manifest.sourceTrackedDirty=true来自保留的原有.gitignore修改；正式包构建前没有未提交产品代码。ZIP不含模型、用户配置或开发输出目录。
 
 ## 交付物
 
@@ -36,3 +45,5 @@
 ## 后续人工工作
 
 仅在用户明确要求时执行cubase-manual-checklist.md。尤其A04须取得真实Cubase事件与发音证据；不能将SDK夹具、手动输入或MIDI lyric meta event当作原生歌词同步。运行时与声库按随包说明另行准备。当前没有要求用户立即操作或等待人工结果。
+
+本轮已授权的自主实施、自动验证、记录、提交推送与本地交付全部完成，没有剩余自主开发阶段。仅人工清单按用户决定保持SKIPPED，不等待人工结果，不冒称真实Cubase S3+通过。

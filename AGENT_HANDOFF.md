@@ -1,6 +1,6 @@
 # 当前任务交接
 
-更新时间：2026-11-15。分支cubase_16_full_ara。M0–M6自主实施与非GUI验收已完成；本轮正在完成M6独立提交/推送及正式源码对应包，持续目标在收尾前保持ACTIVE。真实Cubase S3+实机验收未通过验证，全部人工步骤按用户决定SKIPPED。
+更新时间：2026-11-15。分支cubase_16_full_ara。M0–M6自主实施、非GUI验收、独立提交推送及正式源码对应包均已完成，本轮授权工作正常收尾。真实Cubase S3+实机验收未通过验证，全部人工步骤按用户决定SKIPPED。
 
 ## 已完成
 
@@ -24,9 +24,11 @@
 
 ## Git与最后操作
 
-当前HEAD ed882bffcf5be7d304daa3955467621c38279b58，M5功能420c11aea36b52d84c26609853942fbce744f58f及文档ed882bff均已推送确认。M6修改待独立commit/push。
+M6功能提交1619711d42c15781608fdb4bbed02d78a01bc5e1已推送origin/cubase_16_full_ara，git ls-remote已确认同SHA。正式包从该提交构建；本手册与交付记录为随后文档补记，随同名分支交付。M5功能420c11ae及文档ed882bff此前也已推送确认。
 
-剩余最小操作：stage仅M6文件→cached diff/check→commit→push同名分支→ls-remote确认；再从正式提交生成最终ZIP、解压检查并记录源码提交/ZIP SHA256；更新本手册和交付记录并推送补记。没有新的开发阶段或产品功能待启动。
+最终ZIP：out/cubase/packages/m6-final-1619711d/TuneLab-Cubase-win-x64.zip；SHA256 11991d563abc8ce8261b347279ddaf8de4237f4b898e933913830cb251ec0eb8；51411806字节。ZIP旁有.sha256，包内manifest列369文件和精确依赖/SDK提交。m6-final-package-build.log、m6-final-package-verification.log、m6-final-package-real-lyrics.log均退出0；两个validator各47/0、重定位与完整依赖/CLR及本机真实歌声通过。
+
+没有剩余自主实施或新开发阶段。仅docs/cubase-manual-checklist.md的人工项继续SKIPPED（用户决定，未执行）；以后收到用户明确指令才执行，不自动重启目标或要求当前用户操作。完整结果及A01–A16边界在docs/cubase-delivery.md。
 
 保留原有.gitignore修改、.codegraph/、out/及三份未跟踪参考文档，不stage：docs/Cubase16_SVS_接入静态分析.md、docs/S3+_交付与接口清单分析.md、docs/TuneLab_接入Cubase16_方案分析.md。实际状态以git status为准。
 

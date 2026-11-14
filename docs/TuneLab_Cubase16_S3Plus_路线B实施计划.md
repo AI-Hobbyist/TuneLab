@@ -1,6 +1,6 @@
 # TuneLab 深度集成 Cubase 16 的 S3+ 路线 B 实施计划
 
-日期：2026-11-15。状态：实施中，M0–M5已完成自主实施、非GUI验收及推送检查点；M6自主实施与非GUI验收完成，待提交推送及正式源码包检查点，完整S3+目标仍ACTIVE。
+日期：2026-11-15。状态：M0–M6自主实施、非GUI验收及提交推送检查点完成，最终Windows x64候选包已交付。全部人工验收按用户决定SKIPPED；真实Cubase S3+未实机验证，不记为PASS。
 
 本计划交付两个插件：**TuneLab VST3 Instrument（VSTi3）**和 **TuneLab ARA Bridge**。采用路线 B，在 Cubase 进程内通过原生 C++ 插件壳加载 .NET 与 Avalonia，复用 TuneLab 钢琴窗，使其既能嵌入 VST3 插件界面，也能通过 ARA 工作流进入 Cubase Extension 编辑器。最终目标是 S3+，包括 Cubase Key Editor 歌词输入同步、合成播放、编辑和工程恢复。
 
@@ -290,7 +290,7 @@ GUI 验证当前默认跳过。只有用户后续明确要求执行时，才采�
 | M3 ARA Bridge闭环 | 自主实施/非GUI验收及推送检查点完成，功能提交32433224；见 [M3验收记录](cubase-m3-validation.md)；GUI SKIPPED |
 | M4 双容器钢琴窗 | 自主实施/非GUI验收及推送检查点完成，功能提交78c7f251；见 [M4验收记录](cubase-m4-validation.md) |
 | M5 S3+宿主歌词 | 自主实施与非GUI验收及推送检查点完成（420c11ae）：标准文本入口、稳定ID/事务/冲突、真实SVS及缓存、版本/归档；Cubase实机供给SKIPPED，见 [M5证据](cubase-m5-validation.md) |
-| M6 发布候选 | 自主实施与非GUI验收完成，待提交/推送及正式源码包：双插件Release、重定位/依赖/许可、手册/夹具、892+13测试；人工项SKIPPED，见 [交付记录](cubase-delivery.md) |
+| M6 发布候选 | 自主实施/非GUI验收/推送及正式源码包完成（1619711d）：双插件Release、重定位/依赖/许可、手册/夹具、892+13测试；人工项SKIPPED，见 [交付记录](cubase-delivery.md) |
 
 M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy歌声引擎复用、完整版本化component state和Bypass参数状态、controller文档快照消息/恢复、异步代次缓存、整曲宿主播放和离线process、MIDI短音歌声缓存试听、样本级NoteOff/Bypass、float/double、状态反馈，以及当前块时间信息接收。
 
@@ -429,3 +429,5 @@ M6首包补记（2026-11-15）：新增Windows Release打包和包检查脚本�
 M6资源补记（2026-11-15）：ResourcesFolder宿主定位缺陷已通过独立程序集加载RED→GREEN修复；资源/手册17/17、全部主测试892/892，rc02 Windows Release构建与ZIP重定位363文件/双validator47/0/CLR协议通过。待用户手册、测试工程/许可精确核对及最终检查点，M6未完成未提交。
 
 M6文档/夹具补记（2026-11-15）：用户手册第18章与A01–A16人工清单已补，手册15/15；无声库tlpx/state往返和SMF独立解析通过。nethost二进制/头文件/许可统一同一现存8.0.26 NuGet包；rc03 Release/解压重定位368文件、双validator47/0及CLR通过。后续新增版本说明/SDK pin字段待最终包重生成，继续M6原定最终验收与检查点，未完成未提交。
+
+最终交付（2026-11-15）：M6功能1619711d已推送确认；正式提交对应ZIP、369文件/依赖资产、双validator47/0、跨包CLR及实际包内歌声验证通过。源码提交、ZIP位置/SHA256及A01–A16自动/人工边界详见cubase-delivery.md。历史过程中的ACTIVE/未完成/待办不覆盖当前交付状态；本轮自主工作结束，人工清单SKIPPED，不宣称Cubase实机S3+通过。

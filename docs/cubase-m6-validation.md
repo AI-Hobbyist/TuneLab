@@ -2,7 +2,7 @@
 
 ## 最终自主验收（2026-11-15）
 
-M6原定自主实施、自动验证及交付材料已完成，待独立commit/push检查点及以正式提交重建交付包。后文IN PROGRESS/待办为历史过程，不覆盖本节；真实Cubase、GUI、安装和试听按用户决定SKIPPED，不宣称实机S3+通过。
+M6原定自主实施、自动验证及交付材料已完成。功能提交1619711d42c15781608fdb4bbed02d78a01bc5e1已推送确认，正式提交ZIP已重建并完成最终验证，见cubase-delivery.md。后文IN PROGRESS/待办为历史过程，不覆盖本节；真实Cubase、GUI、安装和试听按用户决定SKIPPED，不宣称实机S3+通过。
 
 | 原M6项目 | 证据 |
 |---|---|
@@ -77,3 +77,8 @@ nethost改为本机已有Microsoft.NETCore.App.Host.win-x64/8.0.26 NuGet包，�
 m6-package-rc03.log构建打包退出0；ZIP解压重定位m6-package-rc03-verification.log退出0，368文件、双validator47/0、CLR跨包协议通过。随后新增依赖版本说明文档及manifest原生SDK pin字段，最终包须重生成并用当前检查器验证，不能把rc03直接标最终发行。当前最新候选ZIP仍out/cubase/packages/m6-rc03/TuneLab-Cubase-win-x64.zip。
 
 下一最小任务：完成原M6最终自主验收矩阵和必要回归（含候选包实际歌声CLI），生成最终内容对应包，审计diff并提交推送检查点；确认之后按最终源码重建/记录交付包。不扩大验收范围。M6未完成未提交，所有GUI/安装/实机/试听仍SKIPPED且非阻塞。
+
+
+## 最终检查点与包
+
+M6功能1619711d42c15781608fdb4bbed02d78a01bc5e1已推送并ls-remote确认一致。正式ZIP out/cubase/packages/m6-final-1619711d/TuneLab-Cubase-win-x64.zip，SHA256 11991d563abc8ce8261b347279ddaf8de4237f4b898e933913830cb251ec0eb8，51411806字节。m6-final-package-build.log、m6-final-package-verification.log、m6-final-package-real-lyrics.log均退出0，369文件/完整依赖/双validator47/0/跨包CLR/实际fu2_ning2_na4歌词重合成通过。本节为已完成事实补记，不改变产品文件。自主交付收尾，人工SKIPPED清单保留；无需启动新开发阶段。
