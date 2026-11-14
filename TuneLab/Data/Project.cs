@@ -30,8 +30,11 @@ internal class Project : DataObject, IProject
     public int MasterExportChannels { get; set; } = 2;
 
     public Project() : this(new ProjectInfo()) { }
-    public Project(ProjectInfo info)
+    internal bool RegisterWithStandaloneAudio { get; }
+
+    public Project(ProjectInfo info, bool registerWithStandaloneAudio = true)
     {
+        RegisterWithStandaloneAudio = registerWithStandaloneAudio;
         mTimeSignatureManager = new(this);
         mTempoManager = new(this);
         mTracks = new(this);

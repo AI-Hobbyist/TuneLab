@@ -9,8 +9,8 @@ namespace TuneLab.Hosting.Compat.Legacy;
 // per-plugin ALC：每个 Legacy 包一个隔离加载上下文，根除野外 voice 引擎各自捆绑的冲突原生依赖
 //   （ONNX/原生运行时不同版本）——这是必要而非可选。
 //
-// 共享契约硬约束：Legacy 冻结三程序集（Base/Extensions.Formats/Extensions.Voices）+ V1 SDK 由 Default ALC
-//   加载一份、所有插件 ALC 共享（Load 对契约返回 null 落 Default）——Compat 适配器已在 Default 加载这些，
+// 共享契约硬约束：Legacy 冻结三程序集（Base/Extensions.Formats/Extensions.Voices）+ V1 SDK 由宿主 ALC
+//   加载一份、所有插件 ALC 共享——独立版是 Default，hostfxr 嵌入版是所属组件上下文，
 //   故插件返回的 Legacy 类型与适配器看到的是同一 Type 标识，无需 marshaling。
 //   插件私有依赖（ONNX 托管/原生库）才进各自 ALC（AssemblyDependencyResolver + 目录探测）。
 //
@@ -34,9 +34,9 @@ internal sealed class LegacyPluginLoadContext : AssemblyLoadContext
     {
         var name = assemblyName.Name;
 
-        // 共享契约 → 返回 null 落 Default ALC，跨边界 Type 同一标识。
+        // Share the compatibility layer's own contract identities.
         if (name != null && IsSharedContract(name))
-            return null;
+            return GetLoadContext(typeof(LegacyPluginLoadContext).Assembly)!.LoadFromAssemblyName(assemblyName);
 
         // 插件私有托管依赖：deps.json → 目录探测。
         var resolved = mResolver?.ResolveAssemblyToPath(assemblyName);

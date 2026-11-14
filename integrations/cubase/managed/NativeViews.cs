@@ -41,7 +41,20 @@ public static partial class NativeEntry
         try
         {
             PluginUiRuntime.Initialize();
-            session = new PianoEditorSession(context.Document, new EmbeddedPlayhead());
+            if (sPendingDocumentStates.TryGetValue(document, out var pendingState))
+            {
+                context.RestoreState(pendingState);
+                sPendingDocumentStates.Remove(document);
+            }
+            var playhead = new EmbeddedPlayhead();
+            session = new PianoEditorSession(context.Document, playhead, () =>
+            {
+                double quarterNotes = PollDocumentPosition(document);
+                if (double.IsFinite(quarterNotes))
+                {
+                    playhead.Pos = quarterNotes * MusicTheory.RESOLUTION;
+                }
+            }, () => PollDocumentStatus(document));
             session.SetPart(context.GetOrCreateEditingPart());
             session.Attach(parent, width, height);
             ulong id = checked((ulong)Interlocked.Increment(ref sNextView));

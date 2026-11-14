@@ -41,6 +41,11 @@ Invoke-Checked "$buildRoot/Debug/tunelab_host_probe.exe" @(
 )
 Invoke-Checked "$buildRoot/Debug/tunelab_state_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_view_protocol_probe.exe" @()
+Invoke-Checked "$buildRoot/Debug/tunelab_audio_cache_probe.exe" @()
+Invoke-Checked "$buildRoot/Debug/tunelab_midi_input_probe.exe" @()
+Invoke-Checked "$buildRoot/Debug/tunelab_host_time_probe.exe" @()
+Invoke-Checked "$buildRoot/Debug/tunelab_instrument_parameters_probe.exe" @()
+Invoke-Checked "$buildRoot/Debug/tunelab_midi_preview_player_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_runtime_probe.exe" @($managedOutput)
 foreach ($pluginName in @('TuneLabInstrumentProbe', 'TuneLabBridgeProbe')) {
     $bundleManaged = "$buildRoot/VST3/Debug/$pluginName.vst3/Contents/Resources/managed"

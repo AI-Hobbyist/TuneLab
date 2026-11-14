@@ -81,7 +81,22 @@ class ManagedRuntime
                resolve(L"CreateDocument", createDocument) &&
                resolve(L"DestroyDocument", destroyDocument) && resolve(L"CreateView", createView) &&
                resolve(L"DestroyView", destroyView) && resolve(L"ResizeView", resizeView) &&
-               resolve(L"FocusView", focusView);
+               resolve(L"FocusView", focusView) &&
+               resolve(L"InitializeServices", initializeServices) &&
+               resolve(L"ValidateVoice", validateVoice) &&
+               resolve(L"RenderSnapshot", renderSnapshot) &&
+               resolve(L"RenderPreview", renderPreview) &&
+               resolve(L"GetRenderedAudio", getRenderedAudio) &&
+               resolve(L"ReleaseRenderedAudio", releaseRenderedAudio) &&
+               resolve(L"CreateRenderRequest", createRenderRequest) &&
+               resolve(L"CancelRenderRequest", cancelRenderRequest) &&
+               resolve(L"ReleaseRenderRequest", releaseRenderRequest) &&
+               resolve(L"ValidateProjectState", validateProjectState) &&
+               resolve(L"CopyDocumentState", copyDocumentState) &&
+               resolve(L"RestoreDocumentState", restoreDocumentState) &&
+               resolve(L"SetDocumentStateCallback", setDocumentStateCallback) &&
+               resolve(L"SetDocumentPositionCallback", setDocumentPositionCallback) &&
+               resolve(L"SetDocumentStatusCallback", setDocumentStatusCallback);
     }
 
     CreateDocument createDocument = nullptr;
@@ -90,6 +105,21 @@ class ManagedRuntime
     DestroyView destroyView = nullptr;
     ResizeView resizeView = nullptr;
     FocusView focusView = nullptr;
+    InitializeServices initializeServices = nullptr;
+    ValidateVoice validateVoice = nullptr;
+    RenderSnapshot renderSnapshot = nullptr;
+    RenderPreview renderPreview = nullptr;
+    GetRenderedAudio getRenderedAudio = nullptr;
+    ReleaseRenderedAudio releaseRenderedAudio = nullptr;
+    CreateRenderRequest createRenderRequest = nullptr;
+    CancelRenderRequest cancelRenderRequest = nullptr;
+    ReleaseRenderRequest releaseRenderRequest = nullptr;
+    ValidateProjectState validateProjectState = nullptr;
+    CopyDocumentState copyDocumentState = nullptr;
+    RestoreDocumentState restoreDocumentState = nullptr;
+    SetDocumentStateCallback setDocumentStateCallback = nullptr;
+    SetDocumentPositionCallback setDocumentPositionCallback = nullptr;
+    SetDocumentStatusCallback setDocumentStatusCallback = nullptr;
 
   private:
     template <typename Function> bool resolve(const wchar_t *method, Function &function)

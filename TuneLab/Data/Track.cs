@@ -99,7 +99,10 @@ internal class Track : DataObject, ITrack
 
     public void Activate()
     {
-        AudioEngine.AddTrack(this);
+        if (mProject is not Project { RegisterWithStandaloneAudio: false })
+        {
+            AudioEngine.AddTrack(this);
+        }
         foreach (var part in mParts)
         {
             part.Activate();
@@ -108,7 +111,10 @@ internal class Track : DataObject, ITrack
 
     public void Deactivate()
     {
-        AudioEngine.RemoveTrack(this);
+        if (mProject is not Project { RegisterWithStandaloneAudio: false })
+        {
+            AudioEngine.RemoveTrack(this);
+        }
         foreach (var part in mParts)
         {
             part.Deactivate();

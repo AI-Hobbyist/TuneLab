@@ -8,5 +8,6 @@
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="11.3.15" />
     <ProjectReference Include="../../../TuneLab/TuneLab.csproj" />
+    <ProjectReference Include="../../../legacy/compat/TuneLab.Hosting.Compat.Legacy/TuneLab.Hosting.Compat.Legacy.csproj" />
   </ItemGroup>
 </Project>

@@ -3,6 +3,8 @@
 #include "managed_runtime.h"
 #include "public.sdk/source/common/pluginview.h"
 #include <cstring>
+#include <functional>
+#include <limits>
 #include <memory>
 
 namespace TuneLab::Cubase
@@ -13,17 +15,102 @@ struct EditorDocument
     std::filesystem::path managedDirectory;
     ManagedRuntime runtime;
     DocumentHandle handle = 0;
+    std::vector<std::uint8_t> state;
+    std::function<void(const std::vector<std::uint8_t> &)> changed;
+    std::function<double()> pollPosition;
+    std::function<std::int32_t(std::int32_t *, std::int32_t *, std::int64_t *)> pollStatus;
+    bool callbackRegistered = false;
 
     bool initialize()
     {
-        return handle != 0 || (runtime.initialize(managedDirectory) &&
-                               runtime.createDocument(&handle) == 0 && handle != 0);
+        if (handle != 0)
+        {
+            return true;
+        }
+        if (!runtime.initialize(managedDirectory) || runtime.createDocument(&handle) != 0 ||
+            handle == 0)
+        {
+            return false;
+        }
+        callbackRegistered = runtime.setDocumentStateCallback(handle, onStateChanged, this) == 0;
+        if (!callbackRegistered ||
+            runtime.setDocumentPositionCallback(handle, onPositionRequested, this) != 0 ||
+            runtime.setDocumentStatusCallback(handle, onStatusRequested, this) != 0 ||
+            (!state.empty() &&
+             runtime.restoreDocumentState(handle, state.data(),
+                                          static_cast<std::int32_t>(state.size())) != 0))
+        {
+            runtime.setDocumentStateCallback(handle, nullptr, nullptr);
+            runtime.destroyDocument(handle);
+            handle = 0;
+            callbackRegistered = false;
+            return false;
+        }
+        return true;
+    }
+
+    static std::int32_t __cdecl onStatusRequested(void *owner, std::int32_t *song,
+                                                  std::int32_t *preview,
+                                                  std::int64_t *elapsed) noexcept
+    {
+        try
+        {
+            auto &document = *static_cast<EditorDocument *>(owner);
+            return document.pollStatus ? document.pollStatus(song, preview, elapsed) : 2;
+        }
+        catch (const std::exception &exception)
+        {
+            OutputDebugStringA(exception.what());
+            return 5;
+        }
+    }
+
+    static double __cdecl onPositionRequested(void *owner) noexcept
+    {
+        try
+        {
+            auto &document = *static_cast<EditorDocument *>(owner);
+            return document.pollPosition ? document.pollPosition()
+                                         : std::numeric_limits<double>::quiet_NaN();
+        }
+        catch (const std::exception &exception)
+        {
+            OutputDebugStringA(exception.what());
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+    }
+
+    static void __cdecl onStateChanged(void *owner, const std::uint8_t *bytes,
+                                       std::int32_t length) noexcept
+    {
+        auto &document = *static_cast<EditorDocument *>(owner);
+        try
+        {
+            std::vector<std::uint8_t> snapshot(bytes, bytes + length);
+            if (snapshot == document.state)
+            {
+                return;
+            }
+            document.state = std::move(snapshot);
+            if (document.changed)
+            {
+                document.changed(document.state);
+            }
+        }
+        catch (const std::exception &exception)
+        {
+            OutputDebugStringA(exception.what());
+        }
     }
 
     ~EditorDocument()
     {
         if (handle != 0)
         {
+            if (callbackRegistered)
+            {
+                runtime.setDocumentStateCallback(handle, nullptr, nullptr);
+            }
             if (runtime.destroyDocument(handle) != 0)
             {
                 OutputDebugStringA("TuneLab: managed document destruction failed\n");

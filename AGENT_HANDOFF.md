@@ -1,38 +1,65 @@
 # 当前任务交接
 
-更新时间：2026-11-14。持续目标 ACTIVE，分支 cubase_16_full_ara。
+更新时间：2026-11-14。持续目标 ACTIVE。分支 cubase_16_full_ara。
 
-## 当前阶段与完成状态
+## 阶段与检查点
 
-M0 已完成并推送 f2f51b2a。M1 自主实施与非 GUI 自动验证完成，本次准备单独检查点提交并推送；须实际确认上游同步后再进入 M2。M2–M6 尚未开始。正式计划：docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md；M0 证据：docs/cubase-m0-baseline.md。
+- M0完成并已推送：f2f51b2a；契约/基线见 docs/cubase-m0-baseline.md。
+- M1完成并已推送：1cb004e144e435b7f915f6110c877cb36c2d7873。
+- M2自主实施与非GUI验收完成，本文件随M2检查点提交；当前尚待提交/推送确认，确认后才进入M3。
+- M3–M6未开始。完整目标仍为路线B S3+，不得标记目标完成。
+- 正式计划：docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md。
+- M2逐项验收与命令/证据：docs/cubase-m2-validation.md。
 
-M1 实现：双 VST3 controller 返回 HWND IPlugView；首次附着加载 CLR，包内 Contents/Resources/managed 定位托管程序集和 nethost.dll；构建每次复制托管输出，避免包内旧副本。私有 ABI 提供文档创建/销毁、视图创建/销毁、尺寸与焦点。CLR 进程常驻，不尝试卸载。
+## 已完成实现
 
-每实例持独立 ProjectDocument；视图绑定所属 MIDI part，重复获取保留编辑对象与历史。视图/控制器共享原生文档所有权，关闭视图不销毁 controller 文档。局部 EditorActionCollection 保留独立版全局 facade；钢琴窗动作、撤销/重做及剪贴板快捷键路由本视图。波形显隐、参数高度局部保存；用户偏好仍共享。关闭视图主动退订、停计时器、释放图像/嵌入根；成功清理后移除句柄。未更改 SDK/Foundation 公共 API。
+M1钢琴窗与CLR基础保持：每实例ProjectDocument、局部动作/撤销/剪贴板、共享controller/view文档所有权；包内hostfxr/nethost及Avalonia嵌入根，显式视图清理。
 
-## 验证结果与证据边界
+M2包括：
 
-- 相关 ActionCommands/KeymapDispatch/EditorActionCollection/CubaseDocumentContext 回归：59/59 PASS，m1-regression.log。
-- legacy compat 测试：13/13 PASS，已实际 restore/test，不以无测试输出的 no-restore 返回值作为证据。
-- verify-host.ps1：退出 0；双 validator 各 47/0；ABI 1、双文档释放、state 正常往返与拒绝未知版本/截断、三处 runtime 入口解析/文档释放 PASS，host-verification.log。
-- view_protocol_probe：平台/无效父句柄、尺寸/焦点转发、移除失败重试、重复移除及所有权 PASS。使用测试回调，不创建 HWND，不证明真实 GUI。
-- 托管集成构建 PASS。git diff --check PASS。存在原有 Cbor 8.0.0 NU1902 和编译警告，未扩大范围修复。
-- 真实 Cubase/V7/GUI、IME、DPI、窗口焦点、关闭再打开、错误线程析构、安装：全部 SKIPPED（用户决定，未执行，需人工验证）。不得记 PASS，不等待或作为 blocked。
+- PluginServices初始化现有/legacy引擎；组件ALC与插件共享所属宿主契约，compat和旧SDK进入私有托管包。插件内选择引擎/歌手，稳定ID、不可用提示、撤销/重做及保存恢复；公共SDK/Foundation ABI未改。
+- CubaseProjectState以TLCUBASE/version1封装原NativeProjectFile CBOR。Native文档copy/restore/callback、controller连接重发、IMessage快照、processor验证/缓存/恢复闭环。恢复抑制回声，活动视图UI线程detach/rebind。
+- 私有Project/AudioGraph不注册Standalone音轨；独立版默认行为保留。SnapshotRenderer、固定租约、请求取消、输出率转换、latest-only RenderWorker及原生AudioCache。音频process不调用CLR/分配/锁/回收缓存。
+- MIDI16通道、SPSC、64槽held-note身份/力度/游标、独立preview worker/每pitch代次缓存、样本偏移NoteOff、float/double混音、无输出flush。原曲播放按宿主sample position，offline setActive非音频等待。
+- VSTi3标准Bypass（ParamID0，可自动化、离散两态），逐样本队列处理；component state后附可选TLVSTP01/12字节参数尾部，旧状态默认false，坏版本/截断拒绝。editor快照消息只恢复工程，不清宿主参数。Bridge暂不暴露该参数。
+- 非音频transport消息反馈工程/试听准备状态及耗时，私有callback接内嵌状态栏；HostTimeMailbox一致采集当前块sample/rate、音乐位置、tempo、拍号/bar及flags。尚未将其写成完整速度表。
 
-## 尚未完成与实际下一步
+## 已验证
 
-M1 还需本轮检查点提交/推送确认。随后开始 M2：先用现有引擎和指定声库跑本机非 GUI 歌声渲染，建立输出/缓存/取消基线；实现双插件内引擎与歌手选择入口、实例 SoundSource 选择和稳定标识恢复；接通 MIDI/参数/宿主时间、合成缓存与音频输出、完整 component state。再按计划进入 M3 ARA 数据/渲染、M4 嵌入体验、M5 歌词协议、M6 部署交付。
+- 解决方案Debug构建PASS：m2-solution-build.log。
+- 主测试818/818：m2-full-tests.log；legacy13/13：m2-legacy-tests.log。
+- verify-host.ps1退出0，双validator各47/0；ABI/三个目录、state、文档/视图协议、缓存/MIDI/时间并发、参数及预览夹具：m2-host-verification.log。
+- 真实VST3 SDK宿主+DiffSinger fu2_ning2_na4：48k32-bit/44.1k64-bit歌声、MIDI、Bypass样本128–255静音、参数恢复及editor更新保留、state/seek-loop/双实例PASS：processor-verification.log。
+- 两线程同时调用真实整曲/预览合成：144000/96000帧，peak0.302906/0.234372，finite/nonzero，concurrent-render-verification.log。
+- 真实最新代次worker/旧率拒绝/空状态失效：m2-render-worker-final.log。
+- 新增渲染测试原用基础SynchronizationContext，Project构造合并通知的时基回调落到ThreadPool使全量测试崩溃。已仅修测试为PumpableSynchronizationContext并显式DrainAll覆盖触发点；原全量命令最终818/818。未改生产断言，临时[DEBUG-m2-thread]代码清除，诊断日志归档out/cubase/m2/context-post.log。
+- clang-format及git diff --check执行PASS。保留原Cbor NU1902及原编译器警告，未做无关升级。
 
-双插件当前仍为静音探针，state/archive 只有版本标记。控制器文档尚未与 processor/ARA 文档关联，属于后续闭环工作。Cubase Key Editor 歌词实际供给未证实：VST3 NoteExpressionTextEvent 是候选；不存在可据以承诺公开协议的 kARAContentTypeLyrics。不能用自有消息或模拟事件宣称宿主链路通过。
+## 未验证与实际限制
 
-用户明确要求插件内可选引擎与歌手，VSTi3 与 ARA Bridge 均实现；复用引擎声库枚举，修改当前实例/part，保存稳定标识、显示缺失/错误，不硬编码唯一声库。新增 API 必须可选，通过能力检测或 DIM 默认体，不影响已有引擎加载合成，保持已发布 ABI。
+真实Cubase/V7/GUI、中文状态栏布局、IME/DPI/焦点/窗口恢复、硬件MIDI、安装、试听全部SKIPPED（用户决定，未执行，需人工验证），不是PASS，不等待、不作为blocked。
 
-本机测试声库：D:/AI-Tools/OpenUtau/Singers/fu2_ning2_na4-DiffSinger/fu2_ning2_na4，仅本机测试不分发；已有 APPDATA TuneLab Extensions 中 DiffSinger 1.0.0 legacy sdk 1.0，保留运行设备设置，自带 44100/hop512/128mel vocoder。无需再次询问声库。
+试听是当前声源/歌词的一秒note加尾音缓存，不是无限延音/实时连续歌唱。原生cache miss起音40–109ms是在已有引擎/磁盘缓存的本机测量，不是首次冷启动指标。tuning数值保留但未应用。真实引擎并发调用、确定性复音夹具与真实Cubase调度分别记录，不互相冒充。
 
-## Git 与工作区
+完整tempo表/变速重合成、ARA对象/region/selection/archive/角色与显式配对归M3；M4双容器工具与生命周期，M5原生歌词协议，M6部署/许可/最终回归。Cubase原生歌词协议仍未证实，不得把自有消息或手动输入称为Key Editor歌词同步。Bridge processor/archive目前仍为M0探针。
 
-M1 修改集中于 TuneLab/Hosting、Input、PianoWindow/清理入口、integrations/cubase、相关测试及计划/本手册。预存 .gitignore 修改、未跟踪 .codegraph/、三份 docs 参考均保留且不提交；out/ 为构建产物不提交。提交号、推送状态以 git log/status/rev-parse 的检查点结果为准。
+## Git与工作区
 
-## 必须遵守
+M2文件已实现，等待本轮专属提交/推送确认。不得把用户预先存在的以下内容stage：.gitignore、.codegraph/、out/、三份未跟踪参考文档（Cubase16_SVS_接入静态分析.md、S3+_交付与接口清单分析.md、TuneLab_接入Cubase16_方案分析.md）。所有模型、测试生成工程/音频、日志均不分发。没有改动third_party源码或冻结公共API文件。
 
-优先主仓及 third_party SDK 各自 CodeGraph。阶段按 M0→M6，单独提交推送确认再开始下一阶段。禁止 codex/ 前缀。保留用户修改，不扩大范围，不改冻结 SDK/Foundation 已发布签名。所有 GUI/实机验收跳过并注明；禁止 Qt offscreen。所有构建测试打包在前台 PowerShell Tee-Object 保存 build.log，并立即检查退出码。MSBuild 使用单节点 /nodeReuse:false；正常网络/进程通信需要时可申请相应执行权限。可靠额度最近检查周池已用 46%，未达预警；不得猜测后续额度。
+## 下一步顺序
+
+1. 检查M2 diff/暂存清单，提交M2，推送同名分支并确认HEAD/上游一致。
+2. 更新检查点推送状态。完成前不启动M3实现。
+3. 用主仓及third_party/ARA_SDK各自CodeGraph核对ara_document.h/bridge_probe.cpp与当前ARA生命周期契约，按原计划开始M3文档/对象模型与归档。
+4. 每阶段完成所需自动验证后更新记录、检查diff、独立提交推送确认，再进入下一阶段；不积压已完成阶段。
+
+## 环境与约束
+
+VS18/2026 MSVC19.51，WindowsSDK10.0.26100；.NET8，hostpack8.0.6/hostfxr8.0.26，Avalonia11.3.15。Cubase16.0.5.174与V7仅静态读取；不启动。third_party SDK索引/链接保留。
+
+所有build/test/package前台PowerShell经Tee-Object写build.log并立即检查LASTEXITCODE；CMake --parallel1 -- /nodeReuse:false。正常Qt真实窗口才可作为GUI证据，禁止offscreen。现阶段GUI默认SKIPPED，不以headless截图冒充。
+
+本机声库fu2_ning2_na4仅测试，不随插件分发；隔离数据out/cubase/m2/data、基线state为out/cubase/m2/fu2_ning2_na4.state。不改变用户设备/CUDA/引擎配置。新增TuneLab引擎API必须可选，现有引擎保留行为。
+
+额度接口最近已用49%，未触发阈值；不得猜测额度。仅阈值触发时按用户规则委派GPT-6 Luna整理交接，正常开发不换模型。

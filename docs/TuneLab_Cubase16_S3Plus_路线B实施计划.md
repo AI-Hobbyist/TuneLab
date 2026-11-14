@@ -282,17 +282,18 @@ GUI 验证当前默认跳过。只有用户后续明确要求执行时，才采�
 
 ## 9 当前进度与下一步
 
-| 项目 | 状态 |
+| 阶段 | 当前状态 |
 |---|---|
-| 本计划书 | 已编写，供用户审阅 |
-| 三份 docs 参考资料与关键 SDK 契约核对 | 已完成本次计划所需核对 |
-| 用户指定 Cubase 版本 | 已读取文件版本 16.0.5.174 |
-| V7 实际工作流、宿主歌词链路、内嵌实机验证 | SKIPPED（用户决定，未执行，需人工验证）；协议静态核对仍纳入 M0 |
-| M0 契约与可行性 | DONE（自主实施与自动验证）；双插件、hostfxr、state/archive 探针通过，嵌入根编译通过；协议与本机测试声库基线见 cubase-m0-baseline.md。真实宿主/GUI 项 SKIPPED，未宣称实机可行性通过 |
-| M1 共享运行层与嵌入骨架 | DONE（自主实施与自动验证）；双 controller 返回 HWND IPlugView，包内 hostfxr/托管加载、实例文档/动作/视图状态隔离、part 绑定与确定性清理已实现。相关回归 59/59、legacy compat 13/13、双 validator 各 47/0，视图协议与双 bundle runtime 探针通过；真实 GUI 验证 SKIPPED，未宣称 Cubase 内嵌实机通过 |
-| M2–M6 产品实施 | NOT STARTED |
-| 编译与命令行验证 | M0/M1 已执行，命令见 integrations/cubase/verify-host.ps1、verify-sdk.ps1、verify-bridge.ps1；安装及真实宿主验收 SKIPPED |
+| M0 契约与可行性 | 自主实施/自动验证完成，f2f51b2a已推送；见 cubase-m0-baseline.md |
+| M1 共享运行层与嵌入骨架 | 自主实施/自动验证完成，1cb004e1已推送；真实GUI SKIPPED |
+| M2 VSTi3完整闭环 | 自主实施与本阶段非GUI自动验收完成；等待本轮检查点提交/推送，见 [M2验收记录](cubase-m2-validation.md) |
+| M3 ARA Bridge闭环 | NOT STARTED；M2检查点确认推送后开始 |
+| M4–M6 | NOT STARTED，按原顺序推进 |
 
-用户已授权持续实施。M1 检查点提交推送确认后进入 M2：歌声合成/缓存/宿主播放、完整 VST3 state，以及插件内引擎和歌手选择。M3–M6 按原顺序继续。当前双插件仍为静音探针，state/archive 仅有版本标记；M1 完成不表示完整 S3+ 集成完成。
+M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy歌声引擎复用、完整版本化component state和Bypass参数状态、controller文档快照消息/恢复、异步代次缓存、整曲宿主播放和离线process、MIDI短音歌声缓存试听、样本级NoteOff/Bypass、float/double、状态反馈，以及当前块时间信息接收。
 
-M1 自动证据仅覆盖编译、私有 ABI 解析、文档/动作隔离与协议分发。视图协议探针使用测试回调且不创建窗口；真实窗口编辑、IME、DPI、焦点、关闭重开均 SKIPPED（用户决定，未执行，需人工验证）。析构在错误线程触发的宿主异常尚未实测，失败输出诊断并保留为人工验收项。
+主测试818/818、legacy13/13、双validator各47/0；真实插件/声库的32/64-bit声音、state/seek-loop/双实例和并发调用证据已记录。全量回归发现并修正了新增测试夹具的同步上下文错误，没有放宽生产线程断言。详细命令、结果及证据边界见M2验收记录。
+
+所有真实Cubase/V7、GUI、实机、硬件MIDI、安装及试听继续 **SKIPPED（用户决定，未执行，需人工验证）**。一秒音符加尾音的缓存试听不等于无限延音或实时连续演唱；当前块tempo不等于完整速度表。完整tempo/ARA对象映射归M3，双容器完整工具归M4，已证实宿主歌词链路归M5，发布与最终性能回归归M6。S3+目标保持未完成，不以M2通过冒充最终交付。
+
+下一步：完成M2专属提交、推送并核对远端，然后开始M3。继续优先使用主仓和third_party各自CodeGraph；不得把原有.gitignore改动、.codegraph、三份参考文档或out测试产物纳入阶段提交。

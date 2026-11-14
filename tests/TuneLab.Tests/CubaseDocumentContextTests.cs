@@ -11,10 +11,70 @@ namespace TuneLab.Tests;
 [Collection("DataThreadProject")]
 public class CubaseDocumentContextTests
 {
+    [Fact]
+    public void StateNotificationsContainOnlySettledEditsAndDoNotEchoRestores()
+    {
+        using var context = new CubaseDocumentContext();
+        context.Document.SetProject(new Project());
+        var snapshots = new System.Collections.Generic.List<byte[]>();
+        context.StateChanged += snapshots.Add;
+        context.Document.Project!.AddTrack(new TrackInfo { Name = "Changed" });
+        Assert.Empty(snapshots);
+        context.Document.Commit();
+        Assert.Single(snapshots);
+        Assert.Equal("Changed", Assert.Single(CubaseProjectState.Decode(snapshots[0]).Project.Tracks).Name);
+        context.Document.Undo();
+        Assert.Equal(2, snapshots.Count);
+        Assert.Empty(CubaseProjectState.Decode(snapshots[1]).Project.Tracks);
+        context.Document.Redo();
+        Assert.Equal(3, snapshots.Count);
+        context.RestoreState(snapshots[0]);
+        Assert.Equal(3, snapshots.Count);
+        context.Dispose();
+        Assert.Equal(3, snapshots.Count);
+    }
+
     sealed class DataThreadContext : SynchronizationContext
     {
         public override void Post(SendOrPostCallback callback, object? state) => callback(state);
         public override void Send(SendOrPostCallback callback, object? state) => callback(state);
+    }
+
+    [Fact]
+    public void StateRestoresAnIndependentDocumentAndInvalidStatePreservesIt()
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DataThreadContext());
+        try
+        {
+            TestVoices.EnsureBuiltIn();
+            using var source = new CubaseDocumentContext();
+            using var target = new CubaseDocumentContext();
+            source.Document.SetProject(new Project());
+            target.Document.SetProject(new Project());
+            var sourcePart = source.GetOrCreateEditingPart();
+            sourcePart.Name.Set("Saved phrase");
+            source.Document.Commit();
+            source.Document.Project!.ExportSampleRate = 48000;
+            source.EditorMetadata.PlayheadPos = 720;
+
+            var state = source.SaveState();
+            target.RestoreState(state);
+            var targetPart = target.GetOrCreateEditingPart();
+            Assert.NotSame(sourcePart, targetPart);
+            Assert.Equal("Saved phrase", targetPart.Name.Value);
+            Assert.Equal(48000, target.Document.Project!.ExportSampleRate);
+            Assert.Equal(720, target.EditorMetadata.PlayheadPos);
+            var project = target.Document.Project;
+            state[0] = 0;
+            Assert.Throws<System.IO.InvalidDataException>(() => target.RestoreState(state));
+            Assert.Same(project, target.Document.Project);
+            Assert.Same(targetPart, target.GetOrCreateEditingPart());
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
     }
 
     [Fact]

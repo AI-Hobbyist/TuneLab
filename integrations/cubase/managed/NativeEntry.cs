@@ -19,7 +19,46 @@ public static partial class NativeEntry
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static int GetAbiVersion()
     {
-        return 1;
+        return 2;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int ValidateVoice(char* engine, int engineLength, char* singer, int singerLength)
+    {
+        if (engine == null || singer == null || engineLength < 0 || singerLength < 0)
+        {
+            return 1;
+        }
+        try
+        {
+            PluginServices.InitializeEngines();
+            return CubaseVoiceSelection.Unavailable(new string(engine, 0, engineLength),
+                new string(singer, 0, singerLength)) == null ? 0 : 2;
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("Cubase voice validation failed: {0}", exception);
+            return 5;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static int InitializeServices()
+    {
+        try
+        {
+            var failures = PluginServices.InitializeEngines();
+            foreach (var failure in failures)
+            {
+                Trace.TraceError("Cubase engine initialization: {0}", failure);
+            }
+            return failures.Count == 0 ? 0 : 5;
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("Cubase services initialization failed: {0}", exception);
+            return 5;
+        }
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -34,7 +73,8 @@ public static partial class NativeEntry
         try
         {
             document = new CubaseDocumentContext();
-            document.Document.SetProject(new Project());
+            document.Document.SetProject(new Project(new TuneLab.SDK.ProjectInfo(),
+                registerWithStandaloneAudio: false));
             ulong id = checked((ulong)Interlocked.Increment(ref sNextHandle));
             if (!sDocuments.TryAdd(id, document))
             {
@@ -87,6 +127,13 @@ public static partial class NativeEntry
         }
         try
         {
+            sPendingDocumentStates.Remove(handle);
+            sPositionCallbacks.Remove(handle);
+            sStatusCallbacks.Remove(handle);
+            if (sDocumentCallbacks.Remove(handle, out var callback))
+            {
+                document.StateChanged -= callback;
+            }
             document.Dispose();
             return 0;
         }

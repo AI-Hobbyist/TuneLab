@@ -1,5 +1,6 @@
 using System;
 using Avalonia.Controls.Embedding;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using TuneLab.Data;
 using TuneLab.Hosting;
@@ -13,13 +14,35 @@ namespace TuneLab.Cubase.Managed;
 internal sealed class PianoEditorSession : IDisposable
 {
     readonly CubasePianoView mView;
+    readonly VoiceSelector mVoiceSelector;
+    readonly DispatcherTimer mTransportTimer;
+    readonly Action mPollTransport;
+    readonly Func<CubaseRenderStatus?> mGetRenderStatus;
+    readonly TextBlock mRenderStatus = new()
+    {
+        Margin = new Avalonia.Thickness(8, 0, 8, 4),
+        TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+        Text = "等待宿主状态"
+    };
     bool mDisposed;
 
-    internal PianoEditorSession(ProjectDocument document, IPlayhead playhead)
+    internal PianoEditorSession(ProjectDocument document, IPlayhead playhead, Action pollTransport,
+        Func<CubaseRenderStatus?> getRenderStatus)
     {
         Dispatcher.UIThread.VerifyAccess();
         mView = new CubasePianoView(document, playhead);
-        Root = EmbeddedEditorRoot.Create(mView.Piano);
+        mVoiceSelector = new VoiceSelector();
+        mPollTransport = pollTransport;
+        mGetRenderStatus = getRenderStatus;
+        mTransportTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+        mTransportTimer.Tick += OnTransportTick;
+        var container = new DockPanel();
+        DockPanel.SetDock(mVoiceSelector, Dock.Top);
+        container.Children.Add(mVoiceSelector);
+        DockPanel.SetDock(mRenderStatus, Dock.Top);
+        container.Children.Add(mRenderStatus);
+        container.Children.Add(mView.Piano);
+        Root = EmbeddedEditorRoot.Create(container);
     }
 
     internal EmbeddableControlRoot Root { get; }
@@ -45,6 +68,13 @@ internal sealed class PianoEditorSession : IDisposable
         }
         Root.Prepare();
         Root.StartRendering();
+        mTransportTimer.Start();
+    }
+
+    void OnTransportTick(object? sender, EventArgs args)
+    {
+        mPollTransport();
+        mRenderStatus.Text = mGetRenderStatus()?.DisplayText() ?? "宿主状态未连接";
     }
 
     internal void Resize(int width, int height)
@@ -89,6 +119,7 @@ internal sealed class PianoEditorSession : IDisposable
         Dispatcher.UIThread.VerifyAccess();
         ObjectDisposedException.ThrowIf(mDisposed, this);
         mView.Piano.Part = part;
+        mVoiceSelector.SetPart(part);
     }
 
     public void Dispose()
@@ -100,6 +131,8 @@ internal sealed class PianoEditorSession : IDisposable
         }
         try
         {
+            mTransportTimer.Stop();
+            mTransportTimer.Tick -= OnTransportTick;
             Root.StopRendering();
             Root.Content = null;
         }
@@ -107,6 +140,7 @@ internal sealed class PianoEditorSession : IDisposable
         {
             try
             {
+                mVoiceSelector.Dispose();
                 mView.Dispose();
             }
             finally

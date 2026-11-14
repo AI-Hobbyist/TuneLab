@@ -16,10 +16,11 @@ internal static class PluginUiRuntime
             throw new InvalidOperationException("The embedded editor requires an STA UI thread.");
         }
 
+        PluginServices.EnsureCore();
         if (Application.Current == null)
         {
-            AppBuilder.Configure<TuneLab.App>()
-                .UsePlatformDetect()
+            TuneLab.Program.ConfigureAppCommon(AppBuilder.Configure<TuneLab.App>()
+                .UsePlatformDetect())
                 .SetupWithoutStarting();
         }
         else if (Application.Current is not TuneLab.App)
@@ -29,5 +30,6 @@ internal static class PluginUiRuntime
 
         Dispatcher.UIThread.VerifyAccess();
         AvaloniaSynchronizationContext.InstallIfNeeded();
+        PluginServices.InitializeEngines();
     }
 }

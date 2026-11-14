@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.Loader;
 using TuneLab.Foundation;
 using TuneLab.SDK;
 using TuneLab.Extensions.Formats;
@@ -20,18 +21,19 @@ internal static class LegacyCompatLoader
     const string EntryTypeName = "TuneLab.Hosting.Compat.Legacy.LegacyCompatEntry";
     const string EntryMethodName = "TryLoad";
 
-    public static void Wire()
+    public static void Wire(string? assemblyDirectory = null)
     {
         try
         {
-            var dllPath = Path.Combine(AppContext.BaseDirectory, CompatAssemblyFile);
+            var dllPath = Path.Combine(assemblyDirectory ?? AppContext.BaseDirectory, CompatAssemblyFile);
             if (!File.Exists(dllPath))
             {
                 Log.Info("Legacy compatibility layer not present; legacy plugins will be skipped.");
                 return;
             }
 
-            var assembly = Assembly.LoadFrom(dllPath);
+            var assembly = AssemblyLoadContext.GetLoadContext(typeof(LegacyCompatLoader).Assembly)!
+                .LoadFromAssemblyPath(Path.GetFullPath(dllPath));
             var method = assembly.GetType(EntryTypeName)?.GetMethod(EntryMethodName, BindingFlags.Public | BindingFlags.Static);
             if (method == null)
             {
