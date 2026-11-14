@@ -94,11 +94,50 @@ class ManagedRuntime
                resolve(L"ValidateProjectState", validateProjectState) &&
                resolve(L"CopyDocumentState", copyDocumentState) &&
                resolve(L"RestoreDocumentState", restoreDocumentState) &&
+               resolve(L"RestoreAraDocumentState", restoreAraDocumentState) &&
                resolve(L"SetDocumentStateCallback", setDocumentStateCallback) &&
+               resolve(L"MapDocumentSourcePosition", mapDocumentSourcePosition) &&
                resolve(L"SetDocumentPositionCallback", setDocumentPositionCallback) &&
-               resolve(L"SetDocumentStatusCallback", setDocumentStatusCallback);
+               resolve(L"SetDocumentStatusCallback", setDocumentStatusCallback) &&
+               resolve(L"BuildAraProjectState", buildAraProjectState) &&
+               resolve(L"BuildAraRenderState", buildAraRenderState) &&
+               resolve(L"SetDocumentKeyPreviewCallback", setDocumentKeyPreviewCallback) &&
+               resolve(L"RegisterPairEndpoint", registerPairEndpoint) &&
+               resolve(L"PairEndpoints", pairEndpoints) &&
+               resolve(L"GetPairEndpointState", getPairEndpointState) &&
+               resolve(L"RestorePairIntent", restorePairIntent) &&
+               resolve(L"UnpairEndpoint", unpairEndpoint) &&
+               resolve(L"ReleasePairEndpoint", releasePairEndpoint) &&
+               resolve(L"SetPairOutputCallback", setPairOutputCallback) &&
+               resolve(L"SetPairDocumentAccess", setPairDocumentAccess) &&
+               resolve(L"CopyPairDocumentState", copyPairDocumentState) &&
+               resolve(L"ApplyPairDocumentState", applyPairDocumentState) &&
+               resolve(L"SetPairViewProvider", setPairViewProvider) &&
+               resolve(L"SetDocumentPairEndpoint", setDocumentPairEndpoint) &&
+               resolve(L"CreatePairDocumentProxy", createPairDocumentProxy) &&
+               resolve(L"CreatePairView", createPairView) &&
+               resolve(L"DestroyPairView", destroyPairView) &&
+               resolve(L"ResizePairView", resizePairView) &&
+               resolve(L"FocusPairView", focusPairView);
     }
 
+    SetPairViewProvider setPairViewProvider = nullptr;
+    SetDocumentPairEndpoint setDocumentPairEndpoint = nullptr;
+    CreatePairDocumentProxy createPairDocumentProxy = nullptr;
+    CreatePairView createPairView = nullptr;
+    DestroyPairView destroyPairView = nullptr;
+    ResizePairView resizePairView = nullptr;
+    FocusPairView focusPairView = nullptr;
+    SetPairDocumentAccess setPairDocumentAccess = nullptr;
+    CopyPairDocumentState copyPairDocumentState = nullptr;
+    ApplyPairDocumentState applyPairDocumentState = nullptr;
+    SetPairOutputCallback setPairOutputCallback = nullptr;
+    RegisterPairEndpoint registerPairEndpoint = nullptr;
+    PairEndpoints pairEndpoints = nullptr;
+    GetPairEndpointState getPairEndpointState = nullptr;
+    RestorePairIntent restorePairIntent = nullptr;
+    UnpairEndpoint unpairEndpoint = nullptr;
+    ReleasePairEndpoint releasePairEndpoint = nullptr;
     CreateDocument createDocument = nullptr;
     DestroyDocument destroyDocument = nullptr;
     CreateView createView = nullptr;
@@ -117,9 +156,14 @@ class ManagedRuntime
     ValidateProjectState validateProjectState = nullptr;
     CopyDocumentState copyDocumentState = nullptr;
     RestoreDocumentState restoreDocumentState = nullptr;
+    RestoreDocumentState restoreAraDocumentState = nullptr;
     SetDocumentStateCallback setDocumentStateCallback = nullptr;
+    MapDocumentSourcePosition mapDocumentSourcePosition = nullptr;
     SetDocumentPositionCallback setDocumentPositionCallback = nullptr;
     SetDocumentStatusCallback setDocumentStatusCallback = nullptr;
+    BuildAraProjectState buildAraProjectState = nullptr;
+    BuildAraRenderState buildAraRenderState = nullptr;
+    SetDocumentKeyPreviewCallback setDocumentKeyPreviewCallback = nullptr;
 
   private:
     template <typename Function> bool resolve(const wchar_t *method, Function &function)

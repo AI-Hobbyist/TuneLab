@@ -1,9 +1,11 @@
 #pragma once
 
+#include "editor_binding.h"
 #include "editor_view.h"
 #include "instrument_parameters.h"
 #include "project_state_stream.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
+#include <array>
 #include <atomic>
 
 namespace TuneLab::Cubase
@@ -34,6 +36,7 @@ class EditorController final : public Steinberg::Vst::EditController
   public:
     explicit EditorController(bool instrument = false) : instrument(instrument)
     {
+        attachmentCallback = std::make_shared<std::function<void()>>([this] { sendEditorOpen(); });
     }
 
     Steinberg::tresult PLUGIN_API initialize(Steinberg::FUnknown *context) override
@@ -50,6 +53,7 @@ class EditorController final : public Steinberg::Vst::EditController
     }
     ~EditorController() override
     {
+        *attachmentCallback = {};
         if (document)
         {
             document->changed = nullptr;
@@ -97,6 +101,8 @@ class EditorController final : public Steinberg::Vst::EditController
         {
             sendSnapshot(document->state);
         }
+        if (result == Steinberg::kResultOk && !instrument)
+            sendEditorOpen();
         return result;
     }
     Steinberg::IPlugView *PLUGIN_API createView(Steinberg::FIDString name) override
@@ -107,8 +113,26 @@ class EditorController final : public Steinberg::Vst::EditController
         }
         try
         {
-            ensureDocument();
-            return new EditorView(document);
+            if (instrument)
+            {
+                ensureDocument();
+                if (getPeer())
+                {
+                    auto request = Steinberg::owned(allocateMessage());
+                    if (!request)
+                        return nullptr;
+                    request->setMessageID("TuneLab.Pairing.Request");
+                    if (sendMessage(request) != Steinberg::kResultOk)
+                        return nullptr;
+                }
+            }
+            auto selected =
+                instrument ? (pairingStatus == 1 ? pairedDocument : document) : araDocument;
+            auto *view = new EditorView(std::move(selected));
+            if (!instrument)
+                view->attachmentChanged = attachmentCallback;
+            views.push_back(view->reference());
+            return view;
         }
         catch (const std::exception &exception)
         {
@@ -117,8 +141,52 @@ class EditorController final : public Steinberg::Vst::EditController
         }
     }
 
+    Steinberg::tresult PLUGIN_API disconnect(Steinberg::Vst::IConnectionPoint *other) override
+    {
+        if (!instrument && other == getPeer())
+        {
+            for (const auto &entry : views)
+                if (auto reference = entry.lock();
+                    reference && reference->view &&
+                    reference->view->setDocument(nullptr) != Steinberg::kResultOk)
+                    return Steinberg::kResultFalse;
+            araDocument.reset();
+            araBound = false;
+        }
+        return EditController::disconnect(other);
+    }
+
     Steinberg::tresult PLUGIN_API notify(Steinberg::Vst::IMessage *message) override
     {
+        if (instrument && message && message->getMessageID() &&
+            std::strcmp(message->getMessageID(), "TuneLab.Pairing.State") == 0)
+            return selectPairedDocument(message);
+        if (!instrument && message && message->getMessageID() &&
+            std::strcmp(message->getMessageID(), "TuneLab.ARA.EditorBinding") == 0)
+        {
+            Steinberg::int64 token = 0;
+            std::shared_ptr<EditorDocument> selected;
+            if (message->getAttributes()->getInt("token", token) != Steinberg::kResultOk ||
+                (token != 0 && !EditorBinding::resolve(token, selected)))
+                return Steinberg::kInvalidArgument;
+            for (auto entry = views.begin(); entry != views.end();)
+            {
+                if (auto reference = entry->lock(); reference && reference->view)
+                {
+                    if (reference->view->setDocument(selected) != Steinberg::kResultOk)
+                        return Steinberg::kResultFalse;
+                    ++entry;
+                }
+                else
+                    entry = views.erase(entry);
+            }
+            const bool firstBinding = !araBound;
+            araDocument = std::move(selected);
+            araBound = true;
+            if (firstBinding)
+                sendEditorOpen();
+            return Steinberg::kResultOk;
+        }
         if (message && message->getMessageID() &&
             std::strcmp(message->getMessageID(), "TuneLab.Transport.Position") == 0)
         {
@@ -143,6 +211,91 @@ class EditorController final : public Steinberg::Vst::EditController
     }
 
   private:
+    Steinberg::tresult selectPairedDocument(Steinberg::Vst::IMessage *message)
+    {
+        Steinberg::int64 status = -1;
+        const void *endpoint = nullptr, *owner = nullptr;
+        Steinberg::uint32 endpointSize = 0, ownerSize = 0;
+        auto *attributes = message->getAttributes();
+        if (attributes->getInt("status", status) != Steinberg::kResultOk || status < 0 ||
+            status > 2 ||
+            attributes->getBinary("endpoint", endpoint, endpointSize) != Steinberg::kResultOk ||
+            !endpoint || endpointSize != 16 ||
+            attributes->getBinary("owner", owner, ownerSize) != Steinberg::kResultOk || !owner ||
+            ownerSize != 16)
+            return Steinberg::kInvalidArgument;
+        std::array<std::uint8_t, 16> nextEndpoint{}, nextOwner{};
+        std::memcpy(nextEndpoint.data(), endpoint, 16);
+        std::memcpy(nextOwner.data(), owner, 16);
+        if (status == pairingStatus && nextEndpoint == pairedEndpoint && nextOwner == pairedOwner)
+            return Steinberg::kResultOk;
+        try
+        {
+            std::shared_ptr<EditorDocument> selected;
+            if (status == 0 || status == 2)
+            {
+                ensureDocument();
+                if (!document->setPairEndpoint(nextEndpoint))
+                    return Steinberg::kResultFalse;
+                selected = document;
+            }
+            else if (status == 1)
+            {
+                selected = std::make_shared<EditorDocument>();
+                if (!selected->runtime.initialize(managedBundleDirectory()) ||
+                    selected->runtime.createPairDocumentProxy(nextEndpoint.data(),
+                                                              &selected->handle) != 0)
+                    return Steinberg::kResultFalse;
+            }
+            // The session hides the independent score while its endpoint is
+            // PeerMissing, leaving only explicit rebind/unlink controls.
+            for (auto entry = views.begin(); entry != views.end();)
+            {
+                if (auto reference = entry->lock(); reference && reference->view)
+                {
+                    if (reference->view->setDocument(selected) != Steinberg::kResultOk)
+                        return Steinberg::kResultFalse;
+                    ++entry;
+                }
+                else
+                    entry = views.erase(entry);
+            }
+            const bool editedPairing = status != 2 && (status != pairingStatus ||
+                                                       (status == 1 && nextOwner != pairedOwner));
+            pairedDocument = status == 1 ? std::move(selected) : nullptr;
+            pairingStatus = static_cast<int>(status);
+            pairedEndpoint = nextEndpoint;
+            pairedOwner = nextOwner;
+            if (editedPairing)
+            {
+                Steinberg::FUnknownPtr<Steinberg::Vst::IComponentHandler2> handler(
+                    getComponentHandler());
+                if (handler)
+                    handler->setDirty(true);
+            }
+            return Steinberg::kResultOk;
+        }
+        catch (const std::exception &exception)
+        {
+            OutputDebugStringA(exception.what());
+            return Steinberg::kResultFalse;
+        }
+    }
+
+    void sendEditorOpen()
+    {
+        bool open = false;
+        for (const auto &entry : views)
+            if (auto reference = entry.lock();
+                reference && reference->view && reference->view->isAttached())
+                open = true;
+        if (auto message = Steinberg::owned(allocateMessage()))
+        {
+            message->setMessageID("TuneLab.ARA.EditorOpen");
+            message->getAttributes()->setInt("open", open ? 1 : 0);
+            sendMessage(message);
+        }
+    }
     void ensureDocument()
     {
         if (!document)
@@ -199,6 +352,13 @@ class EditorController final : public Steinberg::Vst::EditController
     }
 
     std::shared_ptr<EditorDocument> document;
+    std::shared_ptr<EditorDocument> araDocument;
+    std::shared_ptr<EditorDocument> pairedDocument;
+    std::array<std::uint8_t, 16> pairedEndpoint{}, pairedOwner{};
+    int pairingStatus = 0;
+    std::vector<std::weak_ptr<EditorView::Reference>> views;
+    std::shared_ptr<std::function<void()>> attachmentCallback;
+    bool araBound = false;
     bool instrument;
     std::atomic<double> musicalPosition{std::numeric_limits<double>::quiet_NaN()};
     std::atomic<std::int32_t> songResult{-1}, previewResult{-1};

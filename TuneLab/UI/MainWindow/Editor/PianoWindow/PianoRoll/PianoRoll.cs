@@ -22,6 +22,9 @@ internal partial class PianoRoll : View
         PitchAxis PitchAxis { get; }
     }
 
+    internal Action<int>? PreviewKey { get; set; }
+    internal Action? StopPreview { get; set; }
+
     public PianoRoll(IDependency dependency)
     {
         mDependency = dependency;

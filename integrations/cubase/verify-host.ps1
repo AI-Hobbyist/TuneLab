@@ -1,7 +1,8 @@
 param(
     [string]$DotNetRoot = 'C:/Program Files/dotnet',
     [string]$HostPackVersion = '8.0.6',
-    [string]$HostFxrVersion = '8.0.26'
+    [string]$HostFxrVersion = '8.0.26',
+    [string]$AraProjectState = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +45,11 @@ Invoke-Checked "$buildRoot/Debug/tunelab_view_protocol_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_audio_cache_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_midi_input_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_host_time_probe.exe" @()
+Invoke-Checked "$buildRoot/Debug/tunelab_ara_archive_probe.exe" @()
+if ($AraProjectState) {
+    $araStatePath = (Resolve-Path -LiteralPath $AraProjectState).Path
+    Invoke-Checked "$buildRoot/Debug/tunelab_ara_state_probe.exe" @($araStatePath)
+}
 Invoke-Checked "$buildRoot/Debug/tunelab_instrument_parameters_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_midi_preview_player_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_runtime_probe.exe" @($managedOutput)
@@ -51,3 +57,9 @@ foreach ($pluginName in @('TuneLabInstrumentProbe', 'TuneLabBridgeProbe')) {
     $bundleManaged = "$buildRoot/VST3/Debug/$pluginName.vst3/Contents/Resources/managed"
     Invoke-Checked "$buildRoot/Debug/tunelab_runtime_probe.exe" @($bundleManaged)
 }
+
+$instrumentManaged = "$buildRoot/VST3/Debug/TuneLabInstrumentProbe.vst3/Contents/Resources/managed"
+$bridgeManaged = "$buildRoot/VST3/Debug/TuneLabBridgeProbe.vst3/Contents/Resources/managed"
+Invoke-Checked "$buildRoot/Debug/tunelab_runtime_probe.exe" @(
+    $instrumentManaged, '--peer', $bridgeManaged
+)

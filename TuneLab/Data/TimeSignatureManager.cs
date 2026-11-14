@@ -86,7 +86,7 @@ internal class TimeSignatureManager : DataObject, ITimeSignatureManager
         if (index <= 0)
         {
             mTimeSignatures[0].GlobalBeatIndex = 0;
-            mTimeSignatures[0].Pos = 0;
+            mTimeSignatures[0].Pos = mOriginTick;
             CorrectStatusFrom(1);
             return;
         }
@@ -101,6 +101,16 @@ internal class TimeSignatureManager : DataObject, ITimeSignatureManager
             mTimeSignatures[i].GlobalBeatIndex = last.GlobalBeatIndex + beatCount;
             mTimeSignatures[i].Pos = last.Pos + beatCount * last.TicksPerBeat();
         }
+    }
+
+    // A source-local host document can start inside a musical bar. Standalone
+    // projects retain zero; the private host envelope persists this offset.
+    internal void SetOriginTick(double tick)
+    {
+        if (!double.IsFinite(tick))
+            throw new ArgumentOutOfRangeException(nameof(tick));
+        mOriginTick = tick;
+        CorrectStatusFrom(0);
     }
 
     public List<TimeSignatureInfo> GetInfo()
@@ -120,6 +130,7 @@ internal class TimeSignatureManager : DataObject, ITimeSignatureManager
 
     readonly DataObjectList<TimeSignature> mTimeSignatures;
     readonly IProject mProject;
+    double mOriginTick;
 
     class TimeSignature : DataObject, ITimeSignature
     {

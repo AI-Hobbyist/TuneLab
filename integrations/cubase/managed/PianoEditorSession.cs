@@ -15,6 +15,7 @@ internal sealed class PianoEditorSession : IDisposable
 {
     readonly CubasePianoView mView;
     readonly VoiceSelector mVoiceSelector;
+    readonly PairSelector mPairSelector;
     readonly DispatcherTimer mTransportTimer;
     readonly Action mPollTransport;
     readonly Func<CubaseRenderStatus?> mGetRenderStatus;
@@ -27,21 +28,25 @@ internal sealed class PianoEditorSession : IDisposable
     bool mDisposed;
 
     internal PianoEditorSession(ProjectDocument document, IPlayhead playhead, Action pollTransport,
-        Func<CubaseRenderStatus?> getRenderStatus)
+        Func<CubaseRenderStatus?> getRenderStatus, Action<int> previewKey, Action stopPreview, Func<Guid?> pairEndpoint)
     {
         Dispatcher.UIThread.VerifyAccess();
-        mView = new CubasePianoView(document, playhead);
+        mView = new CubasePianoView(document, playhead, previewKey, stopPreview);
         mVoiceSelector = new VoiceSelector();
+        mPairSelector = new PairSelector(pairEndpoint);
         mPollTransport = pollTransport;
         mGetRenderStatus = getRenderStatus;
         mTransportTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         mTransportTimer.Tick += OnTransportTick;
         var container = new DockPanel();
+        DockPanel.SetDock(mPairSelector, Dock.Top);
+        container.Children.Add(mPairSelector);
         DockPanel.SetDock(mVoiceSelector, Dock.Top);
         container.Children.Add(mVoiceSelector);
         DockPanel.SetDock(mRenderStatus, Dock.Top);
         container.Children.Add(mRenderStatus);
         container.Children.Add(mView.Piano);
+        RefreshPairing();
         Root = EmbeddedEditorRoot.Create(container);
     }
 
@@ -73,8 +78,17 @@ internal sealed class PianoEditorSession : IDisposable
 
     void OnTransportTick(object? sender, EventArgs args)
     {
+        RefreshPairing();
         mPollTransport();
         mRenderStatus.Text = mGetRenderStatus()?.DisplayText() ?? "宿主状态未连接";
+    }
+
+    void RefreshPairing()
+    {
+        mPairSelector.Refresh();
+        mView.Piano.IsVisible = mPairSelector.AllowsEditing;
+        mVoiceSelector.IsVisible = mPairSelector.AllowsEditing;
+        mRenderStatus.IsVisible = mPairSelector.AllowsEditing;
     }
 
     internal void Resize(int width, int height)
@@ -100,7 +114,7 @@ internal sealed class PianoEditorSession : IDisposable
         {
             throw new Win32Exception(Marshal.GetLastPInvokeError());
         }
-        return mView.Piano.PianoScrollView.Focus();
+        return mView.Piano.IsVisible ? mView.Piano.PianoScrollView.Focus() : mPairSelector.FocusCode();
     }
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -140,6 +154,7 @@ internal sealed class PianoEditorSession : IDisposable
         {
             try
             {
+                mPairSelector.Dispose();
                 mVoiceSelector.Dispose();
                 mView.Dispose();
             }

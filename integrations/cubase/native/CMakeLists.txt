@@ -54,6 +54,7 @@ add_executable(tunelab_runtime_probe runtime_probe.cpp)
 add_executable(tunelab_processor_probe processor_probe.cpp
     "${VST3_SDK_ROOT}/public.sdk/source/common/memorystream.cpp")
 target_compile_features(tunelab_processor_probe PRIVATE cxx_std_17)
+target_include_directories(tunelab_processor_probe PRIVATE "${DOTNET_HOST_INCLUDE}")
 target_link_libraries(tunelab_processor_probe PRIVATE sdk sdk_hosting)
 add_executable(tunelab_render_probe render_probe.cpp)
 add_executable(tunelab_concurrent_render_probe concurrent_render_probe.cpp)
@@ -67,6 +68,8 @@ add_executable(tunelab_midi_input_probe midi_input_probe.cpp)
 target_compile_features(tunelab_midi_input_probe PRIVATE cxx_std_17)
 target_link_libraries(tunelab_midi_input_probe PRIVATE sdk sdk_hosting)
 add_executable(tunelab_host_time_probe host_time_probe.cpp)
+add_executable(tunelab_ara_archive_probe ara_archive_probe.cpp)
+target_compile_features(tunelab_ara_archive_probe PRIVATE cxx_std_17)
 target_compile_features(tunelab_host_time_probe PRIVATE cxx_std_17)
 target_link_libraries(tunelab_host_time_probe PRIVATE sdk)
 add_executable(tunelab_instrument_parameters_probe instrument_parameters_probe.cpp
@@ -86,9 +89,22 @@ target_include_directories(tunelab_view_protocol_probe PRIVATE "${DOTNET_HOST_IN
 target_link_libraries(tunelab_view_protocol_probe PRIVATE sdk)
 target_compile_features(tunelab_runtime_probe PRIVATE cxx_std_17)
 target_include_directories(tunelab_runtime_probe PRIVATE "${DOTNET_HOST_INCLUDE}")
-target_link_libraries(tunelab_runtime_probe PRIVATE sdk)
+target_link_libraries(tunelab_runtime_probe PRIVATE sdk sdk_hosting)
 add_custom_command(TARGET tunelab_runtime_probe POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${DOTNET_HOST_INCLUDE}/nethost.dll"
         "${CMAKE_CURRENT_SOURCE_DIR}/../managed/bin/$<CONFIG>/net8.0/nethost.dll"
+)
+
+add_executable(tunelab_ara_state_probe ara_state_probe.cpp bridge_probe.cpp)
+target_compile_features(tunelab_ara_state_probe PRIVATE cxx_std_17)
+target_include_directories(tunelab_ara_state_probe PRIVATE "${DOTNET_HOST_INCLUDE}" "${ARA_SDK_ROOT}")
+target_link_libraries(tunelab_ara_state_probe PRIVATE sdk sdk_hosting ARA_PlugIn_Library)
+add_custom_command(TARGET tunelab_ara_state_probe POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/../managed/bin/$<CONFIG>/net8.0"
+        "${CMAKE_CURRENT_BINARY_DIR}/Resources/managed"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${DOTNET_HOST_INCLUDE}/nethost.dll"
+        "${CMAKE_CURRENT_BINARY_DIR}/Resources/managed/nethost.dll"
 )

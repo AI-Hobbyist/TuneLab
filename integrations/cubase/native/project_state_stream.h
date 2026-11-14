@@ -45,8 +45,8 @@ inline Steinberg::tresult readProjectState(Steinberg::IBStream *stream,
     }
     const std::array<std::uint8_t, 8> expected{'T', 'L', 'C', 'U', 'B', 'A', 'S', 'E'};
     std::array<std::uint8_t, 8> fields{};
-    if (magic != expected || !readExact(stream, fields.data(), 8) || fields[0] != 1 ||
-        fields[1] != 0 || fields[2] != 0 || fields[3] != 0)
+    if (magic != expected || !readExact(stream, fields.data(), 8) ||
+        (fields[0] != 1 && fields[0] != 2) || fields[1] != 0 || fields[2] != 0 || fields[3] != 0)
     {
         return Steinberg::kResultFalse;
     }

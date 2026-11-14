@@ -181,11 +181,12 @@ class RenderWorker
             activeRequest = 0;
             if (!stopping && generation.load() == job.generation)
             {
-                lastResult.store(renderResult);
                 if (snapshot)
                 {
                     cache.publish(std::move(snapshot));
                 }
+                // Observing success must also observe the published samples.
+                lastResult.store(renderResult);
             }
             cache.collectRetired();
             completedGeneration = (std::max)(completedGeneration, job.generation);

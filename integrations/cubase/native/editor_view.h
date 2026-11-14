@@ -2,6 +2,9 @@
 
 #include "managed_runtime.h"
 #include "public.sdk/source/common/pluginview.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstring>
 #include <functional>
 #include <limits>
@@ -18,8 +21,33 @@ struct EditorDocument
     std::vector<std::uint8_t> state;
     std::function<void(const std::vector<std::uint8_t> &)> changed;
     std::function<double()> pollPosition;
+    std::function<void(std::int32_t, bool)> keyPreview;
+    std::function<void()> retryPendingHostUpdate;
     std::function<std::int32_t(std::int32_t *, std::int32_t *, std::int64_t *)> pollStatus;
     bool callbackRegistered = false;
+    bool sourcePosition = false;
+    std::array<std::uint8_t, 16> pairEndpoint{};
+
+    bool setPairEndpoint(const std::array<std::uint8_t, 16> &endpoint)
+    {
+        if (handle != 0 && runtime.setDocumentPairEndpoint(handle, endpoint.data()) != 0)
+            return false;
+        pairEndpoint = endpoint;
+        return true;
+    }
+
+    // Registration and delivery use the embedded editor/host main thread.
+    // Weak observers let several ARA renderers share a modification document.
+    void observeStateChanges(const std::shared_ptr<std::function<void()>> &observer)
+    {
+        stateObservers.erase(std::remove_if(stateObservers.begin(), stateObservers.end(),
+                                            [](const auto &entry) { return entry.expired(); }),
+                             stateObservers.end());
+        for (const auto &entry : stateObservers)
+            if (entry.lock() == observer)
+                return;
+        stateObservers.push_back(observer);
+    }
 
     bool initialize()
     {
@@ -34,6 +62,9 @@ struct EditorDocument
         }
         callbackRegistered = runtime.setDocumentStateCallback(handle, onStateChanged, this) == 0;
         if (!callbackRegistered ||
+            (pairEndpoint != std::array<std::uint8_t, 16>{} &&
+             runtime.setDocumentPairEndpoint(handle, pairEndpoint.data()) != 0) ||
+            runtime.setDocumentKeyPreviewCallback(handle, onKeyPreviewRequested, this) != 0 ||
             runtime.setDocumentPositionCallback(handle, onPositionRequested, this) != 0 ||
             runtime.setDocumentStatusCallback(handle, onStatusRequested, this) != 0 ||
             (!state.empty() &&
@@ -47,6 +78,21 @@ struct EditorDocument
             return false;
         }
         return true;
+    }
+
+    static void __cdecl onKeyPreviewRequested(void *owner, std::int32_t pitch,
+                                              std::int32_t pressed) noexcept
+    {
+        try
+        {
+            auto &document = *static_cast<EditorDocument *>(owner);
+            if (document.keyPreview)
+                document.keyPreview(pitch, pressed != 0);
+        }
+        catch (const std::exception &exception)
+        {
+            OutputDebugStringA(exception.what());
+        }
     }
 
     static std::int32_t __cdecl onStatusRequested(void *owner, std::int32_t *song,
@@ -70,8 +116,19 @@ struct EditorDocument
         try
         {
             auto &document = *static_cast<EditorDocument *>(owner);
-            return document.pollPosition ? document.pollPosition()
-                                         : std::numeric_limits<double>::quiet_NaN();
+            // Copy before invoking: a successful retry clears its registration.
+            auto retry = document.retryPendingHostUpdate;
+            if (retry)
+                retry();
+            double position = document.pollPosition ? document.pollPosition()
+                                                    : std::numeric_limits<double>::quiet_NaN();
+            if (!document.sourcePosition || !std::isfinite(position))
+                return position;
+            double quarter = std::numeric_limits<double>::quiet_NaN();
+            return document.runtime.mapDocumentSourcePosition(document.handle, position,
+                                                              &quarter) == 0
+                       ? quarter
+                       : std::numeric_limits<double>::quiet_NaN();
         }
         catch (const std::exception &exception)
         {
@@ -96,12 +153,20 @@ struct EditorDocument
             {
                 document.changed(document.state);
             }
+            // No notification on identical snapshots or suppressed restores.
+            // Copy the weak list because a renderer may register while rebuilding.
+            const auto observers = document.stateObservers;
+            for (const auto &entry : observers)
+                if (auto observer = entry.lock())
+                    (*observer)();
         }
         catch (const std::exception &exception)
         {
             OutputDebugStringA(exception.what());
         }
     }
+
+    std::vector<std::weak_ptr<std::function<void()>>> stateObservers;
 
     ~EditorDocument()
     {
@@ -110,6 +175,7 @@ struct EditorDocument
             if (callbackRegistered)
             {
                 runtime.setDocumentStateCallback(handle, nullptr, nullptr);
+                runtime.setDocumentKeyPreviewCallback(handle, nullptr, nullptr);
             }
             if (runtime.destroyDocument(handle) != 0)
             {
@@ -122,6 +188,16 @@ struct EditorDocument
 class EditorView final : public Steinberg::CPluginView
 {
   public:
+    struct Reference
+    {
+        EditorView *view;
+    };
+    std::weak_ptr<Reference> reference() const
+    {
+        return lifetime;
+    }
+    std::weak_ptr<std::function<void()>> attachmentChanged;
+
     explicit EditorView(std::shared_ptr<EditorDocument> document) : document(std::move(document))
     {
         rect = Steinberg::ViewRect(0, 0, 1100, 700);
@@ -129,10 +205,36 @@ class EditorView final : public Steinberg::CPluginView
 
     ~EditorView() override
     {
+        lifetime->view = nullptr;
         if (removed() != Steinberg::kResultOk)
         {
             OutputDebugStringA("TuneLab: managed view removal failed during destruction\n");
         }
+    }
+
+    Steinberg::tresult setDocument(std::shared_ptr<EditorDocument> next)
+    {
+        if (next == document)
+            return Steinberg::kResultOk;
+        if (!isAttached())
+        {
+            document = std::move(next);
+            return Steinberg::kResultOk;
+        }
+        ViewHandle replacement = 0;
+        if (next && (!next->initialize() ||
+                     next->runtime.createView(next->handle, systemWindow, rect.getWidth(),
+                                              rect.getHeight(), &replacement) != 0))
+            return Steinberg::kResultFalse;
+        if (view != 0 && document->runtime.destroyView(view) != 0)
+        {
+            if (replacement != 0 && next->runtime.destroyView(replacement) != 0)
+                OutputDebugStringA("TuneLab: replacement view cleanup failed\n");
+            return Steinberg::kResultFalse;
+        }
+        document = std::move(next);
+        view = replacement;
+        return Steinberg::kResultOk;
     }
 
     Steinberg::tresult PLUGIN_API isPlatformTypeSupported(Steinberg::FIDString type) override
@@ -144,9 +246,16 @@ class EditorView final : public Steinberg::CPluginView
 
     Steinberg::tresult PLUGIN_API attached(void *parent, Steinberg::FIDString type) override
     {
-        if (!parent || view != 0 || isPlatformTypeSupported(type) != Steinberg::kResultTrue)
+        if (!parent || isAttached() || view != 0 ||
+            isPlatformTypeSupported(type) != Steinberg::kResultTrue)
         {
             return Steinberg::kInvalidArgument;
+        }
+        if (!document)
+        {
+            const auto result = CPluginView::attached(parent, type);
+            notifyAttachment();
+            return result;
         }
         if (!document->initialize())
         {
@@ -157,7 +266,9 @@ class EditorView final : public Steinberg::CPluginView
         {
             return Steinberg::kResultFalse;
         }
-        return CPluginView::attached(parent, type);
+        const auto result = CPluginView::attached(parent, type);
+        notifyAttachment();
+        return result;
     }
 
     Steinberg::tresult PLUGIN_API removed() override
@@ -170,7 +281,11 @@ class EditorView final : public Steinberg::CPluginView
             }
             view = 0;
         }
-        return CPluginView::removed();
+        const bool wasAttached = isAttached();
+        const auto result = CPluginView::removed();
+        if (wasAttached)
+            notifyAttachment();
+        return result;
     }
 
     Steinberg::tresult PLUGIN_API onSize(Steinberg::ViewRect *size) override
@@ -210,6 +325,12 @@ class EditorView final : public Steinberg::CPluginView
     }
 
   private:
+    void notifyAttachment()
+    {
+        if (auto callback = attachmentChanged.lock(); callback && *callback)
+            (*callback)();
+    }
+    std::shared_ptr<Reference> lifetime = std::make_shared<Reference>(Reference{this});
     std::shared_ptr<EditorDocument> document;
     ViewHandle view = 0;
 };

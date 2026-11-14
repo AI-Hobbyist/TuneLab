@@ -13,12 +13,16 @@ internal sealed class CubasePianoView : PianoWindow.IDependency, IDisposable
 {
     bool mDisposed;
     readonly EditorActionCollection mActions = new();
+    readonly Action? mStopPreview;
 
-    public CubasePianoView(ProjectDocument document, IPlayhead playhead)
+    public CubasePianoView(ProjectDocument document, IPlayhead playhead,
+        Action<int>? previewKey = null, Action? stopPreview = null)
     {
         Dispatcher.UIThread.VerifyAccess();
         Playhead = playhead;
         Piano = new PianoWindow(this, mActions, persistViewState: false);
+        mStopPreview = stopPreview;
+        Piano.SetKeyPreview(previewKey, stopPreview);
         Register("edit.undo", "Undo", () => { document.Undo(); }, Key.Z,
             () => document.Undoable() ? null : "there is nothing to undo");
         Register("edit.redo", "Redo", () => { document.Redo(); }, Key.Y,
@@ -64,6 +68,8 @@ internal sealed class CubasePianoView : PianoWindow.IDependency, IDisposable
             return;
         }
         mDisposed = true;
+        mStopPreview?.Invoke();
+        Piano.SetKeyPreview(null, null);
         Piano.Detach();
         mActions.Clear();
     }

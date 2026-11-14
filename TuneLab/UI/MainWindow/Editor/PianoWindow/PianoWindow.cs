@@ -156,6 +156,12 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         s.DisposeAll();
     }
 
+    internal void SetKeyPreview(Action<int>? preview, Action? stop)
+    {
+        mPianoRoll.PreviewKey = preview;
+        mPianoRoll.StopPreview = stop;
+    }
+
     // Called by the embedded view owner on the UI thread, independently of the document.
     public void Detach()
     {

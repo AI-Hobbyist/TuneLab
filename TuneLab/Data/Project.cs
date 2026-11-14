@@ -32,7 +32,7 @@ internal class Project : DataObject, IProject
     public Project() : this(new ProjectInfo()) { }
     internal bool RegisterWithStandaloneAudio { get; }
 
-    public Project(ProjectInfo info, bool registerWithStandaloneAudio = true)
+    public Project(ProjectInfo info, bool registerWithStandaloneAudio = true, double meterOriginTick = 0)
     {
         RegisterWithStandaloneAudio = registerWithStandaloneAudio;
         mTimeSignatureManager = new(this);
@@ -43,6 +43,8 @@ internal class Project : DataObject, IProject
         mTracks.ItemRemoved.Subscribe(OnTrackRemoved);
 
         SetInfo(info);
+        if (meterOriginTick != 0)
+            mTimeSignatureManager.SetOriginTick(meterOriginTick);
     }
 
     public ProjectInfo GetInfo()

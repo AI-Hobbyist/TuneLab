@@ -2,6 +2,7 @@
 #include "host_time.h"
 #include "instrument_parameters.h"
 #include "midi_preview_player.h"
+#include "pair_endpoint.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "probe_state.h"
 #include "project_state_stream.h"
@@ -55,7 +56,8 @@ class InstrumentProbe final : public AudioEffect
     {
         const auto result = TuneLab::Cubase::writeProjectState(stream, state);
         return result == kResultOk
-                   ? TuneLab::Cubase::writeInstrumentParameters(stream, parameters.bypassed())
+                   ? TuneLab::Cubase::writeInstrumentParameters(stream, parameters.bypassed(),
+                                                                !pairing.allowsProjectOutput())
                    : result;
     }
 
@@ -65,8 +67,39 @@ class InstrumentProbe final : public AudioEffect
         {
             return kInvalidArgument;
         }
+        if (std::strcmp(message->getMessageID(), "TuneLab.Pairing.Request") == 0)
+        {
+            if (!enablePairingNotifications())
+                return kResultFalse;
+            return sendPairingState();
+        }
+        if (std::strcmp(message->getMessageID(), "TuneLab.Pairing.Bind") == 0)
+        {
+            const void *peer = nullptr;
+            uint32 length = 0;
+            if (message->getAttributes()->getBinary("bridge", peer, length) != kResultOk || !peer ||
+                length != 16)
+                return kInvalidArgument;
+            if (!enablePairingNotifications() ||
+                pairing.pairWith(static_cast<const std::uint8_t *>(peer)) != 0)
+                return kResultFalse;
+            pairing.publishPendingState();
+            return kResultOk;
+        }
+        if (std::strcmp(message->getMessageID(), "TuneLab.Pairing.Unlink") == 0)
+        {
+            if (!enablePairingNotifications() || pairing.unpair() != 0)
+                return kResultFalse;
+            pairing.publishPendingState();
+            return kResultOk;
+        }
         if (std::strcmp(message->getMessageID(), "TuneLab.Transport.Request") == 0)
         {
+            if (runtimeReady)
+            {
+                pairing.setStateChangedCallback(onPairStateChanged, this);
+                pairing.publishPendingState();
+            }
             TuneLab::Cubase::HostTimeSnapshot context;
             if (!hostTime.tryRead(context))
                 return kResultFalse;
@@ -118,9 +151,9 @@ class InstrumentProbe final : public AudioEffect
             {
                 return result;
             }
-            bool bypass = false;
-            if (restoreParameters &&
-                TuneLab::Cubase::readInstrumentParameters(stream, bypass) != kResultOk)
+            bool bypass = false, requiresPair = false;
+            if (restoreParameters && TuneLab::Cubase::readInstrumentParameters(
+                                         stream, bypass, requiresPair) != kResultOk)
                 return kResultFalse;
             if (!candidate.empty() &&
                 (!ensureRuntime() ||
@@ -141,6 +174,9 @@ class InstrumentProbe final : public AudioEffect
             {
                 preview->update({}, static_cast<int>(processSetup.sampleRate));
             }
+            if (restoreParameters && (requiresPair || runtimeReady) &&
+                (!ensureRuntime() || pairing.restoreIntent(requiresPair) != 0))
+                return kResultFalse;
             state = std::move(candidate);
             if (restoreParameters)
                 parameters.restore(bypass);
@@ -203,6 +239,7 @@ class InstrumentProbe final : public AudioEffect
         publishedPreview.store(nullptr);
         worker.reset();
         preview.reset();
+        pairing.reset();
         return AudioEffect::terminate();
     }
 
@@ -211,6 +248,7 @@ class InstrumentProbe final : public AudioEffect
         // Only publish a lock-free timing observation here. Messages and UI work run on
         // the editor's polling thread, never on the audio callback.
         hostTime.publish(data.processContext);
+        const bool ownsProjectOutput = pairing.allowsProjectOutput();
         for (int32 bus = 0; bus < data.numOutputs; ++bus)
         {
             auto &output = data.outputs[bus];
@@ -228,7 +266,7 @@ class InstrumentProbe final : public AudioEffect
             output.silenceFlags = (uint64(1) << output.numChannels) - 1;
         }
         auto *renderer = publishedWorker.load();
-        if (renderer && processingEnabled.load() && data.numOutputs > 0 &&
+        if (renderer && ownsProjectOutput && processingEnabled.load() && data.numOutputs > 0 &&
             data.outputs[0].numChannels >= 2 && data.numSamples > 0 && data.processContext &&
             (data.processContext->state & ProcessContext::kPlaying))
         {
@@ -255,6 +293,16 @@ class InstrumentProbe final : public AudioEffect
         }
         if (auto *player = publishedPreview.load(); player && processingEnabled.load())
         {
+            if (!ownsProjectOutput)
+            {
+                // Paired playback belongs to ARA. Do not reinterpret incoming
+                // track MIDI as an additional singing preview on this output.
+                player->reset();
+                player->process<float>(nullptr, nullptr, nullptr, data.numSamples,
+                                       static_cast<int>(processSetup.sampleRate));
+                parameters.process(data);
+                return kResultOk;
+            }
             if (data.numOutputs == 0 || data.outputs[0].numChannels < 2)
             {
                 // Hosts may flush Note Off without any audio output buffers.
@@ -281,13 +329,52 @@ class InstrumentProbe final : public AudioEffect
     }
 
   private:
+    tresult sendPairingState()
+    {
+        if (!ensureRuntime())
+            return kResultFalse;
+        auto response = owned(allocateMessage());
+        std::array<std::uint8_t, 16> owner{};
+        std::int32_t status = 0, output = 0;
+        if (!response || pairing.state(owner, status, output) != 0)
+            return kResultFalse;
+        response->setMessageID("TuneLab.Pairing.State");
+        response->getAttributes()->setBinary("endpoint", pairing.id().data(), 16);
+        response->getAttributes()->setBinary("owner", owner.data(), 16);
+        response->getAttributes()->setInt("status", status);
+        response->getAttributes()->setInt("projectOutput", output);
+        return sendMessage(response);
+    }
+
+    static bool onPairStateChanged(void *owner) noexcept
+    {
+        try
+        {
+            auto &instrument = *static_cast<InstrumentProbe *>(owner);
+            return instrument.getPeer() && instrument.sendPairingState() == kResultOk;
+        }
+        catch (const std::exception &exception)
+        {
+            OutputDebugStringA(exception.what());
+            return false;
+        }
+    }
+
+    bool enablePairingNotifications()
+    {
+        if (!ensureRuntime())
+            return false;
+        pairing.setStateChangedCallback(onPairStateChanged, this);
+        return true;
+    }
+
     bool ensureRuntime()
     {
         if (!runtimeReady)
         {
             runtimeReady = runtime.initialize(TuneLab::Cubase::managedBundleDirectory());
         }
-        return runtimeReady;
+        return runtimeReady && pairing.initialize(runtime, 1);
     }
 
     bool submitState(const std::vector<std::uint8_t> &snapshot)
@@ -314,6 +401,7 @@ class InstrumentProbe final : public AudioEffect
 
     std::vector<std::uint8_t> state;
     TuneLab::Cubase::ManagedRuntime runtime;
+    TuneLab::Cubase::PairEndpoint pairing;
     bool runtimeReady = false;
     std::unique_ptr<TuneLab::Cubase::RenderWorker> worker;
     std::atomic<TuneLab::Cubase::RenderWorker *> publishedWorker{nullptr};

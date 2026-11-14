@@ -46,7 +46,7 @@ int main()
     {
         return 6;
     }
-    projectStream.getData()[8] = 2;
+    projectStream.getData()[8] = 3;
     projectStream.seek(0, Steinberg::IBStream::kIBSeekSet, nullptr);
     if (TuneLab::Cubase::readProjectState(&projectStream, restored) == Steinberg::kResultOk ||
         restored != full)

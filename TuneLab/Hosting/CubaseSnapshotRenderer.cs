@@ -27,15 +27,17 @@ internal static class CubaseSnapshotRenderer
         CancellationToken cancellation, int? previewPitch)
     {
         cancellation.ThrowIfCancellationRequested();
+        var envelope = previewPitch.HasValue ? null : CubaseProjectState.DecodeEnvelope(state);
         var file = previewPitch.HasValue ? CubaseMidiPreview.CreateScore(state, previewPitch.Value)
-            : CubaseProjectState.Decode(state);
+            : envelope!.Project;
         var previousContext = SynchronizationContext.Current;
         var pump = new PumpableSynchronizationContext();
         SynchronizationContext.SetSynchronizationContext(pump);
         Project? project = null;
         try
         {
-            project = new Project(file.Project, registerWithStandaloneAudio: false);
+            project = new Project(file.Project, registerWithStandaloneAudio: false,
+                meterOriginTick: envelope?.Ara?.MeterOriginTick ?? 0);
             if (previewPitch.HasValue)
             {
                 var part = project.AllMidiParts().First();

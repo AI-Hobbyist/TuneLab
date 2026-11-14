@@ -1,3 +1,4 @@
+#include "editor_binding.h"
 #include "editor_view.h"
 #include <iostream>
 
@@ -38,6 +39,61 @@ int main()
 {
     using namespace Steinberg;
     auto document = std::make_shared<TuneLab::Cubase::EditorDocument>();
+    {
+        TuneLab::Cubase::EditorDocument observed;
+        int firstCalls = 0, secondCalls = 0;
+        auto first = std::make_shared<std::function<void()>>([&] { ++firstCalls; });
+        auto second = std::make_shared<std::function<void()>>([&] { ++secondCalls; });
+        observed.observeStateChanges(first);
+        observed.observeStateChanges(first);
+        observed.observeStateChanges(second);
+        const std::uint8_t initial[]{1};
+        TuneLab::Cubase::EditorDocument::onStateChanged(&observed, initial, 1);
+        TuneLab::Cubase::EditorDocument::onStateChanged(&observed, initial, 1);
+        if (firstCalls != 1 || secondCalls != 1)
+            return 15;
+        first.reset();
+        const std::uint8_t next[]{2};
+        TuneLab::Cubase::EditorDocument::onStateChanged(&observed, next, 1);
+        if (firstCalls != 1 || secondCalls != 2)
+            return 16;
+        observed.observeStateChanges(second);
+        if (observed.stateObservers.size() != 1)
+            return 17;
+    }
+
+    int previewPitch = -1;
+    bool previewPressed = false;
+    document->keyPreview = [&](std::int32_t pitch, bool pressed) {
+        previewPitch = pitch;
+        previewPressed = pressed;
+    };
+    TuneLab::Cubase::EditorDocument::onKeyPreviewRequested(document.get(), 64, 1);
+    if (previewPitch != 64 || !previewPressed)
+        return 18;
+    TuneLab::Cubase::EditorDocument::onKeyPreviewRequested(document.get(), -1, 0);
+    if (previewPitch != -1 || previewPressed)
+        return 19;
+    document->keyPreview = {};
+    TuneLab::Cubase::EditorDocument::onKeyPreviewRequested(document.get(), 67, 1);
+    if (previewPitch != -1)
+        return 20;
+    std::int64_t expiredToken = 0;
+    {
+        TuneLab::Cubase::EditorBinding first;
+        TuneLab::Cubase::EditorBinding second;
+        first.select(document);
+        std::shared_ptr<TuneLab::Cubase::EditorDocument> resolved;
+        if (first.id() == second.id() ||
+            !TuneLab::Cubase::EditorBinding::resolve(first.id(), resolved) ||
+            resolved != document ||
+            !TuneLab::Cubase::EditorBinding::resolve(second.id(), resolved) || resolved)
+            return 13;
+        expiredToken = first.id();
+    }
+    std::shared_ptr<TuneLab::Cubase::EditorDocument> resolved;
+    if (TuneLab::Cubase::EditorBinding::resolve(expiredToken, resolved))
+        return 14;
     document->handle = 1;
     document->runtime.createView = createView;
     document->runtime.destroyView = destroyView;
@@ -68,7 +124,26 @@ int main()
         return 4;
     }
     rejectRemoval = false;
-    if (api->removed() != kResultOk || api->removed() != kResultOk || removed != 1)
+    auto next = std::make_shared<TuneLab::Cubase::EditorDocument>();
+    next->handle = 2;
+    next->runtime.createView = createView;
+    next->runtime.destroyView = destroyView;
+    next->runtime.destroyDocument = destroyDocument;
+    next->runtime.resizeView = document->runtime.resizeView;
+    next->runtime.focusView = document->runtime.focusView;
+    next->runtime.createView = [](auto, auto, auto, auto, auto *) -> std::int32_t { return 5; };
+    if (view->setDocument(next) != kResultFalse || created != 1 || removed != 0 ||
+        !view->isAttached() || api->onFocus(true) != kResultTrue)
+        return 12;
+    next->runtime.createView = createView;
+    if (view->setDocument(next) != kResultOk || created != 2 || removed != 1 || !view->isAttached())
+        return 8;
+    if (view->setDocument(nullptr) != kResultOk || removed != 2 || !view->isAttached() ||
+        api->onFocus(true) != kResultFalse)
+        return 9;
+    if (view->setDocument(document) != kResultOk || created != 3)
+        return 10;
+    if (api->removed() != kResultOk || api->removed() != kResultOk || removed != 3)
     {
         return 5;
     }
@@ -82,6 +157,9 @@ int main()
     {
         return 7;
     }
+    next.reset();
+    if (documentsReleased != 2)
+        return 11;
     std::cout
         << "View protocol ownership, removal retry, resize and focus dispatch passed (no GUI)\n";
     return 0;

@@ -19,7 +19,7 @@ public static partial class NativeEntry
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static int GetAbiVersion()
     {
-        return 2;
+        return 15;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -117,6 +117,13 @@ public static partial class NativeEntry
 
     static int DestroyDocumentCore(ulong handle)
     {
+        if (sPairDocuments.ContainsKey(handle))
+        {
+            if (sPairViews.Values.Any(view => view.Document == handle))
+                return 1;
+            sPairDocuments.Remove(handle);
+            return 0;
+        }
         if (sViews.Values.Any(view => view.Document == handle))
         {
             return 1;
@@ -128,7 +135,9 @@ public static partial class NativeEntry
         try
         {
             sPendingDocumentStates.Remove(handle);
+            sDocumentPairEndpoints.Remove(handle);
             sPositionCallbacks.Remove(handle);
+            sKeyPreviewCallbacks.Remove(handle);
             sStatusCallbacks.Remove(handle);
             if (sDocumentCallbacks.Remove(handle, out var callback))
             {

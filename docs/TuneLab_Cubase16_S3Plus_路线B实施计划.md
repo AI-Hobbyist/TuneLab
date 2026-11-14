@@ -1,10 +1,10 @@
 # TuneLab 深度集成 Cubase 16 的 S3+ 路线 B 实施计划
 
-日期：2026-11-14。状态：计划草案，尚未开始实施。
+日期：2026-11-14。状态：实施中，M0–M2已完成并推送，M3自主实施与非GUI验收完成，Git检查点完成后进入M4；M4–M6未开始。
 
 本计划交付两个插件：**TuneLab VST3 Instrument（VSTi3）**和 **TuneLab ARA Bridge**。采用路线 B，在 Cubase 进程内通过原生 C++ 插件壳加载 .NET 与 Avalonia，复用 TuneLab 钢琴窗，使其既能嵌入 VST3 插件界面，也能通过 ARA 工作流进入 Cubase Extension 编辑器。最终目标是 S3+，包括 Cubase Key Editor 歌词输入同步、合成播放、编辑和工程恢复。
 
-本次任务仅编写计划书。不创建插件工程、不修改产品代码、不构建、不安装插件、不启动 Cubase 或 VOCALOID。以下模块名称、协议与里程碑均为待实施设计。
+本计划最初按“仅编写计划书”建立，用户随后已授权按阶段持续实施。当前进度与验证见本文进度记录及 AGENT_HANDOFF.md；安装、软件启动和真实 GUI 验证遵循下述跳过政策。
 
 ## 1 目标与范围
 
@@ -287,7 +287,7 @@ GUI 验证当前默认跳过。只有用户后续明确要求执行时，才采�
 | M0 契约与可行性 | 自主实施/自动验证完成，f2f51b2a已推送；见 cubase-m0-baseline.md |
 | M1 共享运行层与嵌入骨架 | 自主实施/自动验证完成，1cb004e1已推送；真实GUI SKIPPED |
 | M2 VSTi3完整闭环 | 自主实施与本阶段非GUI自动验收完成；9b1ec329已推送且HEAD/上游一致，见 [M2验收记录](cubase-m2-validation.md) |
-| M3 ARA Bridge闭环 | NOT STARTED；M2检查点确认推送后开始 |
+| M3 ARA Bridge闭环 | IN PROGRESS；source音符/tempo、身份归档、角色选择、区域合成/活动更新/通知及编辑试听已有CLI证据；跨包配对契约通过，实例绑定/路由/共享文档/UI/恢复、meter原点和最终覆盖待实施；GUI SKIPPED |
 | M4–M6 | NOT STARTED，按原顺序推进 |
 
 M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy歌声引擎复用、完整版本化component state和Bypass参数状态、controller文档快照消息/恢复、异步代次缓存、整曲宿主播放和离线process、MIDI短音歌声缓存试听、样本级NoteOff/Bypass、float/double、状态反馈，以及当前块时间信息接收。
@@ -296,4 +296,65 @@ M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy�
 
 所有真实Cubase/V7、GUI、实机、硬件MIDI、安装及试听继续 **SKIPPED（用户决定，未执行，需人工验证）**。一秒音符加尾音的缓存试听不等于无限延音或实时连续演唱；当前块tempo不等于完整速度表。完整tempo/ARA对象映射归M3，双容器完整工具归M4，已证实宿主歌词链路归M5，发布与最终性能回归归M6。S3+目标保持未完成，不以M2通过冒充最终交付。
 
-下一步：M2功能检查点已实际提交、推送并确认远端一致，补记完成后开始M3。继续优先使用主仓和third_party各自CodeGraph；不得把原有.gitignore改动、.codegraph、三份参考文档或out测试产物纳入阶段提交。
+下一步：M2功能检查点与文档补记均已推送并确认远端一致；M3已通过非GUI归档/选择消息链路，并接入source音符、tempo及更新合并和v2关联元数据；Busy重试已接入并通过非GUI夹具，继续完成原生source身份恢复、多region/拍号应用、角色渲染和显式配对，真实窗口仍SKIPPED。继续优先使用主仓和third_party各自CodeGraph；不得把原有.gitignore改动、.codegraph、三份参考文档或out测试产物纳入阶段提交。
+
+M3补记（2026-11-14）：已提供不替换共享编辑文档的 region 工程快照，保留 pending retry；原 synchronizeScore 复用候选快照后提交。新增无 GUI 回归及既有 ARA 状态夹具通过，日志 m3-region-projection.log。区域 RenderWorker/混音尚未接入，M3仍 IN PROGRESS，未形成阶段提交。
+
+M3补记（2026-11-14）：Bridge 已按激活时 assigned-region 快照接入 RenderWorker 与 process 混音；真实本机声库的区域 crop/offset/overlap/seek/mono/stereo，以及实际 ARA 分配区域后的 Bridge float/double offline 输出通过（m3-assigned-region-final.log），Bridge validator 47/0。仅激活快照，活动更新、变速合成、editor audition/配对仍未完成；M3保持 IN PROGRESS，未提交推送。真实 Cubase验证仍 SKIPPED。
+
+M3补记（2026-11-14）：区域变速合成已通过私有 ABI5 接入（BPM / 播放时长比、source offset × 同比），保持编辑/归档数据和音高字段；factory 声明基础 Timestretch。时间映射6/6和 actual Bridge float/double × 0.5/1/2 倍时长真实声库 CLI 测试通过，见 m3-render-scale-tests.log、m3-render-scale-synthesis.log。活动缓存更新/试听/配对/meter仍未完成，M3保持 IN PROGRESS。
+
+M3补记（2026-11-14）：活动宿主编辑已通过 didEndEditing 的弱生命周期观察者重建播放快照；AraPlayback immutable Plan/原子发布/读者计数保证旧worker在非音频线程回收。actual Bridge激活期间区域移动，0.5/1/2时长×float/double六组真实声库验证通过；12次并发发布/14016音频块通过，validator47/0，日志m3-active-region-synthesis.log。插件内编辑的宿主线程调度、试听/配对/meter仍待完成，M3保持IN PROGRESS、未提交推送。
+
+M3补记（2026-11-14）：确认Avalonia嵌入使用宿主STA线程后，已通过弱观察者接入settled-edit播放刷新，并校验宿主线程/编辑事务；actual Bridge callback→重新合成→process音频变化六组测试通过（m3-editor-refresh-synthesis.log）。多观察者/重复抑制/销毁清理及完整verify-host通过，双validator各47/0（m3-editor-refresh-host.log）。真实GUI仍SKIPPED；宿主dirty通知、editor audition、配对和meter应用继续实施，M3未完成未提交推送。
+
+M3补记（2026-11-14）：modification编辑通知及合成完成的playback region样本失效通知已接入SDK宿主轮询；正确对象/flags、重复合并、恢复无回声及actual Bridge完成通知六组真实声库CLI测试通过。RenderWorker保证先发布samples再置成功，完整回归另见交接最新记录。editor audition/配对/meter仍待完成，M3保持IN PROGRESS，未提交推送，GUI仍SKIPPED。
+
+
+M3补记（2026-11-14）：嵌入钢琴键按下/释放和关闭视图停止经私有ABI6接到所属EditorDocument，独立版默认AudioEngine试听路径保留。当前输入回调已接入，ARA editor renderer音频消费者仍待实施，不能称试听完成；后续配对/meter仍在M3范围内。公共ABI未变，GUI仍SKIPPED，阶段未提交推送。
+
+
+M3补记（2026-11-14）：ARA editor renderer已接入ABI6键盘歌声缓存试听（直接region/sequence、editor-only与combined、松键/no-output flush/停处理/移除分配停止）；actual Bridge真实fu2_ning2_na4三组CLI测试及完整verify-host通过，双validator各47/0，日志m3-editor-audition-final.log和m3-editor-audition-host.log。下一步显式配对/单一正式输出、meter原点与多region最终验收；M3未完成未提交推送，GUI仍SKIPPED。
+
+M3补记（2026-11-14）：实际双插件包证明CLR组件文档注册表分离，新增BCL-only AppDomain进程配对注册及私有ABI7，实际跨包Pair/query/peer removal/unlink通过m3-pair-cross-bundle.log。当前只完成注册/所有权契约，native实例/音频路由/共享工程/UI/恢复仍待接入，不宣称配对产品闭环。M3未完成未提交推送，GUI仍SKIPPED。
+
+
+M3补记（2026-11-14）：私有ABI8把配对路由callback发布到native atomic；Instrument实例/ARA modification端点RAII及clone独立已接入。实际Instrument+真实声库验证Bind后工程与轨道MIDI静音、peer释放保持静音、显式Unlink恢复同cache；跨实际双包native callback及5项registry测试通过，详细日志见AGENT_HANDOFF最新条目。共享文档/UI/持久化仍待完成，M3未完成未提交推送。
+
+
+M3补记（2026-11-14）：私有ABI9共享文档read/apply已接实际Bridge modification所有者，跨包BCL委托及版本化状态字节互通；非法CBOR/Busy保留/clone隔离、registry6/6及完整verify-host通过（m3-shared-document-host.log），双validator各47/0。Instrument视图/共享撤销、配对UI/恢复仍待接入，不能称配对产品闭环；M3未完成未提交推送，GUI仍SKIPPED。
+
+
+M3补记（2026-11-14）：私有ABI10共享视图lease/provider和Bridge EditorDocument保活已接入；7项registry测试、跨实际双包的native协议（同owner、resize/focus、端点移除保活/关闭重试）及完整verify-host通过，双validator各47/0，日志m3-shared-view-cross-bundle.log/m3-shared-view-host.log。尚未切换Instrument实际IPlugView，下一步proxy文档/controller绑定，再配对UI/恢复；M3仍未完成未提交推送，GUI仍SKIPPED。
+
+### M3 进度补记：标准视图代理（2026-11-14）
+
+私有ABI11已将本地配对文档/视图proxy接入标准视图Create/Destroy/Resize/Focus，不创建第二份工程。跨两个实际插件包的非GUI协议夹具确认同一Bridge owner、文档释放约束、缩放/焦点、端点移除保活与关闭重试；完整verify-host通过，双validator各47/0。证据：m3-view-proxy-host.log、m3-view-proxy-cross-bundle.log。owner创建/关闭回调为协议替身，真实窗口未验证。Instrument controller按配对状态选择proxy尚待实现，M3未完成且未提交/推送，人工项继续SKIPPED（用户决定，未执行，需人工验证）。
+
+### M3 进度补记：controller 配对选择（2026-11-14）
+
+Instrument controller已根据Pairing.State选择Bridge文档proxy，重复同一身份通知不重建，缺失对端状态为空容器，解除配对恢复独立文档；processor在Bind/Unlink后主动回传含owner的状态。实际controller/IPlugView跨包无GUI协议及完整verify-host通过，双validator各47/0。实际Instrument+fu2_ning2_na4验证主动回传、配对单一正式输出及32/64位合成/状态/Bypass回归通过。日志m3-controller-pair-host.log、m3-controller-pair-processor.log。配对UI、身份/路由持久化、对端删除主动通知和meter/多region仍待实施；真实GUI仍SKIPPED，M3未完成未提交推送。
+
+### M3 进度补记：对端移除主动通知（2026-11-14）
+
+PairEndpoint已复用输出通知发布配对状态：注册消息线程即时通知，跨线程仅置待发标记，后续控制线程请求发送；失败保留重试。实际Instrument删除对端后无需额外Request即获status2并保持静音，解除后恢复输出；跨双包即时/跨线程/失败重试协议、真实本机声库32/64位回归及完整verify-host通过，双validator各47/0。日志m3-peer-notification-host.log、m3-peer-notification-cross-bundle.log、m3-peer-notification-processor.log。跨线程无消息时通过下次请求/重开查询更新；真实GUI仍SKIPPED。配对UI/关联持久化、meter原点及多region上下文仍未完成，M3保持进行中、未提交推送。
+
+### M3 进度补记：显式配对栏（2026-11-14）
+
+内嵌视图已增加配对栏：Bridge显示当前文档配对码，Instrument粘贴后显式绑定，两侧可解除，状态明确正式输出归属。私有ABI12把文档关联到对应端点，Bridge选区注册当前modification端点；异步UI按钮避免事件中同步销毁当前视图。托管/完整verify-host及实际Bridge+本机声库CLI合成回归通过，双validator各47/0（m3-pair-ui-host.log、m3-pair-ui-ara-synthesis.log）。真实窗口交互、复制粘贴、中文布局及焦点仍SKIPPED，不能称配对UI实机通过。配对码为当前进程标识，配对意图/输出设置持久化与重开后的显式重新绑定仍待完成；之后meter原点、多region及M3验收。阶段未完成、未提交推送。
+
+### M3 进度补记：配对意图保存恢复（2026-11-14）
+
+TLVSTP02新增配对意图，与Bypass同属版本化component参数；旧P01/无尾部状态可读。私有ABI13恢复为PeerMissing并保持Instrument静音，即使旧Bridge尚存也不自动重连或抢占；显式输入当前Bridge码后才能重绑。缺失状态显示配对/解除栏，隐藏独立乐谱，解决原空容器无法恢复绑定的问题。实际Instrument+本机声库验证保存/恢复、旧peer断开、显式重绑、复制到第二实例保持静音通过；注册表8/8及完整verify-host通过，双validator各47/0（m3-pair-intent-tests.log、m3-pair-intent-host.log、m3-pair-intent-processor.log）。无可靠宿主工程身份时按本计划采用显式重新绑定，不持久化runtime GUID或猜测跨工程关系。真实Cubase重开与恢复UI均SKIPPED；meter原点/多region上下文及M3最终验收仍待完成，阶段未提交推送。
+
+### M3 进度补记：宿主拍号相位（2026-11-14）
+
+SDK首bar signature对应bar 1并向前外推；私有ABI14已将宿主拍号送入managed投影。新增私有MeterOriginTick保存音源局部tick 0相对小节起点的偏移和宿主bar编号；Project/TimeSignatureManager仅增加默认0的内部构造支持，独立版原行为不变。文档恢复和正式合成应用偏移，三方合并保留歌词并更新宿主拍号；渲染副本保留该metadata。相关托管19/19、完整verify-host及实际Bridge本机声库CLI回归通过，双validator各47/0（m3-meter-tests.log、m3-meter-host.log、m3-meter-ara-synthesis.log）。真实GUI小节线与Cubase交互仍SKIPPED。多region/不同context的共享编辑和投影语义及M3逐项验收仍待完成，阶段未提交推送。
+
+### M3 进度补记：多region编辑重投影（2026-11-14）
+
+复现了跨context更换tempo时用户覆盖/手工音符及表达锚点仍用旧tick导致源秒漂移（1.25→2.5秒）。CubaseAraMerge已按source秒比较基线并重投影用户几何/表达/裁剪，宿主未覆盖字段仍跟随incoming；同tempo保留原表示。恒速及分段速度、不同原点、保存后的A→B→A往返等21项相关测试通过，完整verify-host和actual Bridge本机声库CLI回归通过，双validator各47/0（m3-region-reprojection-tests.log、m3-region-reprojection-host.log、m3-region-reprojection-ara-synthesis.log）。真实Cubase多region UI仍SKIPPED。下一步M3逐项最终审计与完整回归，尚未完成阶段或提交推送。
+
+### M3 最终自主验收（2026-11-14）
+
+M3逐项审计与必要回归完成，见[cubase-m3-validation.md](cubase-m3-validation.md)。最后补齐Bridge source-local播放位置：mailbox、region源秒、当前/待恢复文档tempo换算，私有ABI15；实际Bridge双连接顺序/失效context和分段pending时钟通过。解决方案build PASS，主测试843/843、legacy13/13，双validator各47/0，actual Bridge/Instrument本机声库回归通过。人工项仍SKIPPED。M3实施/非GUI验收完成，提交推送检查点待执行并确认后才进入M4；完整S3+目标未完成。

@@ -20,7 +20,7 @@ int main()
     if (readInstrumentParameters(&legacy, bypass) != kResultOk || bypass)
         return 3;
     auto *bytes = stream.getData();
-    bytes[7] = '2';
+    bytes[7] = '3';
     stream.seek(0, IBStream::kIBSeekSet, nullptr);
     if (readInstrumentParameters(&stream, bypass) == kResultOk || bypass)
         return 4;
@@ -28,6 +28,34 @@ int main()
     MemoryStream truncated(bytes, 11);
     if (readInstrumentParameters(&truncated, bypass) == kResultOk)
         return 5;
+
+    MemoryStream paired;
+    bool requiresPair = false;
+    if (writeInstrumentParameters(&paired, true, true) != kResultOk)
+        return 10;
+    paired.seek(0, IBStream::kIBSeekSet, nullptr);
+    if (readInstrumentParameters(&paired, bypass, requiresPair) != kResultOk || !bypass ||
+        !requiresPair)
+        return 11;
+    auto *pairedBytes = paired.getData();
+    pairedBytes[9] = 2;
+    paired.seek(0, IBStream::kIBSeekSet, nullptr);
+    if (readInstrumentParameters(&paired, bypass, requiresPair) == kResultOk || !bypass ||
+        !requiresPair)
+        return 12;
+    pairedBytes[9] = 1;
+    pairedBytes[7] = '1';
+    paired.seek(0, IBStream::kIBSeekSet, nullptr);
+    if (readInstrumentParameters(&paired, bypass, requiresPair) == kResultOk)
+        return 13;
+    stream.seek(0, IBStream::kIBSeekSet, nullptr);
+    if (readInstrumentParameters(&stream, bypass, requiresPair) != kResultOk || !bypass ||
+        requiresPair)
+        return 14;
+    requiresPair = true;
+    if (readInstrumentParameters(&legacy, bypass, requiresPair) != kResultOk || bypass ||
+        requiresPair)
+        return 15;
 
     InstrumentParameters parameters;
     std::array<float, 8> left, right;

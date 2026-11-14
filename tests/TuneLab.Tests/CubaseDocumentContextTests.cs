@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using System.Linq;
 using TuneLab.Data;
 using TuneLab.Hosting;
 using TuneLab.SDK;
@@ -11,6 +12,55 @@ namespace TuneLab.Tests;
 [Collection("DataThreadProject")]
 public class CubaseDocumentContextTests
 {
+    [Fact]
+    public void AraAssociationSurvivesEditsDeletionUndoAndDocumentReopen()
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DataThreadContext());
+        try
+        {
+            TestVoices.EnsureBuiltIn();
+            var projection = CubaseAraScore.Create([new(0, 0), new(2, 4)],
+                [new(9, 0.5, 0.5, 60)], new(0, 2, 0, 2), new SoundSourceInfo(),
+                [new(-1, 4, 4), new(7, 3, 4)]);
+            var metadata = new CubaseAraMetadata
+            {
+                SourceId = "source-a",
+                BaselineState = CubaseProjectState.Encode(projection.File),
+                BaselineNoteIds = [9],
+                CurrentNoteIds = [9],
+                MeterOriginTick = projection.MeterOriginTick
+            };
+            using var context = new CubaseDocumentContext();
+            context.RestoreState(CubaseProjectState.Encode(projection.File, metadata));
+            Assert.Equal(-480, context.Document.Project!.TimeSignatureManager.TimeSignatures[0].Pos);
+            var part = context.GetOrCreateEditingPart();
+            var imported = part.Notes.First!;
+            imported.Lyric.Set("你");
+            part.InsertNote(part.CreateNote(new NoteInfo { Pos = 1200, Dur = 120, Pitch = 65, Lyric = "手工" }));
+            context.Document.Commit();
+            var saved = context.SaveState();
+            Assert.Equal(new ulong[] { 9, 0 }, CubaseProjectState.DecodeEnvelope(saved).Ara!.CurrentNoteIds);
+            part.RemoveNote(imported);
+            context.Document.Commit();
+            Assert.Equal(new ulong[] { 0 }, CubaseProjectState.DecodeEnvelope(context.SaveState()).Ara!.CurrentNoteIds);
+            Assert.True(context.Document.Undo());
+            Assert.Equal(new ulong[] { 9, 0 }, CubaseProjectState.DecodeEnvelope(context.SaveState()).Ara!.CurrentNoteIds);
+            using var reopened = new CubaseDocumentContext();
+            reopened.RestoreState(saved);
+            var restored = CubaseProjectState.DecodeEnvelope(reopened.SaveState());
+            Assert.Equal("source-a", restored.Ara!.SourceId);
+            Assert.Equal(-480, restored.Ara.MeterOriginTick);
+            Assert.Equal(-480, reopened.Document.Project!.TimeSignatureManager.TimeSignatures[0].Pos);
+            Assert.Equal(new ulong[] { 9, 0 }, restored.Ara.CurrentNoteIds);
+            Assert.Equal("你", reopened.GetOrCreateEditingPart().Notes.First!.Lyric.Value);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
     [Fact]
     public void StateNotificationsContainOnlySettledEditsAndDoNotEchoRestores()
     {

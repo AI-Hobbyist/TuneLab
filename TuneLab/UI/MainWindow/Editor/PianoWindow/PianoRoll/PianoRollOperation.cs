@@ -204,7 +204,10 @@ internal partial class PianoRoll
             if (mLastKeyNumber == keyNumber)
                 return;
 
-            AudioEngine.PlayKeySample(keyNumber);
+            if (pianoRoll.PreviewKey is { } preview)
+                preview(keyNumber);
+            else
+                AudioEngine.PlayKeySample(keyNumber);
             mLastKeyNumber = keyNumber;
         }
 
@@ -215,6 +218,8 @@ internal partial class PianoRoll
 
         public void Up()
         {
+            if (mIsOperating)
+                pianoRoll.StopPreview?.Invoke();
             mIsOperating = false;
             Reset();
         }

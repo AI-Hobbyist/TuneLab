@@ -11,8 +11,11 @@ namespace TuneLab::Cubase
 inline constexpr Steinberg::Vst::ParamID bypassParameterId = 0;
 
 // Optional versioned trailer after the existing project envelope. Older states
-// end at the project payload and restore the default (not bypassed).
-inline Steinberg::tresult readInstrumentParameters(Steinberg::IBStream *stream, bool &bypass)
+// end at the project payload and restore independent, not bypassed defaults.
+// P01 contains Bypass; P02 also preserves the need for explicit pairing. No
+// process token is persisted or automatically matched to another project.
+inline Steinberg::tresult readInstrumentParameters(Steinberg::IBStream *stream, bool &bypass,
+                                                   bool &requiresPair)
 {
     using namespace Steinberg;
     std::array<std::uint8_t, 12> bytes{};
@@ -21,21 +24,41 @@ inline Steinberg::tresult readInstrumentParameters(Steinberg::IBStream *stream, 
     if (count == 0 && (result == kResultOk || result == kResultFalse))
     {
         bypass = false;
+        requiresPair = false;
         return kResultOk;
     }
-    const std::array<std::uint8_t, 8> magic{'T', 'L', 'V', 'S', 'T', 'P', '0', '1'};
+    const std::array<std::uint8_t, 7> magic{'T', 'L', 'V', 'S', 'T', 'P', '0'};
     if (result != kResultOk || count != 1 || !readExact(stream, bytes.data() + 1, 11) ||
-        !std::equal(magic.begin(), magic.end(), bytes.begin()) || bytes[8] > 1 || bytes[9] != 0 ||
-        bytes[10] != 0 || bytes[11] != 0)
+        !std::equal(magic.begin(), magic.end(), bytes.begin()) ||
+        (bytes[7] != '1' && bytes[7] != '2') || bytes[8] > 1 || bytes[9] > 1 ||
+        (bytes[7] == '1' && bytes[9] != 0) || bytes[10] != 0 || bytes[11] != 0)
         return kResultFalse;
     bypass = bytes[8] != 0;
+    requiresPair = bytes[9] != 0;
     return kResultOk;
 }
 
-inline Steinberg::tresult writeInstrumentParameters(Steinberg::IBStream *stream, bool bypass)
+inline Steinberg::tresult readInstrumentParameters(Steinberg::IBStream *stream, bool &bypass)
 {
-    std::array<std::uint8_t, 12> bytes{
-        'T', 'L', 'V', 'S', 'T', 'P', '0', '1', static_cast<std::uint8_t>(bypass), 0, 0, 0};
+    bool requiresPair = false;
+    return readInstrumentParameters(stream, bypass, requiresPair);
+}
+
+inline Steinberg::tresult writeInstrumentParameters(Steinberg::IBStream *stream, bool bypass,
+                                                    bool requiresPair = false)
+{
+    std::array<std::uint8_t, 12> bytes{'T',
+                                       'L',
+                                       'V',
+                                       'S',
+                                       'T',
+                                       'P',
+                                       '0',
+                                       '2',
+                                       static_cast<std::uint8_t>(bypass),
+                                       static_cast<std::uint8_t>(requiresPair),
+                                       0,
+                                       0};
     Steinberg::int32 position = 0;
     while (position < static_cast<Steinberg::int32>(bytes.size()))
     {

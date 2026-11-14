@@ -127,6 +127,13 @@ public static partial class NativeEntry
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int RestoreDocumentState(ulong document, byte* state, int length)
+        => RestoreDocumentStateCore(document, state, length, preservePendingEdit: false);
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int RestoreAraDocumentState(ulong document, byte* state, int length)
+        => RestoreDocumentStateCore(document, state, length, preservePendingEdit: true);
+
+    static unsafe int RestoreDocumentStateCore(ulong document, byte* state, int length, bool preservePendingEdit)
     {
         if (length < 0 || (state == null && length != 0))
         {
@@ -138,6 +145,8 @@ public static partial class NativeEntry
             {
                 return 2;
             }
+            if (preservePendingEdit && context.Document.HasUncommittedChanges)
+                return 7;
             try
             {
                 var bytes = length == 0 ? CubaseProjectState.Encode(new NativeProjectFile())

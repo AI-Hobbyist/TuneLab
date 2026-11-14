@@ -7,6 +7,7 @@ using System.Threading;
 using Avalonia.Threading;
 using TuneLab.Data;
 using TuneLab.Foundation;
+using TuneLab.Hosting;
 
 namespace TuneLab.Cubase.Managed;
 
@@ -33,6 +34,8 @@ public static partial class NativeEntry
             return 1;
         }
         *view = 0;
+        if (sPairDocuments.TryGetValue(document, out var endpoint))
+            return CreatePairProxyView(document, endpoint, parent, width, height, view);
         if (!sDocuments.TryGetValue(document, out var context))
         {
             return 2;
@@ -54,7 +57,10 @@ public static partial class NativeEntry
                 {
                     playhead.Pos = quarterNotes * MusicTheory.RESOLUTION;
                 }
-            }, () => PollDocumentStatus(document));
+            }, () => PollDocumentStatus(document),
+                pitch => RequestDocumentKeyPreview(document, pitch, true),
+                () => RequestDocumentKeyPreview(document, -1, false),
+                () => DocumentPairEndpoint(document));
             session.SetPart(context.GetOrCreateEditingPart());
             session.Attach(parent, width, height);
             ulong id = checked((ulong)Interlocked.Increment(ref sNextView));
@@ -84,6 +90,8 @@ public static partial class NativeEntry
 
     static int DestroyViewCore(ulong view)
     {
+        if (sPairViews.ContainsKey(view))
+            return PairProxyViewOperation(view, CubasePairRegistry.DestroyPairView, remove: true);
         if (!Dispatcher.UIThread.CheckAccess())
         {
             return 4;
@@ -112,12 +120,12 @@ public static partial class NativeEntry
         {
             return 1;
         }
-        if (!Dispatcher.UIThread.CheckAccess())
-        {
-            return 4;
-        }
         lock (sLifecycleGate)
         {
+            if (sPairViews.ContainsKey(view))
+                return PairProxyViewOperation(view, lease => CubasePairRegistry.ResizePairView(lease, width, height));
+            if (!Dispatcher.UIThread.CheckAccess())
+                return 4;
             if (!sViews.TryGetValue(view, out var registration))
             {
                 return 2;
@@ -138,12 +146,12 @@ public static partial class NativeEntry
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static int FocusView(ulong view)
     {
-        if (!Dispatcher.UIThread.CheckAccess())
-        {
-            return 4;
-        }
         lock (sLifecycleGate)
         {
+            if (sPairViews.ContainsKey(view))
+                return PairProxyViewOperation(view, CubasePairRegistry.FocusPairView);
+            if (!Dispatcher.UIThread.CheckAccess())
+                return 4;
             if (!sViews.TryGetValue(view, out var registration))
             {
                 return 2;

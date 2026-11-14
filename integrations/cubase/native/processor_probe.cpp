@@ -1,4 +1,5 @@
 #include "instrument_parameters.h"
+#include "pair_endpoint.h"
 #include "pluginterfaces/base/ipluginbase.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
@@ -27,6 +28,9 @@ using namespace Steinberg::Vst;
 class TransportReceiver final : public ComponentBase
 {
   public:
+    std::array<std::uint8_t, 16> endpoint{};
+    bool pairingReceived = false;
+    int64 pairStatus = -1, pairOutput = -1;
     double position = 0;
     bool received = false;
     int64 song = -1, preview = -1, elapsed = 0;
@@ -35,6 +39,20 @@ class TransportReceiver final : public ComponentBase
 
     tresult PLUGIN_API notify(IMessage *message) override
     {
+        if (message && message->getMessageID() &&
+            std::strcmp(message->getMessageID(), "TuneLab.Pairing.State") == 0)
+        {
+            const void *bytes = nullptr;
+            uint32 length = 0;
+            if (message->getAttributes()->getBinary("endpoint", bytes, length) != kResultOk ||
+                length != 16 || !bytes)
+                return kResultFalse;
+            std::copy_n(static_cast<const std::uint8_t *>(bytes), 16, endpoint.data());
+            pairingReceived =
+                message->getAttributes()->getInt("status", pairStatus) == kResultOk &&
+                message->getAttributes()->getInt("projectOutput", pairOutput) == kResultOk;
+            return pairingReceived ? kResultOk : kResultFalse;
+        }
         if (!message || !message->getMessageID() ||
             std::strcmp(message->getMessageID(), "TuneLab.Transport.Position") != 0)
             return kResultFalse;
@@ -436,14 +454,114 @@ int wmain(int argc, wchar_t **argv)
         return 24;
     auto request = owned(Steinberg::Vst::allocateMessage(host));
     request->setMessageID("TuneLab.Transport.Request");
-    if (connection->notify(request) != kResultOk || !transport->received || transport->song != 0 ||
-        transport->preview != 0 || transport->elapsed <= 0)
+    // Editor-state updates above enqueue a new asynchronous whole-score render.
+    // Wait for that real task before asserting its completed status.
+    const auto songDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    do
     {
+        if (connection->notify(request) != kResultOk)
+            return 48;
+        if (transport->song != static_cast<int64>(TuneLab::Cubase::BridgeResult::Busy))
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    } while (std::chrono::steady_clock::now() < songDeadline);
+    if (!transport->received || transport->song != 0 || transport->preview != 0 ||
+        transport->elapsed <= 0)
+    {
+        std::cerr << "Transport preview status: received=" << transport->received
+                  << " song=" << transport->song << " preview=" << transport->preview
+                  << " elapsed=" << transport->elapsed << '\n';
         return 48;
     }
     std::cout << "Live MIDI singing preview cold onset=" << coldPreviewMs
               << "ms; warm cache replay and sample-offset Note Off passed\n";
     context.state = ProcessContext::kPlaying;
+    context.projectTimeSamples = 24000;
+    if (plugin.processor->process(data) != kResultOk ||
+        std::none_of(left.begin(), left.end(), [](float value) { return value != 0; }))
+        return 66;
+    const auto independentLeft = left;
+    auto pairingRequest = owned(Steinberg::Vst::allocateMessage(host));
+    pairingRequest->setMessageID("TuneLab.Pairing.Request");
+    if (connection->notify(pairingRequest) != kResultOk || !transport->pairingReceived ||
+        transport->pairStatus != 0 || transport->pairOutput != 1)
+        return 67;
+    TuneLab::Cubase::ManagedRuntime pairingRuntime;
+    const auto managed =
+        std::filesystem::path(argv[1]).parent_path().parent_path() / L"Resources" / L"managed";
+    TuneLab::Cubase::PairEndpoint companion;
+    if (!pairingRuntime.initialize(managed) || !companion.initialize(pairingRuntime, 2))
+        return 68;
+    auto bind = owned(Steinberg::Vst::allocateMessage(host));
+    bind->setMessageID("TuneLab.Pairing.Bind");
+    bind->getAttributes()->setBinary("bridge", companion.id().data(), 16);
+    transport->pairingReceived = false;
+    if (connection->notify(bind) != kResultOk || !transport->pairingReceived ||
+        transport->pairStatus != 1 || transport->pairOutput != 0 ||
+        plugin.processor->process(data) != kResultOk ||
+        std::any_of(left.begin(), left.end(), [](float value) { return value != 0; }))
+        return 69;
+    MemoryStream pairedSaved;
+    if (plugin.component->getState(&pairedSaved) != kResultOk)
+        return 74;
+    pairedSaved.seek(0, IBStream::kIBSeekSet, nullptr);
+    std::vector<std::uint8_t> pairedScore;
+    bool savedBypass = false, savedIntent = false;
+    if (TuneLab::Cubase::readProjectState(&pairedSaved, pairedScore) != kResultOk ||
+        TuneLab::Cubase::readInstrumentParameters(&pairedSaved, savedBypass, savedIntent) !=
+            kResultOk ||
+        !savedIntent || pairedScore != state)
+        return 75;
+    pairedSaved.seek(0, IBStream::kIBSeekSet, nullptr);
+    if (plugin.component->setState(&pairedSaved) != kResultOk || transport->pairStatus != 2 ||
+        transport->pairOutput != 0 || plugin.processor->process(data) != kResultOk ||
+        std::any_of(left.begin(), left.end(), [](float value) { return value != 0; }))
+        return 76;
+    std::array<std::uint8_t, 16> formerOwner{};
+    std::int32_t formerStatus = -1, formerOutput = -1;
+    if (companion.state(formerOwner, formerStatus, formerOutput) != 0 || formerStatus != 0 ||
+        formerOutput != 1)
+        return 77;
+    const auto restoreDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    do
+    {
+        if (connection->notify(request) != kResultOk)
+            return 78;
+        if (transport->song != static_cast<int64>(TuneLab::Cubase::BridgeResult::Busy))
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    } while (std::chrono::steady_clock::now() < restoreDeadline);
+    if (transport->song != 0 || connection->notify(bind) != kResultOk ||
+        transport->pairStatus != 1 || transport->pairOutput != 0)
+        return 79;
+    std::cout << "Paired component state preserves muted intent, detaches live peer and requires "
+                 "explicit rebind\n";
+    EventList pairedMidi;
+    pairedMidi.addEvent(noteOn);
+    data.inputEvents = &pairedMidi;
+    if (plugin.processor->process(data) != kResultOk ||
+        std::any_of(left.begin(), left.end(), [](float value) { return value != 0; }))
+        return 72;
+    data.inputEvents = nullptr;
+    for (int block = 0; block < 64; ++block)
+        if (plugin.processor->process(data) != kResultOk ||
+            std::any_of(left.begin(), left.end(), [](float value) { return value != 0; }))
+            return 73;
+    transport->pairingReceived = false;
+    companion.reset();
+    if (!transport->pairingReceived || transport->pairStatus != 2 || transport->pairOutput != 0 ||
+        plugin.processor->process(data) != kResultOk ||
+        std::any_of(left.begin(), left.end(), [](float value) { return value != 0; }))
+        return 70;
+    auto unlink = owned(Steinberg::Vst::allocateMessage(host));
+    unlink->setMessageID("TuneLab.Pairing.Unlink");
+    transport->pairingReceived = false;
+    if (connection->notify(unlink) != kResultOk || !transport->pairingReceived ||
+        transport->pairStatus != 0 || transport->pairOutput != 1 ||
+        plugin.processor->process(data) != kResultOk || left != independentLeft)
+        return 71;
+    std::cout << "Actual instrument pairing callback mutes project output, missing peer stays "
+                 "muted, explicit unlink restores cache\n";
     MemoryStream empty;
     TuneLab::Cubase::writeProbeState(&empty);
     empty.seek(0, IBStream::kIBSeekSet, nullptr);
@@ -580,6 +698,13 @@ int wmain(int argc, wchar_t **argv)
         return 53;
     }
     std::cout << "44.1k/64-bit live MIDI singing output and sample-offset Note Off passed\n";
+    pairedSaved.seek(0, IBStream::kIBSeekSet, nullptr);
+    if (second.component->setState(&pairedSaved) != kResultOk ||
+        second.processor->process(secondData) != kResultOk ||
+        std::any_of(secondLeft.begin(), secondLeft.end(), [](double value) { return value != 0; }))
+        return 80;
+    std::cout << "Copied paired state stays muted in an independent instance without auto-claiming "
+                 "a peer\n";
     std::cout << "VST3 processor offline output peak=" << peak
               << "; second instance 44.1k/64-bit peak=" << secondPeak
               << "; controller replay, state, seek/loop, instance isolation and transport polling "
