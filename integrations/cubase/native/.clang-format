@@ -1,0 +1,5 @@
+BasedOnStyle: Microsoft
+ColumnLimit: 100
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: Never
+SortIncludes: CaseSensitive

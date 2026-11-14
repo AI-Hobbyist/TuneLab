@@ -1,0 +1,42 @@
+param(
+    [string]$DotNetRoot = 'C:/Program Files/dotnet',
+    [string]$HostPackVersion = '8.0.6',
+    [string]$HostFxrVersion = '8.0.26'
+)
+
+$ErrorActionPreference = 'Stop'
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+$buildRoot = Join-Path $projectRoot 'out/cubase/m0/native'
+$managedProject = Join-Path $PSScriptRoot 'managed/TuneLab.Cubase.Managed.csproj'
+$managedOutput = Join-Path $PSScriptRoot 'managed/bin/Debug/net8.0'
+$includePath = "$DotNetRoot/packs/Microsoft.NETCore.App.Host.win-x64/$HostPackVersion/runtimes/win-x64/native"
+$logPath = Join-Path $projectRoot 'build.log'
+
+function Invoke-Checked {
+    param([string]$Command, [string[]]$Arguments)
+
+    & $Command @Arguments 2>&1 | Tee-Object -FilePath $logPath -Append
+    $buildExitCode = $LASTEXITCODE
+    if ($buildExitCode -ne 0) {
+        Get-Content $logPath -Tail 40
+        throw "Command failed with exit code ${buildExitCode}: $Command"
+    }
+}
+
+Set-Content -LiteralPath $logPath -Value 'TuneLab native/managed host verification'
+Invoke-Checked 'dotnet' @('build', $managedProject, '-c', 'Debug')
+Invoke-Checked 'cmake' @(
+    '-S', "$PSScriptRoot/native", '-B', $buildRoot,
+    '-G', 'Visual Studio 18 2026', '-A', 'x64',
+    "-DDOTNET_HOST_INCLUDE=$includePath"
+)
+Invoke-Checked 'cmake' @(
+    '--build', $buildRoot, '--config', 'Debug', '--parallel', '1',
+    '--', '/nodeReuse:false'
+)
+Invoke-Checked "$buildRoot/Debug/tunelab_host_probe.exe" @(
+    "$DotNetRoot/host/fxr/$HostFxrVersion/hostfxr.dll",
+    "$managedOutput/TuneLab.Cubase.Managed.runtimeconfig.json",
+    "$managedOutput/TuneLab.Cubase.Managed.dll"
+)
+Invoke-Checked "$buildRoot/Debug/tunelab_state_probe.exe" @()
