@@ -104,6 +104,11 @@ internal class ParameterTabBar : Panel
 
     ~ParameterTabBar()
     {
+        Detach();
+    }
+
+    public void Detach()
+    {
         s.DisposeAll();
         mDependency.ActiveAutomationChanged -= SyncAutomationButtonsState;
         mDependency.VisibleAutomationChanged -= SyncAutomationButtonsState;

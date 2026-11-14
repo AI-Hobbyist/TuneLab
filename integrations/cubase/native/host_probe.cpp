@@ -62,5 +62,32 @@ int wmain(int argc, wchar_t **argv)
     auto getVersion = reinterpret_cast<TuneLab::Cubase::GetAbiVersion>(entry);
     const int version = getVersion();
     std::cout << "Managed ABI version: " << version << '\n';
-    return version == TuneLab::Cubase::managedAbiVersion ? 0 : 7;
+    if (version != TuneLab::Cubase::managedAbiVersion)
+    {
+        return 7;
+    }
+    void* createEntry = nullptr;
+    void* destroyEntry = nullptr;
+    const auto typeName = L"TuneLab.Cubase.Managed.NativeEntry, TuneLab.Cubase.Managed";
+    if (load(argv[3], typeName, L"CreateDocument", UNMANAGEDCALLERSONLY_METHOD, nullptr,
+             &createEntry) != 0 ||
+        load(argv[3], typeName, L"DestroyDocument", UNMANAGEDCALLERSONLY_METHOD, nullptr,
+             &destroyEntry) != 0)
+    {
+        return 8;
+    }
+    auto create = reinterpret_cast<TuneLab::Cubase::CreateDocument>(createEntry);
+    auto destroy = reinterpret_cast<TuneLab::Cubase::DestroyDocument>(destroyEntry);
+    TuneLab::Cubase::DocumentHandle first = 0;
+    TuneLab::Cubase::DocumentHandle second = 0;
+    if (create(&first) != 0 || create(&second) != 0 || first == 0 || first == second)
+    {
+        return 9;
+    }
+    if (destroy(first) != 0 || destroy(first) != 2 || destroy(second) != 0)
+    {
+        return 10;
+    }
+    std::cout << "Two document handles created and released independently\n";
+    return 0;
 }

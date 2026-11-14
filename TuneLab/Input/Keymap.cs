@@ -61,14 +61,15 @@ internal static class Keymap
     // 注册一条**可绑动作**：动作本体进 ActionRegistry（穷尽面），可绑那一半（手势 + 作用域）留在这里。
     // 两件事一次做完，故不会出现"注册了动作却忘了让它可绑"或反之的半截状态；二期按面补动作时，
     // 只进穷尽面、不给手势的那些直接调 ActionRegistry.Register。
-    public static void Register(EditorAction action, KeyScope scope, KeyBinding? defaultGesture = null)
+    public static void Register(EditorAction action, KeyScope scope, KeyBinding? defaultGesture = null,
+        EditorActionCollection? actions = null)
     {
         // 带【必填选择器参数】的动作不可绑：一条绑定只有手势、没有参数，按下去无从知道要作用在哪个成员上。
         // "绑定携带参数"是 v2 的事（docs/keybinding-system.md §10），届时改这里与存储、不改动作那一侧。
         // 带【可选修饰符参数】的可以绑：手势路径不带参数，走那条缺省行为（见 ActionParameter.Optional）。
         Debug.Assert(action.Parameter is null or { Optional: true },
             "An action with a required selector parameter cannot be bound to a gesture (id: " + action.Id + ")");
-        ActionRegistry.Register(action);
+        (actions ?? ActionRegistry.Default).Register(action);
         mBindings[action.Id] = new() { ActionId = action.Id, Scope = scope, DefaultGesture = defaultGesture };
         mIndex = null;
     }
@@ -153,11 +154,15 @@ internal static class Keymap
     // 在 scope 下按 e 的手势找命中的绑定并触发那条动作；命中返回 true（调用方据此置 e.Handled）。
     // 【手势命中即吞键】哪怕动作此刻不可用（撤销栈空、两个编辑面都没焦点…）：与从前"Execute 内部守卫
     // 直接 return、键仍算处理过"逐字等价，只是判据搬到了 ActionRegistry 一处。
-    public static bool TryHandle(KeyScope scope, KeyEventArgs e)
+    public static bool TryHandle(KeyScope scope, KeyEventArgs e, EditorActionCollection? actions = null)
     {
         if (Index().TryGetValue((scope, new KeyBinding(e.Key, e.KeyModifiers & KeyBinding.ModifierMask)), out var entry))
         {
-            ActionRegistry.Execute(entry.ActionId);
+            if (actions != null && !actions.TryGet(entry.ActionId, out _))
+            {
+                return false;
+            }
+            (actions ?? ActionRegistry.Default).Execute(entry.ActionId);
             return true;
         }
         return false;

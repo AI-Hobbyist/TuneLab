@@ -156,11 +156,32 @@ internal partial class PianoScrollView : View, IPianoScrollView
 
     ~PianoScrollView()
     {
+        DetachSubscriptions();
+    }
+
+    public void Detach()
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        DetachSubscriptions();
+        mSynthesisHoverTimer?.Stop();
+        mSynthesisShimmerTimer?.Stop();
+        mTooltipFadeTimer?.Stop();
+        mSynthesisCopyTimer?.Stop();
+        mPortrait?.Dispose();
+        mPortrait = null;
+        mBackground?.Dispose();
+        mBackground = null;
+    }
+
+    void DetachSubscriptions()
+    {
         s.DisposeAll();
         TickAxis.AxisChanged -= Update;
         PitchAxis.AxisChanged -= Update;
         Quantization.QuantizationChanged -= InvalidateVisual;
         PitchButton.StateChanged -= InvalidateVisual;
+        TickAxis.AxisChanged -= InvalidateArrange;
+        PitchAxis.AxisChanged -= InvalidateArrange;
     }
 
     void OnSynthesisStatusChanged()

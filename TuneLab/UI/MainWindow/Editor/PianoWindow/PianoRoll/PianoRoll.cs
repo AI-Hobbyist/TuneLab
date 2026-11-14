@@ -34,6 +34,11 @@ internal partial class PianoRoll : View
 
     ~PianoRoll()
     {
+        Detach();
+    }
+
+    public void Detach()
+    {
         PitchAxis.AxisChanged -= InvalidateVisual;
     }
 

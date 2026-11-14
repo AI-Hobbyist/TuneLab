@@ -1,6 +1,7 @@
 #include "ARA_API/ARAVST3.h"
 #include "ara_document.h"
 #include "probe_state.h"
+#include "editor_controller.h"
 #include "public.sdk/source/main/pluginfactory.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
@@ -123,7 +124,7 @@ IMPLEMENT_FUNKNOWN_METHODS(MainFactory, ARA::IMainFactory, ARA::IMainFactory::ii
 
 FUnknown *createController(void *)
 {
-    return static_cast<IEditController *>(new EditController());
+    return static_cast<IEditController *>(new TuneLab::Cubase::EditorController());
 }
 } // namespace
 

@@ -1,4 +1,5 @@
 #include "probe_state.h"
+#include "editor_controller.h"
 #include "public.sdk/source/main/pluginfactory.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
@@ -72,7 +73,7 @@ class InstrumentProbe final : public AudioEffect
 
 FUnknown *createController(void *)
 {
-    return static_cast<IEditController *>(new EditController());
+    return static_cast<IEditController *>(new TuneLab::Cubase::EditorController());
 }
 } // namespace
 

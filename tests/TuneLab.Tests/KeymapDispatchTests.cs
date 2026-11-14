@@ -19,6 +19,44 @@ public class ActionRegistryCollection { }
 [Collection("ActionRegistry")]
 public class KeymapDispatchTests
 {
+    [Fact]
+    public void SharedGestureDispatchesToTheRequestedInstance()
+    {
+        const string id = "test.dispatch.local-instance";
+        var first = new EditorActionCollection();
+        var second = new EditorActionCollection();
+        int firstCount = 0;
+        int secondCount = 0;
+        EditorAction MakeAction(System.Action execute) => new()
+        {
+            Id = id,
+            DisplayName = () => id,
+            Kind = ActionKind.AppState,
+            Execute = execute
+        };
+
+        try
+        {
+            Keymap.Register(MakeAction(() => firstCount++), KeyScope.PianoWindow, new(Key.F9), first);
+            Keymap.Register(MakeAction(() => secondCount++), KeyScope.PianoWindow, new(Key.F9), second);
+
+            Assert.False(ActionRegistry.TryGet(id, out _));
+            Assert.True(Keymap.TryHandle(KeyScope.PianoWindow, Press(Key.F9), first));
+            Assert.Equal(1, firstCount);
+            Assert.Equal(0, secondCount);
+            Assert.True(Keymap.TryHandle(KeyScope.PianoWindow, Press(Key.F9), second));
+            Assert.Equal(1, secondCount);
+            first.Clear();
+            Assert.False(Keymap.TryHandle(KeyScope.PianoWindow, Press(Key.F9), first));
+            Assert.True(Keymap.TryHandle(KeyScope.PianoWindow, Press(Key.F9), second));
+            Assert.Equal(2, secondCount);
+        }
+        finally
+        {
+            Keymap.Unregister(id);
+        }
+    }
+
     static KeyEventArgs Press(Key key, KeyModifiers modifiers = KeyModifiers.None)
         => new() { Key = key, KeyModifiers = modifiers };
 

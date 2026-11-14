@@ -1,37 +1,38 @@
 # 当前任务交接
 
-更新时间：2026-11-14。持续目标已激活，分支 cubase_16_full_ara。
+更新时间：2026-11-14。持续目标 ACTIVE，分支 cubase_16_full_ara。
 
-## 阶段状态
+## 当前阶段与完成状态
 
-M0 自主实施与自动验证完成；真实 Cubase/V7/GUI 项全部 SKIPPED（用户决定，未执行，需人工验证），不作为阶段门槛。正式计划 docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md，证据与限制 docs/cubase-m0-baseline.md。M1 尚未开始，必须确认 M0 检查点推送成功再实施。
+M0 已完成并推送 f2f51b2a。M1 自主实施与非 GUI 自动验证完成，本次准备单独检查点提交并推送；须实际确认上游同步后再进入 M2。M2–M6 尚未开始。正式计划：docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md；M0 证据：docs/cubase-m0-baseline.md。
 
-## 已完成与验证
+M1 实现：双 VST3 controller 返回 HWND IPlugView；首次附着加载 CLR，包内 Contents/Resources/managed 定位托管程序集和 nethost.dll；构建每次复制托管输出，避免包内旧副本。私有 ABI 提供文档创建/销毁、视图创建/销毁、尺寸与焦点。CLR 进程常驻，不尝试卸载。
 
-- integrations/cubase 下有独立 VSTi3、ARA Bridge 标准 bundle 探针；静音，仅发现/生命周期，不是产品。
-- verify-sdk.ps1：SDK 示例构建、内容读取与播放渲染通过。
-- verify-host.ps1：两插件 validator 各 47/0、hostfxr ABI 1、state 正常往返及截断/未知版本拒绝，通过。
-- verify-bridge.ps1：属性、内容通知、modification 克隆、EditorView 协议通知、空文档版本标记归档，通过。
-- Avalonia 11.3.15 嵌入根入口仅编译通过，没有创建窗口。所有测试在前台 Tee-Object 记录，退出码均 0。
-- 原 ARA 示例自动部署故障已通过 ARA_SETUP_DEBUGGING=OFF 解决；缺 InitDll 已补 SDK dllmain；无活跃构建会话。
-- 用户已明确选择 fu2_ning2_na4 仅本机测试，不分发。实际目录 D:/AI-Tools/OpenUtau/Singers/fu2_ning2_na4-DiffSinger/fu2_ning2_na4，自带 vocoder；使用已有 DiffSinger 1.0.0 扩展，保留运行设备配置。
+每实例持独立 ProjectDocument；视图绑定所属 MIDI part，重复获取保留编辑对象与历史。视图/控制器共享原生文档所有权，关闭视图不销毁 controller 文档。局部 EditorActionCollection 保留独立版全局 facade；钢琴窗动作、撤销/重做及剪贴板快捷键路由本视图。波形显隐、参数高度局部保存；用户偏好仍共享。关闭视图主动退订、停计时器、释放图像/嵌入根；成功清理后移除句柄。未更改 SDK/Foundation 公共 API。
 
-## 未实现与证据缺口
+## 验证结果与证据边界
 
-完整编辑器附着、多实例、工程数据归档、引擎合成、缓存/播放、歌词同步、部署尚未实现。当前 archive/state 只有版本标记。VST3 NoteExpressionTextEvent 是公开候选，Cubase Key Editor 供给未证实；禁止虚构 kARAContentTypeLyrics 或用模拟事件宣称真实链路通过。实际声库渲染与确定性未测，后续 M2 执行，不重复询问声库选择。
+- 相关 ActionCommands/KeymapDispatch/EditorActionCollection/CubaseDocumentContext 回归：59/59 PASS，m1-regression.log。
+- legacy compat 测试：13/13 PASS，已实际 restore/test，不以无测试输出的 no-restore 返回值作为证据。
+- verify-host.ps1：退出 0；双 validator 各 47/0；ABI 1、双文档释放、state 正常往返与拒绝未知版本/截断、三处 runtime 入口解析/文档释放 PASS，host-verification.log。
+- view_protocol_probe：平台/无效父句柄、尺寸/焦点转发、移除失败重试、重复移除及所有权 PASS。使用测试回调，不创建 HWND，不证明真实 GUI。
+- 托管集成构建 PASS。git diff --check PASS。存在原有 Cbor 8.0.0 NU1902 和编译警告，未扩大范围修复。
+- 真实 Cubase/V7/GUI、IME、DPI、窗口焦点、关闭再打开、错误线程析构、安装：全部 SKIPPED（用户决定，未执行，需人工验证）。不得记 PASS，不等待或作为 blocked。
 
-## Git 与文件
+## 尚未完成与实际下一步
 
-M0 探针进展提交 4f6a884b 已推送；当前 M0 收尾修改包含私有 managed_abi.h、host_probe、计划和基线记录，本文件随正式检查点提交。最终提交号和上游同步以 Git 为准。开始时已有 .gitignore 修改、未跟踪 .codegraph/ 和三份 docs 集成参考，均保留，不提交。out/ 是本次构建产物，不提交。
+M1 还需本轮检查点提交/推送确认。随后开始 M2：先用现有引擎和指定声库跑本机非 GUI 歌声渲染，建立输出/缓存/取消基线；实现双插件内引擎与歌手选择入口、实例 SoundSource 选择和稳定标识恢复；接通 MIDI/参数/宿主时间、合成缓存与音频输出、完整 component state。再按计划进入 M3 ARA 数据/渲染、M4 嵌入体验、M5 歌词协议、M6 部署交付。
 
-## 下一步
+双插件当前仍为静音探针，state/archive 只有版本标记。控制器文档尚未与 processor/ARA 文档关联，属于后续闭环工作。Cubase Key Editor 歌词实际供给未证实：VST3 NoteExpressionTextEvent 是候选；不存在可据以承诺公开协议的 kARAContentTypeLyrics。不能用自有消息或模拟事件宣称宿主链路通过。
 
-1. 检查 diff/空白并提交推送 M0 正式检查点，确认 HEAD 与上游一致。
-2. 读取 M1 所涉及 Editor/PianoWindow/工程上下文的 CodeGraph，先建立实例隔离与确定性释放，不进行全仓重构。
-3. 实现后按阶段运行非 GUI 验证，更新记录，单独提交推送，再进入 M2。
+用户明确要求插件内可选引擎与歌手，VSTi3 与 ARA Bridge 均实现；复用引擎声库枚举，修改当前实例/part，保存稳定标识、显示缺失/错误，不硬编码唯一声库。新增 API 必须可选，通过能力检测或 DIM 默认体，不影响已有引擎加载合成，保持已发布 ABI。
+
+本机测试声库：D:/AI-Tools/OpenUtau/Singers/fu2_ning2_na4-DiffSinger/fu2_ning2_na4，仅本机测试不分发；已有 APPDATA TuneLab Extensions 中 DiffSinger 1.0.0 legacy sdk 1.0，保留运行设备设置，自带 44100/hop512/128mel vocoder。无需再次询问声库。
+
+## Git 与工作区
+
+M1 修改集中于 TuneLab/Hosting、Input、PianoWindow/清理入口、integrations/cubase、相关测试及计划/本手册。预存 .gitignore 修改、未跟踪 .codegraph/、三份 docs 参考均保留且不提交；out/ 为构建产物不提交。提交号、推送状态以 git log/status/rev-parse 的检查点结果为准。
 
 ## 必须遵守
 
-用户最新要求：若补充 TuneLab API，必须作为可选能力，不影响已有引擎。优先可选接口，已有插件实现接口新增成员给 DIM 默认体；能力检测后启用，验证未实现新 API 的旧引擎仍可加载合成。遵守公共 ABI 演进登记，不改已发布签名。
-
-优先主仓及 SDK 各自 CodeGraph；冻结 SDK/Foundation 公共 ABI；保留独立版行为和用户修改。所有 GUI/实机验证默认跳过，不启动、不反复申请、不等待、不作为 blocked；跳过不记 PASS。禁止 Qt offscreen。构建/测试/打包前台 PowerShell、Tee-Object build.log、立即检查退出码。阶段按序检查点提交推送；分支禁止 codex/ 前缀。SDK 目录是 E 盘符号链接，受限环境部分进程通信/网络需正常权限，已验证使用单节点 MSBuild /nodeReuse:false。
+优先主仓及 third_party SDK 各自 CodeGraph。阶段按 M0→M6，单独提交推送确认再开始下一阶段。禁止 codex/ 前缀。保留用户修改，不扩大范围，不改冻结 SDK/Foundation 已发布签名。所有 GUI/实机验收跳过并注明；禁止 Qt offscreen。所有构建测试打包在前台 PowerShell Tee-Object 保存 build.log，并立即检查退出码。MSBuild 使用单节点 /nodeReuse:false；正常网络/进程通信需要时可申请相应执行权限。可靠额度最近检查周池已用 46%，未达预警；不得猜测后续额度。

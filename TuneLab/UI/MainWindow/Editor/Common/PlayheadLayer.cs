@@ -30,6 +30,11 @@ internal class PlayheadLayer : Component
 
     ~PlayheadLayer()
     {
+        Detach();
+    }
+
+    public void Detach()
+    {
         Playhead.PosChanged.Unsubscribe(InvalidateVisual);
         TickAxis.AxisChanged -= InvalidateVisual;
     }

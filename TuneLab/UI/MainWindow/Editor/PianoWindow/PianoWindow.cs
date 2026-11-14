@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -29,7 +29,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
     public IActionEvent WaveformBottomChanged => mWaveformBottomChanged;
     public IActionEvent WaveformVisibleChanged => mWaveformVisibleChanged;
     public IActionEvent ParameterPanelVisibilityChanged => mParameterPanelVisibilityChanged;
-    public bool IsWaveformVisible => EditorState.WaveformVisible.Value;
+    public bool IsWaveformVisible => mPersistViewState ? EditorState.WaveformVisible.Value : mWaveformVisible;
     // 参数区是否显示着（Ctrl+P 藏起来的就是不显示；各面板自己收起与否不算）。
     public bool IsParameterPanelVisible => !mAreaHidden;
     // 报给外部的面板列表（`editor status`），自上而下。
@@ -65,9 +65,13 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         INotifiableProperty<PlayScrollTarget> PlayScrollTarget { get; }
     }
 
-    public PianoWindow(IDependency dependency)
+    public PianoWindow(IDependency dependency, EditorActionCollection? actions = null,
+        bool persistViewState = true)
     {
         mDependency = dependency;
+        mActions = actions ?? ActionRegistry.Default;
+        mPersistViewState = persistViewState;
+        mWaveformVisible = EditorState.WaveformVisible.Value;
 
         mTickAxis = new TickAxis();
         mPitchAxis = new PitchAxis();
@@ -152,6 +156,35 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         s.DisposeAll();
     }
 
+    // Called by the embedded view owner on the UI thread, independently of the document.
+    public void Detach()
+    {
+        if (mDetached)
+        {
+            return;
+        }
+        mDetached = true;
+        mPartHolder.Set(null);
+        s.DisposeAll();
+        mPlayheadLayer.Detach();
+        mPianoRoll.Detach();
+        mPianoScrollView.Detach();
+        mParameterTabBar.StateChangeAsked -= OnParameterTabBarStateChangeAsked;
+        mParameterTabBar.Detach();
+        foreach (var panel in mPanels)
+        {
+            panel.Detach();
+        }
+        foreach (var action in mOwnedActions)
+        {
+            if (mActions.TryGet(action.Id, out var registered) && ReferenceEquals(action, registered))
+            {
+                mActions.Unregister(action.Id);
+            }
+        }
+        mOwnedActions.Clear();
+    }
+
     public bool IsAutomationVisible(AutomationKey automation) => FocusedPanel.IsAutomationVisible(automation);
 
     // 合成参数回显轨声明（只读轨集合，按 AutomationKey 分源合并 voice + 各 effect）：各面板共用，显隐由各面板自己管。
@@ -178,10 +211,17 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
 
     public void SetWaveformVisible(bool isVisible)
     {
-        if (EditorState.WaveformVisible.Value == isVisible)
+        if (IsWaveformVisible == isVisible)
             return;
 
-        EditorState.WaveformVisible.Value = isVisible;
+        if (mPersistViewState)
+        {
+            EditorState.WaveformVisible.Value = isVisible;
+        }
+        else
+        {
+            mWaveformVisible = isVisible;
+        }
         mWaveformVisibleChanged.Invoke();
     }
 
@@ -197,7 +237,11 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         if (PianoScrollView.OperationState != PianoScrollView.State.None)
             return;
 
-        e.Handled = Keymap.TryHandle(KeyScope.PianoWindow, e);
+        e.Handled = Keymap.TryHandle(KeyScope.PianoWindow, e, mActions);
+        if (!e.Handled && !ReferenceEquals(mActions, ActionRegistry.Default))
+        {
+            e.Handled = Keymap.TryHandle(KeyScope.Editor, e, mActions);
+        }
     }
 
     // PianoWindow 作用域的内置动作（钢琴窗专属：移调 / 八度）。剪贴板类动词（复制/剪切/粘贴/删除/全选）
@@ -207,13 +251,25 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         // 域 = 功能身份（note 音符级操作），非分发作用域（虽在 PianoWindow 分发）。见 docs/keybinding-system.md §1.1。
         // 四条都改音符音高、进撤销栈 → ProjectEdit；可用性判据（有没有 part、选中了没有）与 ChangeKey
         // 从前的内部守卫同一份，见 PianoScrollView.TransposeUnavailable。
-        Keymap.Register(Transpose("note.octaveUp", () => "Octave Up".Tr(TC.Menu), +12), KeyScope.PianoWindow, new(Key.Up, KeyModifiers.Shift));
-        Keymap.Register(Transpose("note.octaveDown", () => "Octave Down".Tr(TC.Menu), -12), KeyScope.PianoWindow, new(Key.Down, KeyModifiers.Shift));
-        Keymap.Register(Transpose("note.transposeUp", () => "Semitone Up".Tr(TC.Menu), +1), KeyScope.PianoWindow, new(Key.Up));
-        Keymap.Register(Transpose("note.transposeDown", () => "Semitone Down".Tr(TC.Menu), -1), KeyScope.PianoWindow, new(Key.Down));
+        RegisterKeyAction(Transpose("note.octaveUp", () => "Octave Up".Tr(TC.Menu), +12), KeyScope.PianoWindow, new(Key.Up, KeyModifiers.Shift));
+        RegisterKeyAction(Transpose("note.octaveDown", () => "Octave Down".Tr(TC.Menu), -12), KeyScope.PianoWindow, new(Key.Down, KeyModifiers.Shift));
+        RegisterKeyAction(Transpose("note.transposeUp", () => "Semitone Up".Tr(TC.Menu), +1), KeyScope.PianoWindow, new(Key.Up));
+        RegisterKeyAction(Transpose("note.transposeDown", () => "Semitone Down".Tr(TC.Menu), -1), KeyScope.PianoWindow, new(Key.Down));
 
         RegisterParameterPanelActions();
         RegisterPanelStackActions();
+    }
+
+    void RegisterKeyAction(EditorAction action, KeyScope scope, TuneLab.GUI.Input.KeyBinding? gesture)
+    {
+        Keymap.Register(action, scope, gesture, mActions);
+        mOwnedActions.Add(action);
+    }
+
+    void RegisterAction(EditorAction action)
+    {
+        mActions.Register(action);
+        mOwnedActions.Add(action);
     }
 
     // 一条移调动作。带一个**可选修饰符参数**（动作面上第一个，见 TuneLab.Input.ActionParameter.Optional）：
@@ -258,7 +314,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         // ── 合成参数轨（引擎产物、只读）的显隐：与标题栏那排 chip 是同一件事（同一个
         // SetSynthesizedParameterVisible）。改的是编辑器自身的显示状态（内存集合，不随工程保存、
         // 撤销栈里没有它）→ AppState、不过闸门。
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "parameter.showSynthesizedTrack",
             DisplayName = () => "Show Synthesized Parameter Track".Tr(TC.Menu),
@@ -272,7 +328,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
                 Execute = token => FocusedPanel.SetSynthesizedParameterVisible(ParseTrackToken(token), true),
             },
         });
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "parameter.hideSynthesizedTrack",
             DisplayName = () => "Hide Synthesized Parameter Track".Tr(TC.Menu),
@@ -292,7 +348,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         // 【为什么仍是 AppState】它写钉选存储（Configs/ParameterPins.json），但那是**界面自身状态的持久化**
         // ——同 view.toggleWaveform 写 EditorState.json，不是 Destructive 说的"往磁盘写文件"（那一档指的是
         // 写用户的文档或任意路径的文件）。分档判据没变：用户一眼看得见（参数栏多/少一条 tab）、自己就能改回来。
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "parameter.pinProperty",
             DisplayName = () => "Edit in Parameter Panel".Tr(TC.Menu),
@@ -306,7 +362,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
                 Execute = token => SetPinned(token, true),
             },
         });
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "parameter.unpinProperty",
             DisplayName = () => "Remove from Parameter Panel".Tr(TC.Menu),
@@ -329,14 +385,14 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
     // 不给就作用于焦点面板（右键「+」关的也是它）；聚焦必须说是哪块。
     void RegisterPanelStackActions()
     {
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "view.showParameterPanel",
             DisplayName = () => "Show Parameter Panel".Tr(TC.Menu),
             Kind = ActionKind.AppState,
             Execute = () => SetParameterAreaHidden(false),
         });
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "view.hideParameterPanel",
             DisplayName = () => "Hide Parameter Panel".Tr(TC.Menu),
@@ -345,7 +401,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         });
         // 照着焦点面板加一块、插在它下方并获得焦点（同标签栏的「+」）。参数区藏着时先显示出来——
         // 与「+」不同（藏着时点「+」只是唤醒）：动作说的是"加一块"，就该真加一块。
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "view.addParameterPanel",
             DisplayName = () => "Add Parameter Panel".Tr(TC.Menu),
@@ -356,7 +412,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
                 InsertPanelAfterFocused();
             },
         });
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "view.closeParameterPanel",
             DisplayName = () => "Close Panel".Tr(TC.Menu),
@@ -365,7 +421,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
             Execute = () => ClosePanel(FocusedPanel),
             Parameter = PanelParameter(panel => ClosePanel(panel), optional: true, "closes the focused panel"),
         });
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "view.collapseParameterPanel",
             DisplayName = () => "Collapse Panel".Tr(TC.Menu),
@@ -373,7 +429,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
             Execute = () => SetPanelCollapsed(FocusedPanel, true),
             Parameter = PanelParameter(panel => SetPanelCollapsed(panel, true), optional: true, "collapses the focused panel"),
         });
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "view.expandParameterPanel",
             DisplayName = () => "Expand Panel".Tr(TC.Menu),
@@ -381,7 +437,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
             Execute = () => SetPanelCollapsed(FocusedPanel, false),
             Parameter = PanelParameter(panel => SetPanelCollapsed(panel, false), optional: true, "expands the focused panel"),
         });
-        ActionRegistry.Register(new()
+        RegisterAction(new()
         {
             Id = "view.focusParameterPanel",
             DisplayName = () => "Focus Panel".Tr(TC.Menu),
@@ -829,12 +885,21 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
     // 本机记的参数栏高度：只作新面板堆（新工程、不带布局的工程）里第一块面板的默认高度。
     double GetStoredParameterHeight()
     {
+        if (!mPersistViewState)
+        {
+            return mParameterHeight;
+        }
         double height = EditorState.MainWindowMaximized ? EditorState.ParameterPanelHeightMaximized : EditorState.ParameterPanelHeightNormal;
         return height < 1 ? EditorState.Defaults.ParameterPanelHeight : height;
     }
 
     void StoreParameterHeight(double height)
     {
+        if (!mPersistViewState)
+        {
+            mParameterHeight = height;
+            return;
+        }
         EditorState.ParameterPanelHeight.Value = height;
         if (TopLevel.GetTopLevel(this) is Window { WindowState: WindowState.Maximized })
         {
@@ -871,6 +936,9 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
     readonly List<ParameterPanel> mPanels = new();
     int mFocusedIndex;
     bool mAreaHidden;
+    readonly bool mPersistViewState;
+    bool mWaveformVisible;
+    double mParameterHeight = EditorState.Defaults.ParameterPanelHeight;
     // 等 part 打开再还原的布局（见 RestoreParameterLayout）。
     (IReadOnlyList<ParameterPanelInfo> Panels, int Focused)? mPendingParameterLayout;
     ParameterPanel FocusedPanel => mPanels[mFocusedIndex];
@@ -923,4 +991,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
     readonly Holder<IMidiPart> mPartHolder = new();
 
     readonly IDependency mDependency;
+    readonly EditorActionCollection mActions;
+    readonly List<EditorAction> mOwnedActions = new();
+    bool mDetached;
 }

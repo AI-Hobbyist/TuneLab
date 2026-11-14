@@ -40,3 +40,9 @@ Invoke-Checked "$buildRoot/Debug/tunelab_host_probe.exe" @(
     "$managedOutput/TuneLab.Cubase.Managed.dll"
 )
 Invoke-Checked "$buildRoot/Debug/tunelab_state_probe.exe" @()
+Invoke-Checked "$buildRoot/Debug/tunelab_view_protocol_probe.exe" @()
+Invoke-Checked "$buildRoot/Debug/tunelab_runtime_probe.exe" @($managedOutput)
+foreach ($pluginName in @('TuneLabInstrumentProbe', 'TuneLabBridgeProbe')) {
+    $bundleManaged = "$buildRoot/VST3/Debug/$pluginName.vst3/Contents/Resources/managed"
+    Invoke-Checked "$buildRoot/Debug/tunelab_runtime_probe.exe" @($bundleManaged)
+}
