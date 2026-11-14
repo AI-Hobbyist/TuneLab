@@ -1,6 +1,6 @@
 # TuneLab 深度集成 Cubase 16 的 S3+ 路线 B 实施计划
 
-日期：2026-11-15。状态：实施中，M0–M3已完成并推送；M4自主实施与非GUI验收完成，待提交推送检查点；M5–M6未开始。
+日期：2026-11-15。状态：实施中，M0–M4已完成自主实施、非GUI验收及推送检查点；M5–M6未开始，完整S3+目标仍ACTIVE。
 
 本计划交付两个插件：**TuneLab VST3 Instrument（VSTi3）**和 **TuneLab ARA Bridge**。采用路线 B，在 Cubase 进程内通过原生 C++ 插件壳加载 .NET 与 Avalonia，复用 TuneLab 钢琴窗，使其既能嵌入 VST3 插件界面，也能通过 ARA 工作流进入 Cubase Extension 编辑器。最终目标是 S3+，包括 Cubase Key Editor 歌词输入同步、合成播放、编辑和工程恢复。
 
@@ -288,8 +288,8 @@ GUI 验证当前默认跳过。只有用户后续明确要求执行时，才采�
 | M1 共享运行层与嵌入骨架 | 自主实施/自动验证完成，1cb004e1已推送；真实GUI SKIPPED |
 | M2 VSTi3完整闭环 | 自主实施与本阶段非GUI自动验收完成；9b1ec329已推送且HEAD/上游一致，见 [M2验收记录](cubase-m2-validation.md) |
 | M3 ARA Bridge闭环 | 自主实施/非GUI验收及推送检查点完成，功能提交32433224；见 [M3验收记录](cubase-m3-validation.md)；GUI SKIPPED |
-| M4 双容器钢琴窗 | 自主实施/非GUI验收完成，待独立提交推送检查点；见 [M4验收记录](cubase-m4-validation.md) |
-| M5–M6 | NOT STARTED，M4检查点确认后按原顺序推进 |
+| M4 双容器钢琴窗 | 自主实施/非GUI验收及推送检查点完成，功能提交78c7f251；见 [M4验收记录](cubase-m4-validation.md) |
+| M5–M6 | NOT STARTED，M4检查点已确认，按原顺序推进 |
 
 M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy歌声引擎复用、完整版本化component state和Bypass参数状态、controller文档快照消息/恢复、异步代次缓存、整曲宿主播放和离线process、MIDI短音歌声缓存试听、样本级NoteOff/Bypass、float/double、状态反馈，以及当前块时间信息接收。
 
@@ -392,3 +392,7 @@ M4仍 IN PROGRESS。静态已确认音符/颤音选择旗标位于共享模型�
 ### M4 最终自主验收（2026-11-15）
 
 双容器编辑工具、显式实例选择、局部菜单/脚本上下文、内嵌参数与批量歌词表单、焦点与缩放接口和释放路径已完成本阶段实施。完整解决方案构建0错误，主855/855、legacy13/13，最新插件包完整verify-host退出0、ABI16、双validator各47/0及跨包所有权/缩放协议通过。逐项证据与人工SKIPPED边界见[cubase-m4-validation.md](cubase-m4-validation.md)。M4自主实施/非GUI验收完成，当前只执行独立提交推送检查点；确认远端后才进入M5。未把TuneLab内部歌词编辑称作Cubase原生歌词同步，完整S3+目标仍ACTIVE。
+
+### M4 Git检查点（2026-11-15）
+
+功能提交 78c7f251deb71e3b6cc1e2d413dd6fd57d724f2a 已独立提交并推送 origin/cubase_16_full_ara，ls-remote 已返回相同 SHA，上游同名。M4 阶段完成；本次仅补记检查点文档，没有新增实施变化。保留用户原有 .gitignore、.codegraph、out 和三份参考文档。确认本次文档推送后进入 M5，完整 S3+ 仍未完成，人工项继续 SKIPPED。

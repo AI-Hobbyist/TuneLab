@@ -6,7 +6,7 @@
 
 - 原目标不变：按 docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md 的 M0→M6 交付 VSTi3 + ARA Bridge、进程内钢琴窗、合成/时间/音符/歌词关联、工程恢复与发布材料，最终 S3+ 尚未完成。
 - M0–M3 已完成自主实施与非 GUI 验收并推送。M3 功能提交 32433224c724b404866ef113f2ad4b5ec7fbac7f，文档补记 ae7cf2bb2cad11379c52b510d9362b81cf0a2f74，均已在此前实际确认远端一致。
-- M4 双容器钢琴窗已完成本阶段自主实施与非 GUI 验收。当前正执行单独提交/推送检查点，尚未提交本阶段；确认推送成功后才进入 M5。
+- M4 双容器钢琴窗已完成自主实施、非 GUI 验收和阶段检查点；功能提交 78c7f251deb71e3b6cc1e2d413dd6fd57d724f2a 已推送 origin/cubase_16_full_ara，ls-remote 实际确认同 SHA，上游同名。当前仅补记已确认的 Git 状态。
 - M5–M6 未开始。Cubase Key Editor 原生歌词通道尚未证实；不得把 TuneLab 内部歌词输入、ARA 音符导入或自有消息当作原生歌词同步。
 - 正式 M4 逐项验收：docs/cubase-m4-validation.md。历史 M2/M3 逐项证据：docs/cubase-m2-validation.md、docs/cubase-m3-validation.md。
 
@@ -39,16 +39,16 @@
 
 ## 当前修改与保留项
 
-M4 修改涉及 TuneLab/Data 的选择与相关编辑入口、TuneLab/Hosting 的视图/表单/配对租约、脚本上下文与句柄、钢琴窗/参数区/歌词输入、integrations/cubase 的 managed/native 视图缩放和协议探针，以及阶段测试、计划和本手册。
+M4 已提交的修改涉及 TuneLab/Data 的选择与相关编辑入口、TuneLab/Hosting 的视图/表单/配对租约、脚本上下文与句柄、钢琴窗/参数区/歌词输入、integrations/cubase 的 managed/native 视图缩放和协议探针，以及阶段测试、计划和本手册。
 
-本阶段新增文件包括：TuneLab/Data/EditorSelectionState.cs、TuneLab/Hosting/EmbeddedScriptInputs.cs、TuneLab/UI/MainWindow/Editor/PianoWindow/PianoScrollView/PianoScrollViewLyrics.cs、integrations/cubase/managed/EditorToolbar.cs、tests/TuneLab.Tests/CubaseScriptScopeTests.cs、tests/TuneLab.Tests/EditorSelectionStateTests.cs、docs/cubase-m4-validation.md。上述均待纳入 M4 检查点。
+本阶段新增文件包括：TuneLab/Data/EditorSelectionState.cs、TuneLab/Hosting/EmbeddedScriptInputs.cs、TuneLab/UI/MainWindow/Editor/PianoWindow/PianoScrollView/PianoScrollViewLyrics.cs、integrations/cubase/managed/EditorToolbar.cs、tests/TuneLab.Tests/CubaseScriptScopeTests.cs、tests/TuneLab.Tests/EditorSelectionStateTests.cs、docs/cubase-m4-validation.md。上述均已纳入 M4 功能检查点 78c7f251deb71e3b6cc1e2d413dd6fd57d724f2a 并推送。本次文档补记没有新增实施变化。
 
 不得 stage 用户原有 .gitignore 修改、.codegraph/、out/ 或三份参考文档：docs/Cubase16_SVS_接入静态分析.md、docs/S3+_交付与接口清单分析.md、docs/TuneLab_接入Cubase16_方案分析.md。模型、生成音频/工程、日志不分发。
 
 ## 下一步顺序
 
-1. M4 验收标准已经通过，不再追加范围或测试；检查 staged diff，单独提交、推送 cubase_16_full_ara 并通过 ls-remote 确认。
-2. 补记实际 Git 检查点状态，确认 HEAD/远端一致后进入 M5。
+1. M4 已完成且功能提交已推送确认；没有剩余 M4 自主实施任务，人工项携带 SKIPPED 正常收尾。
+2. 本次只补记检查点文档，推送并确认 HEAD/远端一致后进入 M5，不再给 M4 增加范围。
 3. M5 按原计划核对 M0 的宿主歌词证据，落实已证实通道及音符/歌词关联、冲突和增量重合成；不虚构协议，不默认降级 S3+。人工项始终非阻塞。
 4. 每阶段同样完成记录→检查 diff→提交→推送→确认，之后才进入下一阶段。
 
