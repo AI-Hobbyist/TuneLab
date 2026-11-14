@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-按 docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md 的 M0→M6 交付 VSTi3 + ARA Bridge、路线B进程内钢琴窗、合成/时间/音符/歌词关联、工程恢复与发布材料。M0–M4 已完成自主实施、非 GUI 验收及提交推送。M5 自主实施与非 GUI 验收完成，当前正执行独立提交/推送检查点；M6 尚未开始。真实 Cubase S3+ 未实机验证。
+按 docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md 的 M0→M6 交付 VSTi3 + ARA Bridge、路线B进程内钢琴窗、合成/时间/音符/歌词关联、工程恢复与发布材料。M0–M4 已完成自主实施、非 GUI 验收及提交推送。M5 自主实施与非 GUI 验收及独立提交/推送检查点已完成，M6 进入部署与交付材料审计。真实 Cubase S3+ 未实机验证。
 
 ## 已完成与已验证
 
@@ -31,7 +31,7 @@
 
 ## Git 状态与下一步
 
-当前HEAD f3c38723ce4e05d8fb0a2a253c53f32f79355843（M4文档检查点，原先已推送确认）。M5全部修改待独立提交。检查点流程：仅stage本阶段文件→cached diff/check→commit→push同名分支→ls-remote确认SHA→补记检查点。确认后再开始M6。
+M5功能提交 420c11aea36b52d84c26609853942fbce744f58f 已推送 origin/cubase_16_full_ara，并由git ls-remote确认同SHA、上游同名。本次文档补记仅记录已核实检查点。M6下一最小任务：核对现有打包/部署入口与依赖许可、按原验收补齐离线部署检查和使用文档；完成后再独立commit/push。
 
 保留且不stage原有.gitignore修改、.codegraph/、out/及三份用户参考文档：docs/Cubase16_SVS_接入静态分析.md、docs/S3+_交付与接口清单分析.md、docs/TuneLab_接入Cubase16_方案分析.md。实际文件状态以git status为准。
 

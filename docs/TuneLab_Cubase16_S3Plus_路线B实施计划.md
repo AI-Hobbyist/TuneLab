@@ -1,6 +1,6 @@
 # TuneLab 深度集成 Cubase 16 的 S3+ 路线 B 实施计划
 
-日期：2026-11-15。状态：实施中，M0–M4已完成自主实施、非GUI验收及推送检查点；M5自主实施与非GUI验收完成、待提交推送检查点，M6未开始，完整S3+目标仍ACTIVE。
+日期：2026-11-15。状态：实施中，M0–M5已完成自主实施、非GUI验收及推送检查点；M6交付审计中，完整S3+目标仍ACTIVE。
 
 本计划交付两个插件：**TuneLab VST3 Instrument（VSTi3）**和 **TuneLab ARA Bridge**。采用路线 B，在 Cubase 进程内通过原生 C++ 插件壳加载 .NET 与 Avalonia，复用 TuneLab 钢琴窗，使其既能嵌入 VST3 插件界面，也能通过 ARA 工作流进入 Cubase Extension 编辑器。最终目标是 S3+，包括 Cubase Key Editor 歌词输入同步、合成播放、编辑和工程恢复。
 
@@ -289,8 +289,8 @@ GUI 验证当前默认跳过。只有用户后续明确要求执行时，才采�
 | M2 VSTi3完整闭环 | 自主实施与本阶段非GUI自动验收完成；9b1ec329已推送且HEAD/上游一致，见 [M2验收记录](cubase-m2-validation.md) |
 | M3 ARA Bridge闭环 | 自主实施/非GUI验收及推送检查点完成，功能提交32433224；见 [M3验收记录](cubase-m3-validation.md)；GUI SKIPPED |
 | M4 双容器钢琴窗 | 自主实施/非GUI验收及推送检查点完成，功能提交78c7f251；见 [M4验收记录](cubase-m4-validation.md) |
-| M5 S3+宿主歌词 | 自主实施与非GUI验收完成，待提交/推送检查点：标准文本入口、稳定ID/事务/冲突、真实SVS及缓存、版本/归档；Cubase实机供给SKIPPED，见 [M5证据](cubase-m5-validation.md) |
-| M6 发布候选 | NOT STARTED，按原顺序推进 |
+| M5 S3+宿主歌词 | 自主实施与非GUI验收及推送检查点完成（420c11ae）：标准文本入口、稳定ID/事务/冲突、真实SVS及缓存、版本/归档；Cubase实机供给SKIPPED，见 [M5证据](cubase-m5-validation.md) |
+| M6 发布候选 | IN PROGRESS：M5检查点已推送确认，开始部署/许可/交付材料审计 |
 
 M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy歌声引擎复用、完整版本化component state和Bypass参数状态、controller文档快照消息/恢复、异步代次缓存、整曲宿主播放和离线process、MIDI短音歌声缓存试听、样本级NoteOff/Bypass、float/double、状态反馈，以及当前块时间信息接收。
 
