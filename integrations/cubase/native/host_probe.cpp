@@ -2,6 +2,7 @@
 #include <coreclr_delegates.h>
 #include <hostfxr.h>
 #include <iostream>
+#include "managed_abi.h"
 
 int wmain(int argc, wchar_t **argv)
 {
@@ -58,8 +59,8 @@ int wmain(int argc, wchar_t **argv)
         return 6;
     }
 
-    auto getVersion = reinterpret_cast<int(__cdecl *)()>(entry);
+    auto getVersion = reinterpret_cast<TuneLab::Cubase::GetAbiVersion>(entry);
     const int version = getVersion();
     std::cout << "Managed ABI version: " << version << '\n';
-    return version == 1 ? 0 : 7;
+    return version == TuneLab::Cubase::managedAbiVersion ? 0 : 7;
 }

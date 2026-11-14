@@ -1,6 +1,6 @@
 # Cubase 集成 M0 技术基线
 
-日期：2026-11-14。状态：M0 进行中，尚未进入 M1。
+日期：2026-11-14。状态：M0 自主实施与自动验证完成；真实宿主/GUI 验证 SKIPPED（用户决定，未执行，需人工验证）。
 
 ## 工具链与依赖
 
@@ -34,9 +34,24 @@ third_party 中 SDK 为本机符号链接；构建脚本提供依赖入口，不
 
 ## 引擎候选
 
+用户已明确选定 fu2_ning2_na4，仅用于本机测试，不随插件或测试资产分发。路径为 D:/AI-Tools/OpenUtau/Singers/fu2_ning2_na4-DiffSinger/fu2_ning2_na4。以现有 DiffSinger 1.0.0 扩展、20 sampling steps、保留当前运行设备配置建立后续引擎对照；本阶段未运行声库渲染，渲染性能和确定性尚未测量。
+
 本机 APPDATA/TuneLab/Extensions/DiffSinger/manifest.json 声明 DiffSinger 1.0.0、voice、sdk-version 1.0、win-x64，入口 DiffSingerForTuneLab.DiffSingerVoiceEngine；目录包含 ONNX Runtime 和 OpenUtau.Core。它可作为现有扩展兼容接入候选，尚未选定可分发声库或完成版本/许可核对，不能记歌声渲染通过。优先复用现有 legacy compat 路径，不修改冻结公共 ABI。
 
-## M0 剩余项
+## M0 检查点
+
+| 原定项目 | 结果 |
+|---|---|
+| 工具链与 SDK 基线 | 已记录版本及 commit |
+| 双插件发现与工厂 | 两个标准 bundle，validator 各 47/0；自有 Bridge ARA CLI 可加载 |
+| C ABI smoke | 实际 native→hostfxr→managed 返回 ABI 1 |
+| 基础状态往返 | VST3 内存流正常/截断/未知版本测试通过；ARA 空文档标记归档通过 |
+| Avalonia 嵌入试验 | 嵌入根 API 编译通过；窗口/线程/IME 实机行为 SKIPPED |
+| 歌词协议证据 | 公开文本事件候选已定位，未证实 Cubase Key Editor 供给；保留 M5 技术缺口 |
+| 引擎和声库 | DiffSinger 1.0.0；用户选定 fu2_ning2_na4 仅本机测试，自带匹配 vocoder，不分发模型；实际歌声渲染留待 M2 |
+| 线程与输出路由设计 | 本节明确约定；尚未实现完整调度 |
+
+本阶段证明基础构建和协议接入路径可执行，不代表 S3/S3+ 产品可用。后续阶段继续实现完整 UI、工程、合成与宿主同步。
 
 ### 已确定的实施契约
 
@@ -57,4 +72,4 @@ deepseek贝壳 的随包 README 明确要求声库再分发另行确认，因此
 
 后续先检查扩展已配置的额外模型目录；若仍无可用模型，记录声库输入缺口并继续 UI、文档适配、缓存及协议工作，不下载许可不明模型，也不以静音或正弦波替代歌声合成验收。保持已有 GPU/DirectML 能力，不为测试便利擅自切换配置。
 
-完成歌词标准事件契约核对、引擎与测试声库基线，记录 C ABI/线程/输出路由决策；审查探针代码及可重复验证记录后才完成阶段提交推送。所有真实 Cubase/V7/GUI 验收均 SKIPPED（用户决定，未执行，需人工验证）。
+完成检查点提交推送后进入 M1：实例上下文、确定性生命周期、钢琴窗嵌入和非 GUI 隔离验证。保留歌词供给及实机 UI 缺口；所有真实 Cubase/V7/GUI 验收均 SKIPPED（用户决定，未执行，需人工验证）。
