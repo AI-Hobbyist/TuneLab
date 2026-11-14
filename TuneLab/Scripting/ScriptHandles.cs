@@ -82,8 +82,15 @@ internal sealed class ScriptNote(ScriptContext ctx, INote note)
     // 用它把"我改了/我怀疑的这些"交到用户眼前——那是外部驱动最需要而从前只能读不能写的一件事。
     public bool IsSelected
     {
-        get => N.IsSelected;
-        set { var n = W; ctx.EnsureWritable(); ctx.CaptureSelection(n); n.IsSelected = value; ctx.Bump(); }
+        get => ctx.IsSelected(N);
+        set
+        {
+            var note = W;
+            ctx.EnsureWritable();
+            ctx.CaptureSelection(note);
+            ctx.SetSelection(note, value);
+            ctx.Bump();
+        }
     }
 
     public string PitchName => MusicTheory.PitchName(N.Pitch.Value);                 // 只读，如 "C4"
@@ -354,8 +361,15 @@ internal sealed class ScriptPart(ScriptContext ctx, IPart part)
     // 用它把"我改了/我怀疑的这些"交到用户眼前——那是外部驱动最需要而从前只能读不能写的一件事。
     public bool IsSelected
     {
-        get => P.IsSelected;
-        set { var p = W; ctx.EnsureWritable(); ctx.CaptureSelection(p); p.IsSelected = value; ctx.Bump(); }
+        get => ctx.IsSelected(P);
+        set
+        {
+            var part = W;
+            ctx.EnsureWritable();
+            ctx.CaptureSelection(part);
+            ctx.SetSelection(part, value);
+            ctx.Bump();
+        }
     }
 
     // 本 part 的完整快照（纯数据 JS 对象，含音源 / 音符 / 曲线 / 颤音 / effect 链 / 两级属性 / 音素）。
@@ -428,7 +442,7 @@ internal sealed class ScriptPart(ScriptContext ctx, IPart part)
     public ScriptNote[] Notes() => Midi.Notes.Select(ctx.WrapNote).ToArray();
 
     // 钢琴窗里用户当前选中的音符；无选中返回空数组。
-    public ScriptNote[] SelectedNotes() => Midi.Notes.AllSelectedItems().Select(ctx.WrapNote).ToArray();
+    public ScriptNote[] SelectedNotes() => Midi.Notes.AllSelectedItems(ctx.ObjectSelection).Select(ctx.WrapNote).ToArray();
 
     // **只选这些音符**：本 part 内其余一律取消。传空数组 = 本 part 全不选。
     // 【为什么除了 isSelected 还要这一条】"把这几个音符选给用户看"是外部最常要的形状，而逐个写
@@ -447,14 +461,16 @@ internal sealed class ScriptPart(ScriptContext ctx, IPart part)
 
         ctx.EnsureWritable();
         midi.Notes.SelectionChanged.BeginMerge();
+        ctx.ObjectSelection?.Changed.BeginMerge();
         foreach (var note in midi.Notes)
         {
             ctx.CaptureSelection(note);
-            note.IsSelected = false;
+            ctx.SetSelection(note, false);
         }
         foreach (var handle in picked)
-            handle.Note.IsSelected = true;
+            ctx.SetSelection(handle.Note, true);
         midi.Notes.SelectionChanged.EndMerge();
+        ctx.ObjectSelection?.Changed.EndMerge();
         ctx.Bump();
     }
 
@@ -868,8 +884,15 @@ internal sealed class ScriptTrack(ScriptContext ctx, ITrack track)
     // 用它把"我改了/我怀疑的这些"交到用户眼前——那是外部驱动最需要而从前只能读不能写的一件事。
     public bool IsSelected
     {
-        get => T.IsSelected;
-        set { var t = W; ctx.EnsureWritable(); ctx.CaptureSelection(t); t.IsSelected = value; ctx.Bump(); }
+        get => ctx.IsSelected(T);
+        set
+        {
+            var track = W;
+            ctx.EnsureWritable();
+            ctx.CaptureSelection(track);
+            ctx.SetSelection(track, value);
+            ctx.Bump();
+        }
     }
 
     // ── 逐轨导出设置（与工程级的 project.exportPath 等同族） ──

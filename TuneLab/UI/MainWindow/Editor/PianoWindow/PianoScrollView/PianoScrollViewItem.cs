@@ -22,6 +22,7 @@ internal partial class PianoScrollView
     class PianoScrollViewItem(PianoScrollView pianoScrollView) : Item
     {
         public PianoScrollView PianoScrollView => pianoScrollView;
+        protected EditorSelectionState ObjectSelection => PianoScrollView.ObjectSelection;
     }
 
     class NoteItem(PianoScrollView pianoScrollView) : PianoScrollViewItem(pianoScrollView)
@@ -283,7 +284,7 @@ internal partial class PianoScrollView
             AnchorPoint? hoverAnchor = (PianoScrollView.HoverItem() as AnchorItem)?.AnchorPoint;
             var center = Position();
             context.DrawEllipse(PointBrush, null, center, 2, 2);
-            if (AnchorPoint.IsSelected)
+            if (ObjectSelection.IsSelected(AnchorPoint))
             {
                 context.DrawEllipse(null, SelectedPointPen, center, 5.5, 5.5);
             }

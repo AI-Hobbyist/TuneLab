@@ -76,10 +76,10 @@ class PairEndpoint
     }
     int setViewProvider(PairCreateViewCallback create, PairDestroyViewCallback destroy,
                         PairResizeViewCallback resize, PairFocusViewCallback focus,
-                        PairReleaseViewProvider release, void *owner)
+                        PairReleaseViewProvider release, PairScaleViewCallback scale, void *owner)
     {
         return runtime.setPairViewProvider(endpoint.data(), create, destroy, resize, focus, release,
-                                           owner);
+                                           scale, owner);
     }
     int setDocumentAccess(PairCopyDocumentCallback copy, PairApplyDocumentCallback apply,
                           void *owner)

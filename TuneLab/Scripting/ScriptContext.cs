@@ -53,7 +53,10 @@ internal sealed class ScriptContext
     readonly HashSet<IMidiPart> mBracketed = new();
     int mChanges;   // 发生的改动计数（>0 才 Commit）
 
-    public ScriptContext(IProject project, Func<IMidiPart?>? currentPart, Func<IQuantization?>? quantization, Func<string?>? language, Func<ScriptSelection?>? selection, Func<ScriptPianoSelection?>? pianoSelection, IScriptSelectionWriter? selectionWriter = null)
+    public ScriptContext(IProject project, Func<IMidiPart?>? currentPart, Func<IQuantization?>? quantization,
+        Func<string?>? language, Func<ScriptSelection?>? selection, Func<ScriptPianoSelection?>? pianoSelection,
+        IScriptSelectionWriter? selectionWriter = null,
+        EditorSelectionState? objectSelection = null)
     {
         mProject = project;
         mCurrentPart = currentPart;
@@ -62,6 +65,7 @@ internal sealed class ScriptContext
         mSelection = selection;
         mPianoSelection = pianoSelection;
         mSelectionWriter = selectionWriter;
+        ObjectSelection = objectSelection;
         mStartHead = project.Head;
         mWritable = project.Pushable();
     }
@@ -75,6 +79,17 @@ internal sealed class ScriptContext
 
     // ── 给根对象（ScriptApp / ScriptProject）读的底层入口 ──
     internal IProject Project => mProject;
+    internal EditorSelectionState? ObjectSelection { get; }
+
+    internal bool IsSelected(ISelectable item) => ObjectSelection?.IsSelected(item) ?? item.IsSelected;
+
+    internal void SetSelection(ISelectable item, bool selected)
+    {
+        if (ObjectSelection == null)
+            item.IsSelected = selected;
+        else
+            ObjectSelection.SetSelected(item, selected);
+    }
 
     // 本次运行的 JS 引擎。句柄的 getInfo() 要产出【普通 JS 对象/数组】（脚本能 for-of / 下标 / JSON.stringify），
     // 构造它们需要引擎实例，故由宿主建好引擎后回填一次。只在 info 读出方向用到。
@@ -103,7 +118,7 @@ internal sealed class ScriptContext
     internal void CaptureSelection(ISelectable selectable)
     {
         if (!mSelectionBackup.ContainsKey(selectable))
-            mSelectionBackup[selectable] = selectable.IsSelected;
+            mSelectionBackup[selectable] = IsSelected(selectable);
     }
 
     // 范围选区的写口（`tl.setTrackSelection` 等）。没有编辑器的进程里为 null——调用方据此如实报错。
@@ -149,7 +164,7 @@ internal sealed class ScriptContext
     void RestoreSelection()
     {
         foreach (var kvp in mSelectionBackup)
-            kvp.Key.IsSelected = kvp.Value;
+            SetSelection(kvp.Key, kvp.Value);
         mSelectionBackup.Clear();
 
         if (mTrackSelectionCaptured && mSelectionWriter is { } writer1)

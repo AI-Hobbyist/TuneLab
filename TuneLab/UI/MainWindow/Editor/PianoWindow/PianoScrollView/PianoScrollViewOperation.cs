@@ -132,7 +132,7 @@ internal partial class PianoScrollView
 
         // 命中选区带 → pianoSelection 工具（目标=tl.pianoSelection()）。仅落在带内才给，与上方选区操作一致。
         if (insideRegion)
-            ScriptToolMenu.AppendContextTools(menu.Items, Scripting.ScriptToolContext.PianoSelection, this);
+            ScriptToolMenu.AppendContextTools(menu.Items, Scripting.ScriptToolContext.PianoSelection, this, ScriptScope);
 
         this.OpenContextMenu(menu);
     }
@@ -321,10 +321,10 @@ internal partial class PianoScrollView
                                     if (item is NoteItem noteItem)
                                     {
                                         var note = noteItem.Note;
-                                        if (!note.IsSelected)
+                                        if (!ObjectSelection.IsSelected(note))
                                         {
-                                            Part.Notes.DeselectAllItems();
-                                            note.Select();
+                                            Part.Notes.DeselectAllItems(ObjectSelection);
+                                            note.Select(ObjectSelection);
                                         }
 
                                         var position = e.Position;
@@ -343,7 +343,7 @@ internal partial class PianoScrollView
                                         {
                                             var menuItem = new MenuItem().SetName("Split by Phonemes".Tr(TC.Menu)).SetAction(() =>
                                             {
-                                                var selectedNotes = Part.Notes.AllSelectedItems();
+                                                var selectedNotes = Part.Notes.AllSelectedItems(ObjectSelection);
                                                 if (selectedNotes.IsEmpty())
                                                     return;
 
@@ -391,13 +391,13 @@ internal partial class PianoScrollView
                                         }
                                         // 仅当选中音符里有「可锁而未锁」的（有合成音素、无钉死音素）才提供「锁定音素」——
                                         // 把合成产物固定为用户数据（与拖音素边界时的隐式锁定同源，见 INote.LockPhonemes）。
-                                        if (Part.Notes.AllSelectedItems().Any(n => !n.HasPinnedPhonemes && n.SynthesizedSyllable.PhonemeCount() > 0))
+                                        if (Part.Notes.AllSelectedItems(ObjectSelection).Any(n => !n.HasPinnedPhonemes && n.SynthesizedSyllable.PhonemeCount() > 0))
                                         {
                                             var menuItem = new MenuItem().SetName("Lock Phonemes".Tr(TC.Menu)).SetAction(() =>
                                             {
                                                 bool changed = false;
                                                 Part.BeginMergeDirty();
-                                                foreach (var selectedNote in Part.Notes.AllSelectedItems())
+                                                foreach (var selectedNote in Part.Notes.AllSelectedItems(ObjectSelection))
                                                 {
                                                     if (selectedNote.HasPinnedPhonemes)
                                                         continue;
@@ -414,13 +414,13 @@ internal partial class PianoScrollView
                                             menu.Items.Add(menuItem);
                                         }
                                         // 仅当选中音符里有钉死（锁定）音素才提供「清除锁定音素」——清空后回到合成音素口径。
-                                        if (Part.Notes.AllSelectedItems().Any(n => n.HasPinnedPhonemes))
+                                        if (Part.Notes.AllSelectedItems(ObjectSelection).Any(n => n.HasPinnedPhonemes))
                                         {
                                             var menuItem = new MenuItem().SetName("Clear Locked Phonemes".Tr(TC.Menu)).SetAction(() =>
                                             {
                                                 bool changed = false;
                                                 Part.BeginMergeDirty();
-                                                foreach (var selectedNote in Part.Notes.AllSelectedItems())
+                                                foreach (var selectedNote in Part.Notes.AllSelectedItems(ObjectSelection))
                                                 {
                                                     if (!selectedNote.HasPinnedPhonemes)
                                                         continue;
@@ -447,11 +447,11 @@ internal partial class PianoScrollView
 
                                         menu.Items.Add(new Avalonia.Controls.Separator());
                                         {
-                                            var menuItem = new MenuItem().SetName("Octave Up".Tr(TC.Menu)).SetAction("note.octaveUp");
+                                            var menuItem = new MenuItem().SetName("Octave Up".Tr(TC.Menu)).SetAction("note.octaveUp", mActions);
                                             menu.Items.Add(menuItem);
                                         }
                                         {
-                                            var menuItem = new MenuItem().SetName("Octave Down".Tr(TC.Menu)).SetAction("note.octaveDown");
+                                            var menuItem = new MenuItem().SetName("Octave Down".Tr(TC.Menu)).SetAction("note.octaveDown", mActions);
                                             menu.Items.Add(menuItem);
                                         }
 
@@ -492,13 +492,13 @@ internal partial class PianoScrollView
                                             menu.Items.Add(menuItem);
                                         }
                                         {
-                                            var menuItem = new MenuItem().SetName("Input Lyrics".Tr(TC.Menu)).SetAction(() => { LyricInput.EnterInput(Part.Notes.AllSelectedItems(), this.Window()); });
+                                            var menuItem = new MenuItem().SetName("Input Lyrics".Tr(TC.Menu)).SetAction(EnterLyrics);
                                             menu.Items.Add(menuItem);
                                         }
                                         {
                                             var menuItem = new MenuItem().SetName("Remove Overlaps".Tr(TC.Menu)).SetAction(() =>
                                             {
-                                                if (Part.RemoveOverlaps(Part.Notes.AllSelectedItems()))
+                                                if (Part.RemoveOverlaps(Part.Notes.AllSelectedItems(ObjectSelection)))
                                                     Part.Commit();
                                             });
                                             menu.Items.Add(menuItem);
@@ -509,7 +509,7 @@ internal partial class PianoScrollView
                                             var menuItem = new MenuItem().SetName("Delete".Tr(TC.Menu)).SetAction(Delete).SetInputGesture(Key.Delete);
                                             menu.Items.Add(menuItem);
                                         }
-                                        ScriptToolMenu.AppendContextTools(menu.Items, Scripting.ScriptToolContext.Note, this);   // 命中音符 → note 工具（目标=选中音符）
+                                        ScriptToolMenu.AppendContextTools(menu.Items, Scripting.ScriptToolContext.Note, this, ScriptScope);   // 命中音符 → note 工具（目标=选中音符）
                                     }
                                     else
                                     {
@@ -525,7 +525,7 @@ internal partial class PianoScrollView
                                                 menu.Items.Add(menuItem);
                                             }
                                         }
-                                        ScriptToolMenu.AppendContextTools(menu.Items, Scripting.ScriptToolContext.PartContent, this);   // 钢琴空白 → partContent 工具（目标=当前 part）
+                                        ScriptToolMenu.AppendContextTools(menu.Items, Scripting.ScriptToolContext.PartContent, this, ScriptScope);   // 钢琴空白 → partContent 工具（目标=当前 part）
                                     }
 
                                     this.OpenContextMenu(menu);
@@ -557,7 +557,7 @@ internal partial class PianoScrollView
                                     if (Part == null)
                                         break;
 
-                                    Part.DeselectAllAutomationPoints();
+                                    Part.DeselectAllAutomationPoints(ObjectSelection);
                                     mDependency.RefreshParameterPanels();
 
                                     if (mPreviewPitchItem != null && mPreviewPitchItem.OnDown != null)
@@ -574,10 +574,11 @@ internal partial class PianoScrollView
                                         {
                                             if (e.IsDoubleClick)
                                             {
-                                                var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - Part.Pos.Value, PitchAxis.Y2Pitch(e.Position.Y) - 0.5) { IsSelected = true };
+                                                var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - Part.Pos.Value, PitchAxis.Y2Pitch(e.Position.Y) - 0.5);
+                                                anchor.Select(ObjectSelection);
                                                 Part.Pitch.InsertPoint(anchor);
-                                                Part.Pitch.DeselectAllAnchors();
-                                                anchor.Select();
+                                                Part.Pitch.DeselectAllAnchors(ObjectSelection);
+                                                anchor.Select(ObjectSelection);
                                                 mAnchorMoveOperation.Down(e.Position, ctrl, anchor);
                                             }
                                             else
@@ -593,9 +594,9 @@ internal partial class PianoScrollView
                                     if (Part == null)
                                         break;
 
-                                    Part.DeselectAllAutomationPoints();
+                                    Part.DeselectAllAutomationPoints(ObjectSelection);
                                     mDependency.RefreshParameterPanels();
-                                    Part.Pitch.DeselectAllAnchors();
+                                    Part.Pitch.DeselectAllAnchors(ObjectSelection);
                                     if (item is AnchorItem anchorItem)
                                     {
                                         Part.Pitch.DeletePoints([anchorItem.AnchorPoint]);
@@ -665,9 +666,9 @@ internal partial class PianoScrollView
                                     var preview = GetVibratoAddPreview(e.Position);
                                     if (preview != null)
                                     {
-                                        Part.Vibratos.DeselectAllItems();
+                                        Part.Vibratos.DeselectAllItems(ObjectSelection);
                                         var vibrato = Part.CreateVibrato(preview);
-                                        vibrato.Select();
+                                        vibrato.Select(ObjectSelection);
                                         Part.InsertVibrato(vibrato);
                                         // 接拖拽起点边界微调（照搬 note 双击创建并拖拽）：create + 拖拽同属一次操作、一次提交；纵向可顺手调振幅。
                                         mVibratoStartResizeOperation.DownForCreate(TickAxis.Tick2X(vibrato.GlobalStartPos()), e.Position.Y, vibrato);
@@ -687,10 +688,10 @@ internal partial class PianoScrollView
                                     if (item is IVibratoItem vibratoItem)
                                     {
                                         var vibrato = vibratoItem.Vibrato;
-                                        if (!vibrato.IsSelected)
+                                        if (!ObjectSelection.IsSelected(vibrato))
                                         {
-                                            Part.Vibratos.DeselectAllItems();
-                                            vibrato.Select();
+                                            Part.Vibratos.DeselectAllItems(ObjectSelection);
+                                            vibrato.Select(ObjectSelection);
                                         }
                                         {
                                             var menuItem = new MenuItem().SetName("Copy".Tr(TC.Menu)).SetAction(Copy).SetInputGesture(Key.C, ModifierKeys.Ctrl);
@@ -1141,7 +1142,7 @@ internal partial class PianoScrollView
                         break;
 
                     items.Add(new VibratoItem(this) { Vibrato = vibrato });
-                    if (!vibrato.IsSelected)
+                    if (!ObjectSelection.IsSelected(vibrato))
                         continue;
 
                     items.Add(new VibratoAmplitudeItem(this) { Vibrato = vibrato });
@@ -1218,7 +1219,7 @@ internal partial class PianoScrollView
                 var previewInfo = previewIndex
                     .Where(index => (uint)index < Part.Pitch.AnchorGroups.Count)
                     .Select(index => Part.Pitch.AnchorGroups[index])
-                    .Where(anchorGroup => anchorGroup.HasSelectedItem() || anchorGroup == hoverAnchorOnFirstGroup || anchorGroup == hoverAnchorOnLastGroup)
+                    .Where(anchorGroup => anchorGroup.HasSelectedItem(ObjectSelection) || anchorGroup == hoverAnchorOnFirstGroup || anchorGroup == hoverAnchorOnLastGroup)
                     .Select(anchorGroup => anchorGroup.GetInfo().Select(p => p.ToPoint()).ToList()).ToList();
 
                 if (previewInfo.Count == 0)
@@ -1230,15 +1231,16 @@ internal partial class PianoScrollView
                 {
                     foreach (var anchorGroup in mPreviewPitchItem.PiecewiseAutomation.AnchorGroups)
                     {
-                        anchorGroup[0].Select();
+                        anchorGroup[0].Select(ObjectSelection);
                     }
                     mPreviewPitchItem.PiecewiseAutomation.InsertPoint(hoverAnchor ?? new AnchorPoint(pos, PitchAxis.Y2Pitch(MousePosition.Y) - 0.5));
                     mPreviewPitchItem.OnDown += (e, ctrl) =>
                     {
-                        var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - Part.Pos.Value, PitchAxis.Y2Pitch(e.Position.Y) - 0.5) { IsSelected = true };
+                        var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - Part.Pos.Value, PitchAxis.Y2Pitch(e.Position.Y) - 0.5);
+                        anchor.Select(ObjectSelection);
                         Part.Pitch.InsertPoint(anchor);
-                        Part.Pitch.DeselectAllAnchors();
-                        anchor.Select();
+                        Part.Pitch.DeselectAllAnchors(ObjectSelection);
+                        anchor.Select(ObjectSelection);
                         mAnchorMoveOperation.Down(e.Position, ctrl, anchor);
                     };
                 }
@@ -1248,13 +1250,13 @@ internal partial class PianoScrollView
                     if (hoverAnchorOnLastGroup != null)
                     {
                         mPreviewPitchItem.PiecewiseAutomation.ConnectAnchorGroup(0);
-                        if (hoverAnchorGroupIndex + 1 < Part.Pitch.AnchorGroups.Count && Part.Pitch.AnchorGroups[hoverAnchorGroupIndex + 1].HasSelectedItem())
+                        if (hoverAnchorGroupIndex + 1 < Part.Pitch.AnchorGroups.Count && Part.Pitch.AnchorGroups[hoverAnchorGroupIndex + 1].HasSelectedItem(ObjectSelection))
                             mPreviewPitchItem.OnDown += (_, _) => Part.Pitch.ConnectAnchorGroup(hoverAnchorGroupIndex);
                     }
                     if (hoverAnchorOnFirstGroup != null)
                     {
                         mPreviewPitchItem.PiecewiseAutomation.ConnectAnchorGroup(0);
-                        if (hoverAnchorGroupIndex - 1 >= 0 && Part.Pitch.AnchorGroups[hoverAnchorGroupIndex - 1].HasSelectedItem())
+                        if (hoverAnchorGroupIndex - 1 >= 0 && Part.Pitch.AnchorGroups[hoverAnchorGroupIndex - 1].HasSelectedItem(ObjectSelection))
                             mPreviewPitchItem.OnDown += (_, _) => Part.Pitch.ConnectAnchorGroup(hoverAnchorGroupIndex - 1);
                     }
                     if (mPreviewPitchItem.OnDown != null)
@@ -1409,6 +1411,7 @@ internal partial class PianoScrollView
     class Operation(PianoScrollView pianoScrollView)
     {
         public PianoScrollView PianoScrollView => pianoScrollView;
+        protected EditorSelectionState ObjectSelection => PianoScrollView.ObjectSelection;
         public State State { get => PianoScrollView.mState; set => PianoScrollView.mState = value; }
     }
 
@@ -1473,7 +1476,7 @@ internal partial class PianoScrollView
             mDownPitch = PianoScrollView.PitchAxis.Y2Pitch(point.Y);
             if (ctrl)
             {
-                mSelectedItems = Collection.AllSelectedItems();
+                mSelectedItems = Collection.AllSelectedItems(ObjectSelection);
             }
             Move(point);
         }
@@ -1492,11 +1495,11 @@ internal partial class PianoScrollView
                 return;
 
             BeginSelect();
-            Collection.DeselectAllItems();
+            Collection.DeselectAllItems(ObjectSelection);
             if (mSelectedItems != null)
             {
                 foreach (var item in mSelectedItems)
-                    item.Select();
+                    item.Select(ObjectSelection);
             }
             double minTick = Math.Min(mTick, mDownTick);
             double maxTick = Math.Max(mTick, mDownTick);
@@ -1560,7 +1563,7 @@ internal partial class PianoScrollView
                     break;
 
                 if (note.Pitch.Value + 1 > minPitch && note.Pitch.Value < maxPitch)
-                    note.Select();
+                    note.Select(ObjectSelection);
             }
         }
 
@@ -1807,15 +1810,15 @@ internal partial class PianoScrollView
                 return;
 
             mCtrl = ctrl;
-            mIsSelected = note.IsSelected;
+            mIsSelected = ObjectSelection.IsSelected(note);
             if (!mCtrl && !mIsSelected)
             {
-                PianoScrollView.Part.Notes.DeselectAllItems();
+                PianoScrollView.Part.Notes.DeselectAllItems(ObjectSelection);
             }
-            note.Select();
+            note.Select(ObjectSelection);
 
             var (minPitch, maxPitch) = PianoScrollView.Part.PitchRange();
-            foreach (var selectedNote in PianoScrollView.Part.Notes.Where(note => note.IsSelected))
+            foreach (var selectedNote in PianoScrollView.Part.Notes.Where(note => ObjectSelection.IsSelected(note)))
             {
                 mMoveNotes.Add(selectedNote);
 
@@ -1907,13 +1910,13 @@ internal partial class PianoScrollView
                 {
                     if (mIsSelected)
                     {
-                        mNote.Inselect();
+                        mNote.Inselect(ObjectSelection);
                     }
                 }
                 else
                 {
-                    PianoScrollView.Part.Notes.DeselectAllItems();
-                    mNote.Select();
+                    PianoScrollView.Part.Notes.DeselectAllItems(ObjectSelection);
+                    mNote.Select(ObjectSelection);
                 }
             }
             mMoved = false;
@@ -2183,7 +2186,7 @@ internal partial class PianoScrollView
                 if (vibrato.StartPos() > maxTick)
                     break;
 
-                vibrato.Select();
+                vibrato.Select(ObjectSelection);
             }
         }
     }
@@ -2384,7 +2387,7 @@ internal partial class PianoScrollView
             if (PianoScrollView.Part == null)
                 return;
 
-            var vibratos = PianoScrollView.Part.Vibratos.AllSelectedItems();
+            var vibratos = PianoScrollView.Part.Vibratos.AllSelectedItems(ObjectSelection);
             if (vibratos.IsEmpty())
                 return;
 
@@ -2454,7 +2457,7 @@ internal partial class PianoScrollView
             if (PianoScrollView.Part == null)
                 return;
 
-            var vibratos = PianoScrollView.Part.Vibratos.AllSelectedItems();
+            var vibratos = PianoScrollView.Part.Vibratos.AllSelectedItems(ObjectSelection);
             if (vibratos.IsEmpty())
                 return;
 
@@ -2525,7 +2528,7 @@ internal partial class PianoScrollView
             if (PianoScrollView.Part == null)
                 return;
 
-            var vibratos = PianoScrollView.Part.Vibratos.AllSelectedItems();
+            var vibratos = PianoScrollView.Part.Vibratos.AllSelectedItems(ObjectSelection);
             if (vibratos.IsEmpty())
                 return;
 
@@ -2613,7 +2616,7 @@ internal partial class PianoScrollView
         public void Down(double x, IVibratoItem vibratoItem)
         {
             mPart = vibratoItem.Vibrato.Part;
-            var vibratos = mPart.Vibratos.AllSelectedItems();
+            var vibratos = mPart.Vibratos.AllSelectedItems(ObjectSelection);
             if (vibratos.IsEmpty())
                 return;
 
@@ -2679,7 +2682,7 @@ internal partial class PianoScrollView
         public void Down(double x, IVibratoItem vibratoItem)
         {
             mPart = vibratoItem.Vibrato.Part;
-            var vibratos = mPart.Vibratos.AllSelectedItems();
+            var vibratos = mPart.Vibratos.AllSelectedItems(ObjectSelection);
             if (vibratos.IsEmpty())
                 return;
 
@@ -2748,14 +2751,14 @@ internal partial class PianoScrollView
                 return;
 
             mCtrl = ctrl;
-            mIsSelected = vibrato.IsSelected;
+            mIsSelected = ObjectSelection.IsSelected(vibrato);
             if (!mCtrl && !mIsSelected)
             {
-                PianoScrollView.Part.Vibratos.DeselectAllItems();
+                PianoScrollView.Part.Vibratos.DeselectAllItems(ObjectSelection);
             }
-            vibrato.Select();
+            vibrato.Select(ObjectSelection);
 
-            mMoveVibratos = PianoScrollView.Part.Vibratos.AllSelectedItems();
+            mMoveVibratos = PianoScrollView.Part.Vibratos.AllSelectedItems(ObjectSelection);
             if (mMoveVibratos.IsEmpty())
                 return;
 
@@ -2824,13 +2827,13 @@ internal partial class PianoScrollView
                 {
                     if (mIsSelected)
                     {
-                        mVibrato.Inselect();
+                        mVibrato.Inselect(ObjectSelection);
                     }
                 }
                 else
                 {
-                    PianoScrollView.Part.Vibratos.DeselectAllItems();
-                    mVibrato.Select();
+                    PianoScrollView.Part.Vibratos.DeselectAllItems(ObjectSelection);
+                    mVibrato.Select(ObjectSelection);
                 }
             }
             mMoved = false;
@@ -2926,12 +2929,12 @@ internal partial class PianoScrollView
                 return;
 
             mCtrl = ctrl;
-            mIsSelected = anchor.IsSelected;
+            mIsSelected = ObjectSelection.IsSelected(anchor);
             if (!mCtrl && !mIsSelected)
             {
-                PianoScrollView.Part.Pitch.DeselectAllAnchors();
+                PianoScrollView.Part.Pitch.DeselectAllAnchors(ObjectSelection);
             }
-            anchor.Select();
+            anchor.Select(ObjectSelection);
 
             State = State.AnchorMoving;
             PianoScrollView.Part.BeginMergeDirty();
@@ -2957,7 +2960,7 @@ internal partial class PianoScrollView
 
             mMoved = true;
             part.DiscardTo(mHead);
-            part.Pitch.MoveSelectedPoints(posOffset, pitchOffset);
+            part.Pitch.MoveSelectedPoints(posOffset, pitchOffset, ObjectSelection);
         }
 
         public void Up()
@@ -2986,13 +2989,13 @@ internal partial class PianoScrollView
                 {
                     if (mIsSelected)
                     {
-                        mAnchor.Inselect();
+                        mAnchor.Inselect(ObjectSelection);
                     }
                 }
                 else
                 {
-                    PianoScrollView.Part.Pitch.DeselectAllAnchors();
-                    mAnchor.Select();
+                    PianoScrollView.Part.Pitch.DeselectAllAnchors(ObjectSelection);
+                    mAnchor.Select(ObjectSelection);
                 }
             }
             // 末尾照样 Commit，把这一次按下抬起收成**一个**撤销单元（纯点击无先行动作时 Commit 为 no-op）。
@@ -3033,7 +3036,7 @@ internal partial class PianoScrollView
 
                 var pitch = item.Value + 0.5;
                 if (pitch >= minPitch && pitch <= maxPitch)
-                    item.Select();
+                    item.Select(ObjectSelection);
             }
         }
     }

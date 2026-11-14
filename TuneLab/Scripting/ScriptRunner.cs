@@ -70,10 +70,15 @@ internal static class ScriptRunner
     // 只读建议/需确认预览用（跑一遍看会改什么、干净回退）。见 docs §3。
     // selectionWriter：范围选区的写口（tl.setTrackSelection 等）。**只有 Run 收它**——求 schema / 枚举
     // 元数据那两条路只读，不该能改用户的选区。没有编辑器的进程传 null，那几个 tl 方法据此如实报错。
-    public static ScriptRunResult Run(IProject project, Func<IMidiPart?>? currentPart, Func<IQuantization?>? quantization, Func<string?>? language, Func<ScriptSelection?>? selection, Func<ScriptPianoSelection?>? pianoSelection, ScriptLimits limits, string code, CancellationToken cancellationToken, PropertyObject? inputs = null, bool preview = false, IScriptSelectionWriter? selectionWriter = null)
+    public static ScriptRunResult Run(IProject project, Func<IMidiPart?>? currentPart,
+        Func<IQuantization?>? quantization, Func<string?>? language, Func<ScriptSelection?>? selection,
+        Func<ScriptPianoSelection?>? pianoSelection, ScriptLimits limits, string code,
+        CancellationToken cancellationToken, PropertyObject? inputs = null, bool preview = false,
+        IScriptSelectionWriter? selectionWriter = null,
+        EditorSelectionState? objectSelection = null)
     {
         // 写守卫不在入口、而下沉到首次写入（ScriptContext.EnsureWritable）：只读脚本即便在用户操作中途也畅通，只拦写。
-        var context = new ScriptContext(project, currentPart, quantization, language, selection, pianoSelection, selectionWriter);
+        var context = new ScriptContext(project, currentPart, quantization, language, selection, pianoSelection, selectionWriter, objectSelection);
         var output = new StringBuilder();
         string? resultText = null;
         string? error = null;
@@ -147,9 +152,13 @@ internal static class ScriptRunner
     //  · Config==null,Error==null → 无 getInputConfig（无入参脚本）；
     //  · Error!=null             → getInputConfig eval/调用/解析失败（消息回报调用方）。
     // getInputConfig 约定无副作用；任何误改在 finally 原子回退（写守卫在首次写入兜底，只读天然畅通）。
-    public static (ObjectConfig? Config, string? Error) GetInputConfig(IProject project, Func<IMidiPart?>? currentPart, Func<IQuantization?>? quantization, Func<string?>? language, Func<ScriptSelection?>? selection, Func<ScriptPianoSelection?>? pianoSelection, string code, PropertyObject currentValues, CancellationToken cancellationToken)
+    public static (ObjectConfig? Config, string? Error) GetInputConfig(IProject project,
+        Func<IMidiPart?>? currentPart, Func<IQuantization?>? quantization, Func<string?>? language,
+        Func<ScriptSelection?>? selection, Func<ScriptPianoSelection?>? pianoSelection,
+        string code, PropertyObject currentValues, CancellationToken cancellationToken,
+        EditorSelectionState? objectSelection = null)
     {
-        var context = new ScriptContext(project, currentPart, quantization, language, selection, pianoSelection);
+        var context = new ScriptContext(project, currentPart, quantization, language, selection, pianoSelection, objectSelection: objectSelection);
         try
         {
             var engine = CreateEngine(ScriptLimits.Interactive, cancellationToken);

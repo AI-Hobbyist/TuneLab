@@ -67,14 +67,15 @@ internal partial class AutomationRenderer
                     if (Part == null || !TryGetActivePiecewise(out var automation, out var config, true))
                         break;
 
-                    var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - Part.Pos.Value, YToValue(e.Position.Y, config.Scale)) { IsSelected = true };
+                    var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - Part.Pos.Value, YToValue(e.Position.Y, config.Scale));
+                    anchor.Select(ObjectSelection);
                     automation.InsertPoint(anchor);
                     var inserted = automation.AnchorGroups.SelectMany(group => group).FirstOrDefault(point => point.Pos == anchor.Pos);
                     if (inserted == null)
                         break;
 
-                    automation.DeselectAllAnchors();
-                    inserted.Select();
+                    automation.DeselectAllAnchors(ObjectSelection);
+                    inserted.Select(ObjectSelection);
                     mPiecewiseAnchorMoveOperation.Down(e.Position, ctrl, automation, inserted, config.Scale, true);
                 }
                 else
@@ -86,7 +87,7 @@ internal partial class AutomationRenderer
                 // 右键先取消该轨全部选中（空白处右键即"取消选中"，对齐 pitch 锚点工具），再按命中删点。
                 // 取消选中后必须重绘：选中环是绘制出来的，不刷新会留着假的选中态；连线预览也随选中态变化。
                 if (TryGetActivePiecewise(out var deselectTarget, out _, false))
-                    deselectTarget.DeselectAllAnchors();
+                    deselectTarget.DeselectAllAnchors(ObjectSelection);
                 if (item is PiecewiseAnchorItem deleteAnchorItem)
                     deleteAnchorItem.Automation.DeletePoints([deleteAnchorItem.AnchorPoint]);
                 InvalidateVisual();
@@ -146,7 +147,7 @@ internal partial class AutomationRenderer
         var previewInfo = previewIndex
             .Where(index => (uint)index < piecewise.AnchorGroups.Count)
             .Select(index => piecewise.AnchorGroups[index])
-            .Where(anchorGroup => anchorGroup.HasSelectedItem() || anchorGroup == hoverAnchorOnFirstGroup || anchorGroup == hoverAnchorOnLastGroup)
+            .Where(anchorGroup => anchorGroup.HasSelectedItem(ObjectSelection) || anchorGroup == hoverAnchorOnFirstGroup || anchorGroup == hoverAnchorOnLastGroup)
             .Select(anchorGroup => anchorGroup.GetInfo().Select(p => p.ToPoint()).ToList()).ToList();
         if (previewInfo.Count == 0)
             return;
@@ -157,7 +158,7 @@ internal partial class AutomationRenderer
         {
             // 预览副本里把各组首点标选中，使临时 InsertPoint 走与真数据相同的并组分支。
             foreach (var anchorGroup in preview.PiecewiseAutomation.AnchorGroups)
-                anchorGroup[0].Select();
+                anchorGroup[0].Select(ObjectSelection);
 
             double value = YToValue(MousePosition.Y, config.Scale);
             preview.PiecewiseAutomation.InsertPoint(new AnchorPoint(pos, value));
@@ -166,10 +167,11 @@ internal partial class AutomationRenderer
                 if (!TryGetActivePiecewise(out var target, out var targetConfig, true))
                     return;
 
-                var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - Part!.Pos.Value, YToValue(e.Position.Y, targetConfig.Scale)) { IsSelected = true };
+                var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - Part!.Pos.Value, YToValue(e.Position.Y, targetConfig.Scale));
+                anchor.Select(ObjectSelection);
                 target.InsertPoint(anchor);
-                target.DeselectAllAnchors();
-                anchor.Select();
+                target.DeselectAllAnchors(ObjectSelection);
+                anchor.Select(ObjectSelection);
                 mPiecewiseAnchorMoveOperation.Down(e.Position, ctrl, target, anchor, targetConfig.Scale, true);
             };
         }
@@ -179,13 +181,13 @@ internal partial class AutomationRenderer
             if (hoverAnchorOnLastGroup != null)
             {
                 preview.PiecewiseAutomation.ConnectAnchorGroup(0);
-                if (hoverAnchorGroupIndex + 1 < piecewise.AnchorGroups.Count && piecewise.AnchorGroups[hoverAnchorGroupIndex + 1].HasSelectedItem())
+                if (hoverAnchorGroupIndex + 1 < piecewise.AnchorGroups.Count && piecewise.AnchorGroups[hoverAnchorGroupIndex + 1].HasSelectedItem(ObjectSelection))
                     preview.OnDown += (_, _) => piecewise.ConnectAnchorGroup(hoverAnchorGroupIndex);
             }
             if (hoverAnchorOnFirstGroup != null)
             {
                 preview.PiecewiseAutomation.ConnectAnchorGroup(0);
-                if (hoverAnchorGroupIndex - 1 >= 0 && piecewise.AnchorGroups[hoverAnchorGroupIndex - 1].HasSelectedItem())
+                if (hoverAnchorGroupIndex - 1 >= 0 && piecewise.AnchorGroups[hoverAnchorGroupIndex - 1].HasSelectedItem(ObjectSelection))
                     preview.OnDown += (_, _) => piecewise.ConnectAnchorGroup(hoverAnchorGroupIndex - 1);
             }
             // 连接在此只改数据、不单独提交：一次按下抬起是**一个**用户动作，该是一个撤销单元。
@@ -244,7 +246,7 @@ internal partial class AutomationRenderer
             var center = Position();
             var pointBrush = new SolidColorBrush(Color);
             context.DrawEllipse(pointBrush, null, center, 2.5, 2.5);
-            if (AnchorPoint.IsSelected)
+            if (ObjectSelection.IsSelected(AnchorPoint))
                 context.DrawEllipse(null, new Pen(pointBrush), center, 5.5, 5.5);
             else if (AnchorPoint == hoverAnchor)
                 context.DrawEllipse(null, new Pen(Brushes.White), center, 5.5, 5.5);
@@ -458,12 +460,12 @@ internal partial class AutomationRenderer
             mAutomation = automation;
             mAnchor = anchor;
             mCtrl = ctrl;
-            mIsSelected = anchor.IsSelected;
+            mIsSelected = ObjectSelection.IsSelected(anchor);
             mKeepChangeWithoutMove = keepChangeWithoutMove;
             mScale = scale;
             if (!mCtrl && !mIsSelected)
-                mAutomation.DeselectAllAnchors();
-            anchor.Select();
+                mAutomation.DeselectAllAnchors(ObjectSelection);
+            anchor.Select(ObjectSelection);
 
             State = State.AnchorMoving;
             AutomationRenderer.Part.BeginMergeDirty();
@@ -486,7 +488,7 @@ internal partial class AutomationRenderer
 
             mMoved = true;
             part.DiscardTo(mHead);
-            mAutomation.MoveSelectedPoints(posOffset, valueOffset);
+            mAutomation.MoveSelectedPoints(posOffset, valueOffset, ObjectSelection);
         }
 
         public void Up()
@@ -511,12 +513,12 @@ internal partial class AutomationRenderer
                 if (mCtrl)
                 {
                     if (mIsSelected)
-                        mAnchor.Inselect();
+                        mAnchor.Inselect(ObjectSelection);
                 }
                 else
                 {
-                    mAutomation.DeselectAllAnchors();
-                    mAnchor.Select();
+                    mAutomation.DeselectAllAnchors(ObjectSelection);
+                    mAnchor.Select(ObjectSelection);
                 }
             }
             // 末尾照样 Commit：把先行动作收成**一个**撤销单元（纯点击无先行动作时 Commit 是 no-op）。
@@ -561,7 +563,7 @@ internal partial class AutomationRenderer
             mDownTick = AutomationRenderer.TickAxis.X2Tick(point.X) - AutomationRenderer.Part!.Pos.Value;
             mDownNormalized = AutomationRenderer.YToNormalized(point.Y);
             if (ctrl)
-                mSelectedItems = AllAnchors().Where(a => a.IsSelected).ToList();
+                mSelectedItems = AllAnchors().Where(a => ObjectSelection.IsSelected(a)).ToList();
             Move(point);
         }
 
@@ -572,11 +574,11 @@ internal partial class AutomationRenderer
 
             mTick = AutomationRenderer.TickAxis.X2Tick(point.X) - AutomationRenderer.Part!.Pos.Value;
             mNormalized = AutomationRenderer.YToNormalized(point.Y);
-            mAutomation.DeselectAllAnchors();
+            mAutomation.DeselectAllAnchors(ObjectSelection);
             if (mSelectedItems != null)
             {
                 foreach (var item in mSelectedItems)
-                    item.Select();
+                    item.Select(ObjectSelection);
             }
 
             double minTick = Math.Min(mTick, mDownTick);
@@ -587,7 +589,7 @@ internal partial class AutomationRenderer
             {
                 double normalized = mScale.ToNormalized(anchor.Value);
                 if (anchor.Pos >= minTick && anchor.Pos <= maxTick && normalized >= minNormalized && normalized <= maxNormalized)
-                    anchor.Select();
+                    anchor.Select(ObjectSelection);
             }
 
             AutomationRenderer.InvalidateVisual();

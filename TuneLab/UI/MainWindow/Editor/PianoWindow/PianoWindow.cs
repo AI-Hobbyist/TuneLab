@@ -66,7 +66,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
     }
 
     public PianoWindow(IDependency dependency, EditorActionCollection? actions = null,
-        bool persistViewState = true)
+        bool persistViewState = true, EditorSelectionState? objectSelection = null)
     {
         mDependency = dependency;
         mActions = actions ?? ActionRegistry.Default;
@@ -99,7 +99,7 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
 
                 var pianoScrollViewPanel = new LayerPanel() { ClipToBounds = true };
                 {
-                    mPianoScrollView = new PianoScrollView(this);
+                    mPianoScrollView = new PianoScrollView(this, mActions, objectSelection);
                     pianoScrollViewPanel.Children.Add(mPianoScrollView);
 
                     mParameterLayer = new DockPanel() { LastChildFill = false, MinHeight = PARAMETER_TITLE_BAR_HEIGHT };
@@ -648,19 +648,19 @@ internal class PianoWindow : DockPanel, PianoRoll.IDependency, PianoScrollView.I
         switch (PianoTool.Value)
         {
             case UI.PianoTool.Note:
-                Part?.Notes.SelectAllItems();
+                Part?.Notes.SelectAllItems(PianoScrollView.ObjectSelection);
                 break;
             case UI.PianoTool.Vibrato:
-                Part?.Vibratos.SelectAllItems();
+                Part?.Vibratos.SelectAllItems(PianoScrollView.ObjectSelection);
                 break;
             case UI.PianoTool.Anchor:
                 if (automationRenderer.IsHover)
                     automationRenderer.SelectAllAnchors();
                 else
                 {
-                    Part?.DeselectAllAutomationPoints();
+                    Part?.DeselectAllAutomationPoints(PianoScrollView.ObjectSelection);
                     RefreshParameterPanels();
-                    Part?.Pitch.SelectAllAnchors();
+                    Part?.Pitch.SelectAllAnchors(PianoScrollView.ObjectSelection);
                 }
                 break;
             default:

@@ -6,6 +6,11 @@ using TuneLab.Data;
 using TuneLab.Hosting;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using Avalonia.Media;
+using System.Threading.Tasks;
+using TuneLab.SDK;
+using TuneLab.UI;
+using TuneLab.Foundation;
 
 namespace TuneLab.Cubase.Managed;
 
@@ -16,9 +21,23 @@ internal sealed class PianoEditorSession : IDisposable
     readonly CubasePianoView mView;
     readonly VoiceSelector mVoiceSelector;
     readonly PairSelector mPairSelector;
+    readonly EditorToolbar mToolbar;
     readonly DispatcherTimer mTransportTimer;
     readonly Action mPollTransport;
     readonly Func<CubaseRenderStatus?> mGetRenderStatus;
+    readonly LayoutTransformControl mScaledContent;
+    readonly EmbeddedScriptInputs mInputs = new();
+    readonly DockPanel mEditorContent;
+    readonly TextBox mScriptError = new()
+    {
+        IsReadOnly = true,
+        AcceptsReturn = true,
+        TextWrapping = TextWrapping.Wrap,
+        MaxHeight = 120,
+        IsVisible = false,
+        Margin = new Avalonia.Thickness(8, 0, 8, 4)
+    };
+    double? mContentScale;
     readonly TextBlock mRenderStatus = new()
     {
         Margin = new Avalonia.Thickness(8, 0, 8, 4),
@@ -26,6 +45,7 @@ internal sealed class PianoEditorSession : IDisposable
         Text = "等待宿主状态"
     };
     bool mDisposed;
+    bool mClosing;
 
     internal PianoEditorSession(ProjectDocument document, IPlayhead playhead, Action pollTransport,
         Func<CubaseRenderStatus?> getRenderStatus, Action<int> previewKey, Action stopPreview, Func<Guid?> pairEndpoint)
@@ -34,23 +54,81 @@ internal sealed class PianoEditorSession : IDisposable
         mView = new CubasePianoView(document, playhead, previewKey, stopPreview);
         mVoiceSelector = new VoiceSelector();
         mPairSelector = new PairSelector(pairEndpoint);
+        mToolbar = new EditorToolbar(mView);
         mPollTransport = pollTransport;
         mGetRenderStatus = getRenderStatus;
         mTransportTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         mTransportTimer.Tick += OnTransportTick;
-        var container = new DockPanel();
+        var container = mEditorContent = new DockPanel();
         DockPanel.SetDock(mPairSelector, Dock.Top);
         container.Children.Add(mPairSelector);
         DockPanel.SetDock(mVoiceSelector, Dock.Top);
         container.Children.Add(mVoiceSelector);
+        DockPanel.SetDock(mToolbar, Dock.Top);
+        container.Children.Add(mToolbar);
         DockPanel.SetDock(mRenderStatus, Dock.Top);
         container.Children.Add(mRenderStatus);
+        DockPanel.SetDock(mScriptError, Dock.Top);
+        container.Children.Add(mScriptError);
         container.Children.Add(mView.Piano);
         RefreshPairing();
-        Root = EmbeddedEditorRoot.Create(container);
+        var layers = new Grid();
+        layers.Children.Add(container);
+        layers.Children.Add(mInputs);
+        mScaledContent = new LayoutTransformControl { Child = layers };
+        Root = EmbeddedEditorRoot.Create(mScaledContent);
+        Root.ScalingChanged += OnScalingChanged;
+        mView.ScriptScope.PromptInputs = ShowInputsAsync;
+        mView.ScriptScope.ReportError = (title, message) =>
+        {
+            mScriptError.Text = title + ": " + message;
+            mScriptError.IsVisible = true;
+        };
     }
 
     internal EmbeddableControlRoot Root { get; }
+
+    async Task<PropertyObject?> ShowInputsAsync(ScriptToolMenu.InputRequest request)
+    {
+        if (mClosing)
+            return null;
+        mEditorContent.IsEnabled = false;
+        mScriptError.IsVisible = false;
+        try
+        {
+            return await mInputs.ShowAsync(request);
+        }
+        finally
+        {
+            if (!mClosing)
+            {
+                mEditorContent.IsEnabled = true;
+                mView.Piano.PianoScrollView.Focus();
+            }
+        }
+    }
+
+    internal void SetScale(double factor)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        ObjectDisposedException.ThrowIf(mDisposed, this);
+        if (!double.IsFinite(factor) || factor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(factor));
+        mContentScale = factor;
+        UpdateContentScale();
+    }
+
+    void OnScalingChanged(object? sender, EventArgs args) => UpdateContentScale();
+
+    void UpdateContentScale()
+    {
+        if (mContentScale is not { } factor)
+            return;
+        // VST3 supplies physical pixels per content unit. Avalonia already
+        // applies the HWND's DPI, so compensate rather than multiplying it twice.
+        double relativeScale = factor / Root.RenderScaling;
+        mScaledContent.LayoutTransform = new ScaleTransform(relativeScale, relativeScale);
+    }
 
     internal void Attach(nint parent, int width, int height)
     {
@@ -80,6 +158,7 @@ internal sealed class PianoEditorSession : IDisposable
     {
         RefreshPairing();
         mPollTransport();
+        mToolbar.Refresh();
         mRenderStatus.Text = mGetRenderStatus()?.DisplayText() ?? "宿主状态未连接";
     }
 
@@ -88,6 +167,7 @@ internal sealed class PianoEditorSession : IDisposable
         mPairSelector.Refresh();
         mView.Piano.IsVisible = mPairSelector.AllowsEditing;
         mVoiceSelector.IsVisible = mPairSelector.AllowsEditing;
+        mToolbar.IsVisible = mPairSelector.AllowsEditing;
         mRenderStatus.IsVisible = mPairSelector.AllowsEditing;
     }
 
@@ -114,6 +194,8 @@ internal sealed class PianoEditorSession : IDisposable
         {
             throw new Win32Exception(Marshal.GetLastPInvokeError());
         }
+        if (mInputs.IsVisible)
+            return mInputs.FocusForm();
         return mView.Piano.IsVisible ? mView.Piano.PianoScrollView.Focus() : mPairSelector.FocusCode();
     }
 
@@ -132,6 +214,8 @@ internal sealed class PianoEditorSession : IDisposable
     {
         Dispatcher.UIThread.VerifyAccess();
         ObjectDisposedException.ThrowIf(mDisposed, this);
+        if (!ReferenceEquals(mView.Piano.Part, part))
+            mInputs.Cancel();
         mView.Piano.Part = part;
         mVoiceSelector.SetPart(part);
     }
@@ -143,10 +227,13 @@ internal sealed class PianoEditorSession : IDisposable
         {
             return;
         }
+        mClosing = true;
+        mView.ScriptScope.Deactivate();
         try
         {
             mTransportTimer.Stop();
             mTransportTimer.Tick -= OnTransportTick;
+            Root.ScalingChanged -= OnScalingChanged;
             Root.StopRendering();
             Root.Content = null;
         }
@@ -154,13 +241,32 @@ internal sealed class PianoEditorSession : IDisposable
         {
             try
             {
-                mPairSelector.Dispose();
-                mVoiceSelector.Dispose();
-                mView.Dispose();
+                try
+                {
+                    mPairSelector.Dispose();
+                }
+                finally
+                {
+                    try
+                    {
+                        mVoiceSelector.Dispose();
+                    }
+                    finally
+                    {
+                        mView.Dispose();
+                    }
+                }
             }
             finally
             {
-                Root.Dispose();
+                try
+                {
+                    mInputs.Dispose();
+                }
+                finally
+                {
+                    Root.Dispose();
+                }
             }
         }
         mDisposed = true;

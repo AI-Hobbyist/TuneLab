@@ -1,6 +1,7 @@
 #pragma once
 
 #include "managed_runtime.h"
+#include "pluginterfaces/gui/iplugviewcontentscalesupport.h"
 #include "public.sdk/source/common/pluginview.h"
 #include <algorithm>
 #include <array>
@@ -185,7 +186,8 @@ struct EditorDocument
     }
 };
 
-class EditorView final : public Steinberg::CPluginView
+class EditorView final : public Steinberg::CPluginView,
+                         public Steinberg::IPlugViewContentScaleSupport
 {
   public:
     struct Reference
@@ -201,6 +203,58 @@ class EditorView final : public Steinberg::CPluginView
     explicit EditorView(std::shared_ptr<EditorDocument> document) : document(std::move(document))
     {
         rect = Steinberg::ViewRect(0, 0, 1100, 700);
+    }
+
+    Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid, void **object) override
+    {
+        if (Steinberg::FUnknownPrivate::iidEqual(iid, Steinberg::IPlugViewContentScaleSupport::iid))
+        {
+            if (!object)
+                return Steinberg::kInvalidArgument;
+            *object = static_cast<Steinberg::IPlugViewContentScaleSupport *>(this);
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        return CPluginView::queryInterface(iid, object);
+    }
+    Steinberg::uint32 PLUGIN_API addRef() override
+    {
+        return CPluginView::addRef();
+    }
+    Steinberg::uint32 PLUGIN_API release() override
+    {
+        return CPluginView::release();
+    }
+
+    Steinberg::tresult PLUGIN_API setContentScaleFactor(ScaleFactor factor) override
+    {
+        if (!std::isfinite(factor) || factor <= 0)
+            return Steinberg::kInvalidArgument;
+        const double ratio = factor / contentScale;
+        const double width = std::round(rect.getWidth() * ratio);
+        const double height = std::round(rect.getHeight() * ratio);
+        if (width < 1 || height < 1 || width > (std::numeric_limits<Steinberg::int32>::max)() ||
+            height > (std::numeric_limits<Steinberg::int32>::max)())
+            return Steinberg::kInvalidArgument;
+        Steinberg::ViewRect next(0, 0, static_cast<Steinberg::int32>(width),
+                                 static_cast<Steinberg::int32>(height));
+        const auto previous = rect;
+        if (plugFrame && plugFrame->resizeView(this, &next) != Steinberg::kResultOk)
+            return Steinberg::kResultFalse;
+        if (view != 0 && document->runtime.scaleView(view, factor) != 0)
+        {
+            if (plugFrame)
+            {
+                auto restore = previous;
+                if (plugFrame->resizeView(this, &restore) != Steinberg::kResultOk)
+                    OutputDebugStringA("TuneLab: host rejected scaling rollback\n");
+            }
+            return Steinberg::kResultFalse;
+        }
+        contentScale = factor;
+        scaleRequested = true;
+        rect = next;
+        return Steinberg::kResultTrue;
     }
 
     ~EditorView() override
@@ -226,6 +280,13 @@ class EditorView final : public Steinberg::CPluginView
                      next->runtime.createView(next->handle, systemWindow, rect.getWidth(),
                                               rect.getHeight(), &replacement) != 0))
             return Steinberg::kResultFalse;
+        if (replacement != 0 && scaleRequested &&
+            next->runtime.scaleView(replacement, contentScale) != 0)
+        {
+            if (next->runtime.destroyView(replacement) != 0)
+                OutputDebugStringA("TuneLab: scaled replacement view cleanup failed\n");
+            return Steinberg::kResultFalse;
+        }
         if (view != 0 && document->runtime.destroyView(view) != 0)
         {
             if (replacement != 0 && next->runtime.destroyView(replacement) != 0)
@@ -264,6 +325,12 @@ class EditorView final : public Steinberg::CPluginView
         if (document->runtime.createView(document->handle, parent, rect.getWidth(),
                                          rect.getHeight(), &view) != 0)
         {
+            return Steinberg::kResultFalse;
+        }
+        if (scaleRequested && document->runtime.scaleView(view, contentScale) != 0)
+        {
+            if (document->runtime.destroyView(view) == 0)
+                view = 0;
             return Steinberg::kResultFalse;
         }
         const auto result = CPluginView::attached(parent, type);
@@ -333,5 +400,7 @@ class EditorView final : public Steinberg::CPluginView
     std::shared_ptr<Reference> lifetime = std::make_shared<Reference>(Reference{this});
     std::shared_ptr<EditorDocument> document;
     ViewHandle view = 0;
+    double contentScale = 1;
+    bool scaleRequested = false;
 };
 } // namespace TuneLab::Cubase

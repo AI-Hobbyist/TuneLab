@@ -1,6 +1,6 @@
 # TuneLab 深度集成 Cubase 16 的 S3+ 路线 B 实施计划
 
-日期：2026-11-14。状态：实施中，M0–M2已完成并推送，M3自主实施与非GUI验收完成且功能检查点已推送确认；下一阶段M4尚未开始。
+日期：2026-11-15。状态：实施中，M0–M3已完成并推送；M4自主实施与非GUI验收完成，待提交推送检查点；M5–M6未开始。
 
 本计划交付两个插件：**TuneLab VST3 Instrument（VSTi3）**和 **TuneLab ARA Bridge**。采用路线 B，在 Cubase 进程内通过原生 C++ 插件壳加载 .NET 与 Avalonia，复用 TuneLab 钢琴窗，使其既能嵌入 VST3 插件界面，也能通过 ARA 工作流进入 Cubase Extension 编辑器。最终目标是 S3+，包括 Cubase Key Editor 歌词输入同步、合成播放、编辑和工程恢复。
 
@@ -287,8 +287,9 @@ GUI 验证当前默认跳过。只有用户后续明确要求执行时，才采�
 | M0 契约与可行性 | 自主实施/自动验证完成，f2f51b2a已推送；见 cubase-m0-baseline.md |
 | M1 共享运行层与嵌入骨架 | 自主实施/自动验证完成，1cb004e1已推送；真实GUI SKIPPED |
 | M2 VSTi3完整闭环 | 自主实施与本阶段非GUI自动验收完成；9b1ec329已推送且HEAD/上游一致，见 [M2验收记录](cubase-m2-validation.md) |
-| M3 ARA Bridge闭环 | IN PROGRESS；source音符/tempo、身份归档、角色选择、区域合成/活动更新/通知及编辑试听已有CLI证据；跨包配对契约通过，实例绑定/路由/共享文档/UI/恢复、meter原点和最终覆盖待实施；GUI SKIPPED |
-| M4–M6 | NOT STARTED，按原顺序推进 |
+| M3 ARA Bridge闭环 | 自主实施/非GUI验收及推送检查点完成，功能提交32433224；见 [M3验收记录](cubase-m3-validation.md)；GUI SKIPPED |
+| M4 双容器钢琴窗 | 自主实施/非GUI验收完成，待独立提交推送检查点；见 [M4验收记录](cubase-m4-validation.md) |
+| M5–M6 | NOT STARTED，M4检查点确认后按原顺序推进 |
 
 M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy歌声引擎复用、完整版本化component state和Bypass参数状态、controller文档快照消息/恢复、异步代次缓存、整曲宿主播放和离线process、MIDI短音歌声缓存试听、样本级NoteOff/Bypass、float/double、状态反馈，以及当前块时间信息接收。
 
@@ -362,3 +363,32 @@ M3逐项审计与必要回归完成，见[cubase-m3-validation.md](cubase-m3-val
 ### M3 Git检查点（2026-11-14）
 
 功能提交32433224c724b404866ef113f2ad4b5ec7fbac7f已独立提交并推送至origin/cubase_16_full_ara，ls-remote实际返回相同SHA，上游同名关系已确认。M3完成自主实施/非GUI验收及阶段检查点；当前只补记文档，随后按顺序进入M4。保留原.gitignore、.codegraph、out及三份参考文档。人工项继续SKIPPED，完整S3+目标未完成。
+
+### M4 编辑入口进度（2026-11-15）
+
+已接入共用 EditorToolbar：实例内撤销/重做、剪切/复制/粘贴/删除/全选，五种现有钢琴工具及 1–5 工具快捷键，普通/三连音/五连音量化。操作中的编辑事务禁止工具切换和撤销/重做。工具栏与现有配对状态联动，缺失配对时隐藏编辑入口。
+
+静态调用路径发现右键升/降八度菜单仍查找全局 ActionRegistry，已改为传递本视图的 EditorActionCollection；局部临时菜单不注册全局 Keymap.Changed，独立版维持原路径。
+
+托管插件构建 PASS；局部动作/文档/歌手/动作覆盖回归 12/12（m4-editing-regression.log）；verify-host.ps1 退出0（m4-host-verification.log），两个 validator 各47/0、实际插件包运行时、ARA/视图协议和跨包共享 lease 回归通过。均为非 GUI 证据，不证明真实窗口操作。
+
+M4仍 IN PROGRESS，未提交。下一步核对缩放接口、IME/键盘/菜单归属、完整编辑入口和确定性释放，补齐必要实现与非 GUI 事务/所有权验收。真实窗口、Cubase/V7、DPI/IME视觉检查继续 SKIPPED（用户决定，未执行，需人工验证）。另外发现现有 ScriptToolMenu 使用独立版静态工程上下文，内嵌实例菜单的脚本路径需要在后续 M4 核对中明确隔离，尚未修改此路径。
+### M4 菜单隔离补记（2026-11-15）
+
+ScriptToolMenu 已引入可选的实例 Scope，三个内嵌钢琴窗菜单站点使用当前文档/片段/量化/选区，执行复用原 ScriptRunner，不安装全局工程提供器。菜单共用的 Scope.RunScript 已通过两个文档的修改、选区、撤销重做和失败回滚测试。既有脚本 API 与相关非 GUI 回归共70/70通过，日志m4-script-regression.log。视图清理已补 finally，确保试听/订阅清理失败时仍尝试释放后续对象；此项没有真实窗口验收证据。
+
+M4仍 IN PROGRESS。下一步为 VST3 内容缩放接口及其跨包视图转发、内嵌脚本参数表单与菜单归属。已核对本地 SDK 的绝对比例/尺寸调整/IPlugFrame.resizeView 契约，尚未实现缩放链路；现有脚本输入在非 Window 容器下的默认填值行为也未满足完整交互要求。未做阶段提交推送，未进入M5；所有真实 GUI 项仍按用户决定 SKIPPED。
+### M4 缩放链路（2026-11-15）
+
+IPlugViewContentScaleSupport 已接入挂载前尺寸/比例、宿主 resizeView、托管视图与配对跨包 lease，私有 ABI16；托管布局以 host factor / 窗口 RenderScaling 避免重复 DPI 放大，随系统 DPI 通知刷新，释放解绑。未改变宿主全局 DPI 策略或冻结公共 API。挂载前、非法值、帧拒绝、托管失败尺寸回退协议探针通过；相关托管16/16，完整 verify-host 退出0、双 validator 各47/0及真实插件包跨包转发通过。证据 m4-scale-host-verification.log，逐项记录见[cubase-m4-validation.md](cubase-m4-validation.md)。
+
+M4仍 IN PROGRESS、未提交推送。下一步是内嵌脚本参数表单/关闭取消、同文档多视图选择隔离核对及本阶段剩余审计。真实窗口 DPI/IME/点击命中/资源验证继续 SKIPPED，不与协议探针混同。
+### M4 内嵌参数输入（2026-11-15）
+
+有实例 Scope 的脚本输入已使用插件根内覆盖层：复用现有属性控件，确认/取消/重置、条件字段与错误显示，背景编辑暂停，关闭或片段切换取消，工程替换后拒绝旧结果。错误走插件内文本，不再把 EmbeddableControlRoot 强制转换为 Window。未创建额外窗口或嵌套主循环，不修改冻结公共 API。最新托管插件构建通过；参数等待/取消/关闭/工程替换与现有脚本回归73/73（m4-input-prompt-tests.log）。真实表单交互、IME/焦点/DPI仍 SKIPPED，不称端到端通过。
+
+M4仍 IN PROGRESS。静态已确认音符/颤音选择旗标位于共享模型，接下来完成同文档多视图选择隔离及阶段剩余审计；未进入M5、未提交推送。全程使用原生 Windows 工具链，不调用或探测 WSL，不构建本机非 Windows 目标。
+
+### M4 最终自主验收（2026-11-15）
+
+双容器编辑工具、显式实例选择、局部菜单/脚本上下文、内嵌参数与批量歌词表单、焦点与缩放接口和释放路径已完成本阶段实施。完整解决方案构建0错误，主855/855、legacy13/13，最新插件包完整verify-host退出0、ABI16、双validator各47/0及跨包所有权/缩放协议通过。逐项证据与人工SKIPPED边界见[cubase-m4-validation.md](cubase-m4-validation.md)。M4自主实施/非GUI验收完成，当前只执行独立提交推送检查点；确认远端后才进入M5。未把TuneLab内部歌词编辑称作Cubase原生歌词同步，完整S3+目标仍ACTIVE。

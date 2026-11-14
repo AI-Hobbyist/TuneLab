@@ -19,7 +19,7 @@ public static partial class NativeEntry
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static int GetAbiVersion()
     {
-        return 15;
+        return 16;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

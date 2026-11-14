@@ -16,6 +16,7 @@ internal partial class AutomationRenderer
     class AutomationRenderItem(AutomationRenderer automationRenderer) : Item
     {
         public AutomationRenderer AutomationRenderer => automationRenderer;
+        protected EditorSelectionState ObjectSelection => AutomationRenderer.ObjectSelection;
     }
 
     class VibratoItem(AutomationRenderer automationRenderer) : AutomationRenderItem(automationRenderer)
@@ -54,7 +55,7 @@ internal partial class AutomationRenderer
             var center = Position();
             var pointBrush = new SolidColorBrush(Color);
             context.DrawEllipse(pointBrush, null, center, 2.5, 2.5);
-            if (AnchorPoint.IsSelected)
+            if (ObjectSelection.IsSelected(AnchorPoint))
             {
                 context.DrawEllipse(null, new Pen(pointBrush), center, 5.5, 5.5);
             }

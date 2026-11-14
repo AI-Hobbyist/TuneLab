@@ -75,7 +75,7 @@ internal partial class AutomationRenderer
 
                 if (mDependency.PianoTool.Value == PianoTool.Anchor)
                 {
-                    Part?.Pitch.DeselectAllAnchors();
+                    Part?.Pitch.DeselectAllAnchors(ObjectSelection);
                     mDependency.PianoScrollView.InvalidateVisual();
                     if (ActiveIsPiecewise())
                     {
@@ -94,14 +94,15 @@ internal partial class AutomationRenderer
                                 if (!TryGetActiveAutomation(out var automation, out var config, true))
                                     break;
 
-                                var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - automation.Part.Pos.Value, YToValue(e.Position.Y, config.Scale)) { IsSelected = true };
-                                automation.InsertPoint(anchor);
+                                var anchor = new AnchorPoint(TickAxis.X2Tick(e.Position.X) - automation.Part.Pos.Value, YToValue(e.Position.Y, config.Scale));
+                                anchor.Select(ObjectSelection);
+                                automation.InsertPoint(anchor, ObjectSelection);
                                 var insertedAnchor = automation.Points.FirstOrDefault(point => point.Pos == anchor.Pos);
                                 if (insertedAnchor == null)
                                     break;
 
-                                automation.Points.DeselectAllItems();
-                                insertedAnchor.Select();
+                                automation.Points.DeselectAllItems(ObjectSelection);
+                                insertedAnchor.Select(ObjectSelection);
                                 mAnchorMoveOperation.Down(e.Position, ctrl, automation, insertedAnchor, config.Scale, true);
                             }
                             else
@@ -113,7 +114,7 @@ internal partial class AutomationRenderer
                             // 右键先取消该轨全部选中（空白处右键即"取消选中"，对齐 pitch 锚点工具），再按命中删点。
                             // 两者都要重绘 + 刷锚点值输入框——输入框显示的是"选中锚点的值"，选中态变了必须跟着刷。
                             if (TryGetActiveAutomation(out var deselectTarget, out _, false))
-                                deselectTarget.Points.DeselectAllItems();
+                                deselectTarget.Points.DeselectAllItems(ObjectSelection);
                             if (item is AutomationAnchorItem deleteAnchorItem)
                                 deleteAnchorItem.Automation.DeletePoints([deleteAnchorItem.AnchorPoint]);
                             InvalidateVisual();
@@ -164,7 +165,7 @@ internal partial class AutomationRenderer
                                 if (automationKey == null || !Part.TryGetAutomationConfig(automationKey.Value, out _))
                                     break;
 
-                                foreach (var vibrato in Part.Vibratos.AllSelectedItems())
+                                foreach (var vibrato in Part.Vibratos.AllSelectedItems(ObjectSelection))
                                 {
                                     vibrato.RemoveAssociation(automationKey.Value);
                                 }
@@ -500,6 +501,7 @@ internal partial class AutomationRenderer
     class Operation(AutomationRenderer automationRenderer)
     {
         public AutomationRenderer AutomationRenderer => automationRenderer;
+        protected EditorSelectionState ObjectSelection => AutomationRenderer.ObjectSelection;
         public State State { get => AutomationRenderer.mState; set => AutomationRenderer.mState = value; }
     }
 
@@ -1234,7 +1236,7 @@ internal partial class AutomationRenderer
             mDownNormalized = AutomationRenderer.YToNormalized(point.Y);
             if (ctrl)
             {
-                mSelectedItems = mAutomation.Points.AllSelectedItems();
+                mSelectedItems = mAutomation.Points.AllSelectedItems(ObjectSelection);
             }
             Move(point);
         }
@@ -1246,11 +1248,11 @@ internal partial class AutomationRenderer
 
             mTick = AutomationRenderer.TickAxis.X2Tick(point.X) - mAutomation.Part.Pos.Value;
             mNormalized = AutomationRenderer.YToNormalized(point.Y);
-            mAutomation.Points.DeselectAllItems();
+            mAutomation.Points.DeselectAllItems(ObjectSelection);
             if (mSelectedItems != null)
             {
                 foreach (var item in mSelectedItems)
-                    item.Select();
+                    item.Select(ObjectSelection);
             }
 
             double minTick = Math.Min(mTick, mDownTick);
@@ -1261,7 +1263,7 @@ internal partial class AutomationRenderer
             {
                 double normalized = mScale.ToNormalized(pointItem.Value + mDefaultValue);
                 if (pointItem.Pos >= minTick && pointItem.Pos <= maxTick && normalized >= minNormalized && normalized <= maxNormalized)
-                    pointItem.Select();
+                    pointItem.Select(ObjectSelection);
             }
 
             AutomationRenderer.UpdateAnchorValueInput();
@@ -1378,14 +1380,14 @@ internal partial class AutomationRenderer
             mAutomation = automation;
             mAnchor = anchor;
             mCtrl = ctrl;
-            mIsSelected = anchor.IsSelected;
+            mIsSelected = ObjectSelection.IsSelected(anchor);
             mKeepChangeWithoutMove = keepChangeWithoutMove;
             mScale = scale;
             if (!mCtrl && !mIsSelected)
             {
-                mAutomation.Points.DeselectAllItems();
+                mAutomation.Points.DeselectAllItems(ObjectSelection);
             }
-            anchor.Select();
+            anchor.Select(ObjectSelection);
 
             State = State.AnchorMoving;
             AutomationRenderer.Part.BeginMergeDirty();
@@ -1409,7 +1411,7 @@ internal partial class AutomationRenderer
 
             mMoved = true;
             part.DiscardTo(mHead);
-            mAutomation.MoveSelectedPoints(posOffset, valueOffset);
+            mAutomation.MoveSelectedPoints(posOffset, valueOffset, ObjectSelection);
             AutomationRenderer.UpdateAnchorValueInput();
         }
 
@@ -1435,13 +1437,13 @@ internal partial class AutomationRenderer
                 {
                     if (mIsSelected)
                     {
-                        mAnchor.Inselect();
+                        mAnchor.Inselect(ObjectSelection);
                     }
                 }
                 else
                 {
-                    mAutomation.Points.DeselectAllItems();
-                    mAnchor.Select();
+                    mAutomation.Points.DeselectAllItems(ObjectSelection);
+                    mAnchor.Select(ObjectSelection);
                 }
             }
 
@@ -1474,13 +1476,13 @@ internal partial class AutomationRenderer
             if (AutomationRenderer.Part == null)
                 return;
 
-            if (!downVibrato.IsSelected)
+            if (!ObjectSelection.IsSelected(downVibrato))
             {
-                AutomationRenderer.Part.Vibratos.DeselectAllItems();
-                downVibrato.Select();
+                AutomationRenderer.Part.Vibratos.DeselectAllItems(ObjectSelection);
+                downVibrato.Select(ObjectSelection);
             }
 
-            var vibratos = AutomationRenderer.Part.Vibratos.AllSelectedItems();
+            var vibratos = AutomationRenderer.Part.Vibratos.AllSelectedItems(ObjectSelection);
             if (vibratos.IsEmpty())
                 return;
 

@@ -1,16 +1,69 @@
-﻿# 当前任务交接
+# 当前任务交接
 
-更新时间：2026-11-14。持续目标 ACTIVE。分支 cubase_16_full_ara。
+更新时间：2026-11-15。持续目标 ACTIVE。分支 cubase_16_full_ara。
 
-## 阶段与检查点
+## 当前阶段与 Git 检查点
 
-- M0完成并已推送：f2f51b2a；契约/基线见 docs/cubase-m0-baseline.md。
-- M1完成并已推送：1cb004e144e435b7f915f6110c877cb36c2d7873。
-- M2自主实施与非GUI验收完成，功能检查点9b1ec32917c89f659ac4dbfd621fd56ebe5b8886已推送origin/cubase_16_full_ara，HEAD/上游一致已实际确认。本次文档提交补记结果，随后可进入M3。
-- M2文档补记999ab39d也已推送并确认HEAD/上游一致。
-- M3自主实施/非GUI验收完成，功能检查点32433224c724b404866ef113f2ad4b5ec7fbac7f已提交并推送，ls-remote确认一致。M4–M6未开始，完整目标ACTIVE。
-- 正式计划：docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md。
-- M2逐项验收与命令/证据：docs/cubase-m2-validation.md。
+- 原目标不变：按 docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md 的 M0→M6 交付 VSTi3 + ARA Bridge、进程内钢琴窗、合成/时间/音符/歌词关联、工程恢复与发布材料，最终 S3+ 尚未完成。
+- M0–M3 已完成自主实施与非 GUI 验收并推送。M3 功能提交 32433224c724b404866ef113f2ad4b5ec7fbac7f，文档补记 ae7cf2bb2cad11379c52b510d9362b81cf0a2f74，均已在此前实际确认远端一致。
+- M4 双容器钢琴窗已完成本阶段自主实施与非 GUI 验收。当前正执行单独提交/推送检查点，尚未提交本阶段；确认推送成功后才进入 M5。
+- M5–M6 未开始。Cubase Key Editor 原生歌词通道尚未证实；不得把 TuneLab 内部歌词输入、ARA 音符导入或自有消息当作原生歌词同步。
+- 正式 M4 逐项验收：docs/cubase-m4-validation.md。历史 M2/M3 逐项证据：docs/cubase-m2-validation.md、docs/cubase-m3-validation.md。
+
+## M4 已完成实现
+
+- 两个容器沿用同一 EditorView/PianoEditorSession；局部动作和工具栏、五种钢琴工具及快捷键、量化、剪贴板、既有参数区与歌词/音素编辑。操作进行中限制工具切换/撤销。
+- 每个内嵌视图拥有 EditorSelectionState，弱键保存对象选择；音符/颤音/连续与分段锚点的渲染、拖动、复制、删除、粘贴及脚本读写/失败回滚显式传递该状态。独立版默认保留模型旗标语义；同文档仍共享撤销历史，各视图时间/音高轴独立。
+- 右键升降八度使用实例动作集合，局部临时菜单不订阅全局 Keymap.Changed。脚本菜单使用实例 Scope，不安装全局工程提供器。
+- EmbeddedScriptInputs 在插件根内复用现有属性控件，确认/取消/重置、响应式 schema、焦点与 Tab 范围；关闭/片段切换取消，工程替换后拒绝旧结果，错误在插件内显示。批量歌词也使用此入口，复用原 LyricInput.ApplyLyrics 的分词/发音/跳过延音符逻辑，不强转内嵌根为 Window。
+- 私有 ABI16：IPlugViewContentScaleSupport、挂载前比例/尺寸、IPlugFrame.resizeView、失败回退、跨包 ScaleView/ScalePairView。托管布局按 host factor / Root.RenderScaling，不更改宿主 DPI 策略。
+- 显式清理订阅、计时器、属性控件、动作、试听和 Root；作用域停用与表单取消避免关闭后的续体执行。原生 removed/共享 lease 保持已有关闭重试及 owner 生命周期。
+- 未改冻结 TuneLab.SDK/Foundation 公共 API、既有引擎必需接口或第三方源码；私有数据/脚本选择参数均可选，原入口默认行为保留。
+
+## 最终验证（M4）
+
+- m4-solution-build.log：Windows Debug 解决方案构建 PASS，0 错误。
+- m4-full-tests.log：主测试 855/855 PASS。
+- m4-legacy-tests.log：legacy 兼容 13/13 PASS。
+- m4-selection-managed-build.log：最新托管集成程序集构建 PASS。
+- m4-selection-lyrics-tests.log：选择/歌词/脚本/锚点/动作相关 94/94 PASS，含同文档双选择、音符/颤音剪贴板与撤销、锚点重建和脚本回滚。
+- m4-final-host-verification.log：完整 verify-host 退出0；ABI16；双 validator 各47/0；实际插件包的运行时、ARA/状态/时间/缓存/视图及跨包所有权、缩放协议通过。CMake ALL 目标复制最新 managed 资源。
+- 限定格式处理、原 BOM 保留和 git diff --check 已执行。保留原 Cbor NU1902 和既有编译器警告，没有无关升级。
+- 修复过的构建问题：Windows max 宏冲突、表单所在程序集无法访问既有内部控件（移入主程序集）、测试构造前置条件及新歌词入口 using。最终均已通过，未放宽断言。
+
+## 未验证事项与证据边界
+
+所有真实 Cubase/V7、GUI、中文/日文 IME、宿主快捷键、菜单、DPI/点击命中、反复开关与资源观测、硬件、安装和试听均 SKIPPED（用户决定，未执行，需人工验证）。不启动、不等待、不作为 blocked，不记为 PASS。视图探针不创建 HWND；数据/委托测试不创建控件，不冒充真实双窗口或 Cubase S3+ 验收。
+
+本机声库仅 fu2_ning2_na4 用于测试，不随插件分发。M3试听仍是一秒音符加尾音缓存，不是无限延音/连续实时演唱；M3 既有边界与音频证据见其正式验收记录。
+
+## 当前修改与保留项
+
+M4 修改涉及 TuneLab/Data 的选择与相关编辑入口、TuneLab/Hosting 的视图/表单/配对租约、脚本上下文与句柄、钢琴窗/参数区/歌词输入、integrations/cubase 的 managed/native 视图缩放和协议探针，以及阶段测试、计划和本手册。
+
+本阶段新增文件包括：TuneLab/Data/EditorSelectionState.cs、TuneLab/Hosting/EmbeddedScriptInputs.cs、TuneLab/UI/MainWindow/Editor/PianoWindow/PianoScrollView/PianoScrollViewLyrics.cs、integrations/cubase/managed/EditorToolbar.cs、tests/TuneLab.Tests/CubaseScriptScopeTests.cs、tests/TuneLab.Tests/EditorSelectionStateTests.cs、docs/cubase-m4-validation.md。上述均待纳入 M4 检查点。
+
+不得 stage 用户原有 .gitignore 修改、.codegraph/、out/ 或三份参考文档：docs/Cubase16_SVS_接入静态分析.md、docs/S3+_交付与接口清单分析.md、docs/TuneLab_接入Cubase16_方案分析.md。模型、生成音频/工程、日志不分发。
+
+## 下一步顺序
+
+1. M4 验收标准已经通过，不再追加范围或测试；检查 staged diff，单独提交、推送 cubase_16_full_ara 并通过 ls-remote 确认。
+2. 补记实际 Git 检查点状态，确认 HEAD/远端一致后进入 M5。
+3. M5 按原计划核对 M0 的宿主歌词证据，落实已证实通道及音符/歌词关联、冲突和增量重合成；不虚构协议，不默认降级 S3+。人工项始终非阻塞。
+4. 每阶段同样完成记录→检查 diff→提交→推送→确认，之后才进入下一阶段。
+
+## 必须遵守的约束与运行环境
+
+- CodeGraph 优先；主仓与 third_party SDK 各自索引。不得初始化用户未决定的索引。
+- 本机16GB：仅原生 Windows 工具链和 Windows 目标。禁止任何 WSL 调用、列举、探测、启动或间接包装；不进行本地 Linux/其他目标构建。
+- 所有构建/测试/打包前台 PowerShell，2>&1 | Tee-Object -FilePath build.log，立即记录并检查 LASTEXITCODE，失败读日志。不并行占用多个构建进程；native 使用 --parallel 1 -- /nodeReuse:false。
+- Qt offscreen 禁止；真实 GUI 按用户决定全部跳过，不能用 headless/offscreen 代替 PASS。
+- 冻结公共 ABI；新增 TuneLab API 必须可选且兼容既有引擎；不做无关重构或扩大阶段范围。
+- 不猜额度/订阅。最近可靠查询 primary used56%，仍允许使用，未触发交接阈值。仅阈值触发后才委派 Luna 整理手册；当前手册由当前 Agent 更新。
+- 核心路径：out/cubase/m0/native；managed 项目 integrations/cubase/managed/TuneLab.Cubase.Managed.csproj；两插件位于 out/cubase/m0/native/VST3/Debug/。
+- 验证前设置 TUNELAB_DATA_DIR=out/cubase/m2/data；本机测试状态 out/cubase/m2/fu2_ning2_na4.state。verify-host.ps1 -AraProjectState 该文件执行全套非 GUI 协议；运行日志位于仓库根，未加入 Git。
+
+## 历史实现与验证资料（当前阶段以以上记录为准）
 
 ## 已完成实现
 
@@ -20,7 +73,7 @@ source note内容、版本1身份匹配、musical context tempo/meter与region�
 
 source身份与计数器已通过TLARA002按筛选器归档恢复和新文档ID重映射。Bridge已支持区域合成、变速、裁剪/偏移/重叠、活动host/editor更新、宿主编辑通知及合成完成通知；immutable Plan保证音频线程不释放worker。真实本机声库CLI路径和双validator通过，证据见下文最新补记。
 
-当前私有ABI15：ARA源数据/tempo/拍号原点、版本化关联/归档、区域合成/试听、source-local播放位置及显式配对均已实现。跨包共享文档与视图lease、唯一正式输出、配对码UI、PeerMissing意图保存恢复，以及多region源时间重投影有对应自动证据。M3验收记录见docs/cubase-m3-validation.md；解决方案build、主843/843、legacy13/13、双validator各47/0和本机SVS CLI回归通过。功能检查点32433224c724b404866ef113f2ad4b5ec7fbac7f已提交推送并经远端确认。下一阶段M4尚未开始。真实GUI/Cubase保持SKIPPED，不称实机S3+通过。
+当前私有ABI16（M4增加视图缩放）：ARA源数据/tempo/拍号原点、版本化关联/归档、区域合成/试听、source-local播放位置及显式配对均已实现。跨包共享文档与视图lease、唯一正式输出、配对码UI、PeerMissing意图保存恢复，以及多region源时间重投影有对应自动证据。M3验收记录见docs/cubase-m3-validation.md；解决方案build、主843/843、legacy13/13、双validator各47/0和本机SVS CLI回归通过。功能检查点32433224c724b404866ef113f2ad4b5ec7fbac7f已提交推送并经远端确认。M4已开始，当前工具栏变更尚未提交。真实GUI/Cubase保持SKIPPED，不称实机S3+通过。
 
 M1钢琴窗与CLR基础保持：每实例ProjectDocument、局部动作/撤销/剪贴板、共享controller/view文档所有权；包内hostfxr/nethost及Avalonia嵌入根，显式视图清理。
 
@@ -458,7 +511,7 @@ BridgeAudioModification::pairEndpoint懒注册对应文档provider：读已提�
 
 - 补齐Bridge source-local播放位置：HostTimeMailbox发布sample/rate；控制线程以weak region/clock转换source秒，私有ABI15 MapDocumentSourcePosition按当前工程或pending state转换quarter。独立Instrument原quarter回调不变；失效对象/context返回未知。
 - 最终自动验收：解决方案build PASS/0 errors（m3-solution-build.log）；主843/843（m3-full-tests.log）；legacy13/13（m3-legacy-tests.log）；完整verify-host/ABI15/双validator各47/0（m3-source-playhead-host.log）；最终runtime跨包含分段pending时钟PASS（m3-source-playhead-clock.log）；actual Bridge本机SVS区域/试听/归档/transport PASS（m3-source-playhead-ara-synthesis.log）。
-- docs/cubase-m3-validation.md逐项对应M3要求及证据。M3自主实施与非GUI验收完成；全部真实GUI/Cubase人工项SKIPPED，不称S3+实机通过。M4–M6未开始，完整目标ACTIVE。
+- docs/cubase-m3-validation.md逐项对应M3要求及证据。M3自主实施与非GUI验收完成；全部真实GUI/Cubase人工项SKIPPED，不称S3+实机通过。M4实施中，M5–M6未开始，完整目标ACTIVE。
 - 旧exec会话37755已从工具注册表消失；本机完整日志确认解决方案、主测试及legacy命令均报告成功，没有盲目重启。新增分段时钟断言最终明确进入重新编译的probe并输出PASS。
 - 当前分支cubase_16_full_ara，M3尚未提交/推送。下一操作：仅stage M3源码/测试/计划/验收记录，排除原.gitignore/.codegraph/out/三份参考文档与本机模型/日志；检查暂存diff与空白，独立提交M3并推送，核实同名远端SHA；更新实际Git状态后才进入M4。
 - M4按原计划核对双容器工具、状态呈现/焦点和资源释放。M5原生歌词通道尚未实现；不能把手工歌词保存称为Cubase原生歌词同步。

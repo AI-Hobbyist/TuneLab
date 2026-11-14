@@ -11,9 +11,9 @@ public static partial class NativeEntry
 {
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int SetPairViewProvider(byte* endpoint, nint create, nint destroy,
-        nint resize, nint focus, nint release, nint owner)
+        nint resize, nint focus, nint release, nint scale, nint owner)
     {
-        if (endpoint == null || create == 0 || destroy == 0 || resize == 0 || focus == 0 || release == 0)
+        if (endpoint == null || create == 0 || destroy == 0 || resize == 0 || focus == 0 || release == 0 || scale == 0)
             return 1;
         try
         {
@@ -28,7 +28,8 @@ public static partial class NativeEntry
                 view => ((delegate* unmanaged[Cdecl]<nint, ulong, int>)destroy)(owner, view),
                 (view, width, height) => ((delegate* unmanaged[Cdecl]<nint, ulong, int, int, int>)resize)(owner, view, width, height),
                 view => ((delegate* unmanaged[Cdecl]<nint, ulong, int>)focus)(owner, view),
-                () => ((delegate* unmanaged[Cdecl]<nint, void>)release)(owner));
+                () => ((delegate* unmanaged[Cdecl]<nint, void>)release)(owner),
+                (view, factor) => ((delegate* unmanaged[Cdecl]<nint, ulong, double, int>)scale)(owner, view, factor));
             return 0;
         }
         catch (KeyNotFoundException) { return 2; }
@@ -71,6 +72,10 @@ public static partial class NativeEntry
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int ResizePairView(byte* lease, int width, int height)
         => PairViewOperation(lease, id => CubasePairRegistry.ResizePairView(id, width, height));
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int ScalePairView(byte* lease, double factor)
+        => PairViewOperation(lease, id => CubasePairRegistry.ScalePairView(id, factor));
 
     static unsafe int PairViewOperation(byte* lease, Func<Guid, int> operation)
     {

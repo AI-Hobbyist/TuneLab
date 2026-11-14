@@ -81,7 +81,7 @@ class ManagedRuntime
                resolve(L"CreateDocument", createDocument) &&
                resolve(L"DestroyDocument", destroyDocument) && resolve(L"CreateView", createView) &&
                resolve(L"DestroyView", destroyView) && resolve(L"ResizeView", resizeView) &&
-               resolve(L"FocusView", focusView) &&
+               resolve(L"FocusView", focusView) && resolve(L"ScaleView", scaleView) &&
                resolve(L"InitializeServices", initializeServices) &&
                resolve(L"ValidateVoice", validateVoice) &&
                resolve(L"RenderSnapshot", renderSnapshot) &&
@@ -118,7 +118,7 @@ class ManagedRuntime
                resolve(L"CreatePairView", createPairView) &&
                resolve(L"DestroyPairView", destroyPairView) &&
                resolve(L"ResizePairView", resizePairView) &&
-               resolve(L"FocusPairView", focusPairView);
+               resolve(L"FocusPairView", focusPairView) && resolve(L"ScalePairView", scalePairView);
     }
 
     SetPairViewProvider setPairViewProvider = nullptr;
@@ -128,6 +128,7 @@ class ManagedRuntime
     DestroyPairView destroyPairView = nullptr;
     ResizePairView resizePairView = nullptr;
     FocusPairView focusPairView = nullptr;
+    ScalePairView scalePairView = nullptr;
     SetPairDocumentAccess setPairDocumentAccess = nullptr;
     CopyPairDocumentState copyPairDocumentState = nullptr;
     ApplyPairDocumentState applyPairDocumentState = nullptr;
@@ -144,6 +145,7 @@ class ManagedRuntime
     DestroyView destroyView = nullptr;
     ResizeView resizeView = nullptr;
     FocusView focusView = nullptr;
+    ScaleView scaleView = nullptr;
     InitializeServices initializeServices = nullptr;
     ValidateVoice validateVoice = nullptr;
     RenderSnapshot renderSnapshot = nullptr;

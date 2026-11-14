@@ -90,10 +90,18 @@ internal partial class LyricInput : Window
         if (mNotes.Count == 0)
             return;
 
-        var lyricResults = LyricUtils.Split(mLyricInputBox.Text);
+        ApplyLyrics(mNotes, mLyricInputBox.Text, mSkipTenutoCheckBox.IsChecked);
+        Close();
+    }
+
+    internal static void ApplyLyrics(IReadOnlyCollection<INote> selectedNotes, string text, bool skipTenuto)
+    {
+        if (selectedNotes.Count == 0)
+            return;
+        var lyricResults = LyricUtils.Split(text);
         // 录词跳过按编辑器 "-" 记号（录入便利，与右侧歌词串里的 "-" 同一约定），不走插件判定。
-        var notes = mSkipTenutoCheckBox.IsChecked ? mNotes.Where(note => !note.IsEditorContinuationLyric()) : mNotes;
-        using var enumerator = (mSkipTenutoCheckBox.IsChecked ? lyricResults.Where(lyricResult => lyricResult.Lyric != "-") : lyricResults).GetEnumerator();
+        var notes = skipTenuto ? selectedNotes.Where(note => !note.IsEditorContinuationLyric()) : selectedNotes;
+        using var enumerator = (skipTenuto ? lyricResults.Where(lyricResult => lyricResult.Lyric != "-") : lyricResults).GetEnumerator();
         foreach (var note in notes)
         {
             if (!enumerator.MoveNext())
@@ -110,8 +118,7 @@ internal partial class LyricInput : Window
                 note.Pronunciation.Set(current.Pronunciation);
         }
 
-        mNotes.First().Commit();
-        Close();
+        selectedNotes.First().Commit();
     }
 
     IReadOnlyCollection<INote>? mNotes = null;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using TuneLab.Data;
 using TuneLab.Foundation;
@@ -22,6 +23,53 @@ namespace TuneLab.UI;
 // 各右键菜单站点只需一行 AppendContextTools 即可。运行复用独立脚本模块 ScriptRunner（整段 = 一个可撤销单位、出错原子回退）。
 internal static class ScriptToolMenu
 {
+    internal sealed record InputRequest(string Title, ObjectConfig Schema,
+        Func<PropertyObject, (ObjectConfig? Schema, string? Error)> Compute, PropertyObject InitialValues);
+
+    internal sealed record Scope(Func<IProject?> Project, Func<IMidiPart?> CurrentPart,
+        Func<IQuantization?> Quantization, Func<ScriptSelection?> Selection,
+        Func<ScriptPianoSelection?> PianoSelection, IScriptSelectionWriter SelectionWriter)
+    {
+        internal bool IsActive { get; private set; } = true;
+        internal Func<InputRequest, Task<PropertyObject?>>? PromptInputs { get; set; }
+        internal Action<string, string>? ReportError { get; set; }
+        internal EditorSelectionState? ObjectSelection { get; init; }
+
+        internal void Deactivate()
+        {
+            IsActive = false;
+            PromptInputs = null;
+            ReportError = null;
+        }
+
+        internal async Task<PropertyObject?> PickInputsAsync(InputRequest request)
+        {
+            if (!IsActive)
+                return null;
+            var project = Project();
+            if (project == null)
+                return null;
+            var part = CurrentPart();
+            var prompt = PromptInputs ?? throw new InvalidOperationException("The embedded input presenter is not configured.");
+            var picked = await prompt(request);
+            if (picked == null || !IsActive)
+                return null;
+            // Host restoration or another selected region can replace the
+            // editing target while the user is filling out the form.
+            return ReferenceEquals(Project(), project) && ReferenceEquals(CurrentPart(), part) ? picked : null;
+        }
+
+        internal ScriptRunResult RunScript(string code, PropertyObject? inputs = null)
+        {
+            if (!IsActive)
+                throw new InvalidOperationException("The editor view is closed.");
+            var project = Project() ?? throw new InvalidOperationException("The editor document is closed.");
+            return ScriptRunner.Run(project, CurrentPart, Quantization, Lang, Selection, PianoSelection,
+                ScriptLimits.Interactive, code, CancellationToken.None, inputs, selectionWriter: SelectionWriter,
+                objectSelection: ObjectSelection);
+        }
+    }
+
     static Func<IProject?>? sProject;
     static Func<IMidiPart?>? sCurrentPart;
     static Func<IQuantization?>? sQuantization;
@@ -39,11 +87,12 @@ internal static class ScriptToolMenu
         sSelectionWriter = selectionWriter;
     }
 
-    static List<ScriptToolInfo> Discover()
+    static List<ScriptToolInfo> Discover(Scope? scope = null)
     {
-        var project = sProject?.Invoke();
+        var project = (scope == null ? sProject : scope.Project)?.Invoke();
         if (project == null) return new List<ScriptToolInfo>();
-        return ScriptTools.Discover(project, sCurrentPart, sQuantization, () => TranslationManager.CurrentLanguage.Value);
+        return ScriptTools.Discover(project, scope == null ? sCurrentPart : scope.CurrentPart,
+            scope == null ? sQuantization : scope.Quantization, () => TranslationManager.CurrentLanguage.Value);
     }
 
     // 顶部 Scripts 菜单的菜单项（global 工具，按 category 分组：有 category 的进同名子菜单，无的直接列）。
@@ -178,15 +227,15 @@ internal static class ScriptToolMenu
     // 注入项的标记，便于"只建一次"的菜单（TrackHead）每次打开时清掉上轮注入再重建。
     const string ToolTag = "script-tool";
 
-    static List<ScriptToolInfo> ToolsFor(ScriptToolContext context)
-        => Discover().Where(t => t.Context == context)
+    static List<ScriptToolInfo> ToolsFor(ScriptToolContext context, Scope? scope = null)
+        => Discover(scope).Where(t => t.Context == context)
                      .OrderBy(t => t.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToList();
 
     // 在某右键菜单末尾追加该 context 下的工具项（前置一条分隔线）。无工具则什么都不加。
     // 用于每次右键都重新构建的菜单（钢琴卷帘音符/空白、编排区命中 part/空白）。
-    public static void AppendContextTools(ItemCollection items, ScriptToolContext context, Control anchor)
+    public static void AppendContextTools(ItemCollection items, ScriptToolContext context, Control anchor, Scope? scope = null)
     {
-        var tools = ToolsFor(context);
+        var tools = ToolsFor(context, scope);
         if (tools.Count == 0) return;
 
         // 仅当菜单已有项时才前置分隔线（选区菜单在无 copy/paste 时可能为空，避免顶部裸分隔线）。
@@ -194,7 +243,7 @@ internal static class ScriptToolMenu
             items.Add(new Separator { Tag = ToolTag });
         foreach (var tool in tools)
         {
-            var item = MakeItem(tool, anchor);
+            var item = MakeItem(tool, anchor, scope);
             item.Tag = ToolTag;
             items.Add(item);
         }
@@ -209,26 +258,45 @@ internal static class ScriptToolMenu
         AppendContextTools(menu.Items, context, anchor);
     }
 
-    static MenuItem MakeItem(ScriptToolInfo tool, Control anchor)
+    static MenuItem MakeItem(ScriptToolInfo tool, Control anchor, Scope? scope = null)
     {
         var item = new MenuItem { Header = tool.DisplayName };
-        item.Command = ReactiveUI.ReactiveCommand.Create(() => Run(tool, anchor));
+        item.Command = ReactiveUI.ReactiveCommand.Create(() => Run(tool, anchor, scope));
         return item;
     }
 
     static Func<string?> Lang => () => TranslationManager.CurrentLanguage.Value;
 
-    // async void：由菜单/快捷键的 UI 事件触发，需 await 入参窗的 ShowDialog。
-    static async void Run(ScriptToolInfo tool, Control anchor)
+    static void ReportFailure(Scope? scope, Control anchor, string title, string message)
     {
-        var project = sProject?.Invoke();
+        if (scope != null)
+        {
+            if (scope.IsActive)
+                scope.ReportError?.Invoke(title, message);
+            return;
+        }
+        _ = anchor.ShowMessage(title, message);
+    }
+
+    // async void：由菜单/快捷键的 UI 事件触发，需 await 入参窗的 ShowDialog。
+    static async void Run(ScriptToolInfo tool, Control anchor, Scope? scope = null)
+    {
+        if (scope is { IsActive: false })
+            return;
+        var projectAccess = scope == null ? sProject : scope.Project;
+        var currentPart = scope == null ? sCurrentPart : scope.CurrentPart;
+        var quantization = scope == null ? sQuantization : scope.Quantization;
+        var selection = scope == null ? sSelection : scope.Selection;
+        var pianoSelection = scope == null ? sPianoSelection : scope.PianoSelection;
+        var selectionWriter = scope == null ? sSelectionWriter : scope.SelectionWriter;
+        var project = projectAccess?.Invoke();
         if (project == null) return;
 
         string code;
         try { code = ScriptLibrary.Read(tool.ScriptName); }
         catch (Exception ex)
         {
-            _ = anchor.ShowMessage("Script".Tr(TC.Menu), "Failed to load script:".Tr(TC.Dialog) + " " + tool.ScriptName + "\n" + ex.Message);
+            ReportFailure(scope, anchor, "Script".Tr(TC.Menu), "Failed to load script:".Tr(TC.Dialog) + " " + tool.ScriptName + "\n" + ex.Message);
             return;
         }
 
@@ -236,26 +304,52 @@ internal static class ScriptToolMenu
         PropertyObject? inputs = null;
         string scriptId = ScriptTools.StableId(tool);
         var initialValues = ScriptInputMemory.Load(scriptId);
-        var (schema, schemaError) = ScriptRunner.GetInputConfig(project, sCurrentPart, sQuantization, Lang, sSelection, sPianoSelection, code, initialValues, CancellationToken.None);
+        var (schema, schemaError) = ScriptRunner.GetInputConfig(project, currentPart, quantization, Lang, selection, pianoSelection, code, initialValues, CancellationToken.None, objectSelection: scope?.ObjectSelection);
         if (schemaError != null)
         {
-            _ = anchor.ShowMessage("Script".Tr(TC.Menu), "getInputConfig error:".Tr(TC.Dialog) + " " + schemaError);
+            ReportFailure(scope, anchor, "Script".Tr(TC.Menu), "getInputConfig error:".Tr(TC.Dialog) + " " + schemaError);
             return;
         }
         if (schema != null)
         {
             var owner = TopLevel.GetTopLevel(anchor) as Window;
-            if (owner != null)
+            if (scope != null)
+            {
+                PropertyObject? picked;
+                try
+                {
+                    picked = await scope.PickInputsAsync(new InputRequest(tool.DisplayName, schema,
+                        vals => ScriptRunner.GetInputConfig(project, currentPart, quantization, Lang,
+                            selection, pianoSelection, code, vals, CancellationToken.None, objectSelection: scope.ObjectSelection), initialValues));
+                }
+                catch (Exception ex)
+                {
+                    ReportFailure(scope, anchor, "Script".Tr(TC.Menu), "Input form failed: " + ex.Message);
+                    return;
+                }
+                if (picked == null)
+                    return;
+                ScriptInputMemory.Save(scriptId, picked);
+                var (finalSchema, finalError) = ScriptRunner.GetInputConfig(project, currentPart, quantization,
+                    Lang, selection, pianoSelection, code, picked, CancellationToken.None, objectSelection: scope?.ObjectSelection);
+                if (finalError != null)
+                {
+                    ReportFailure(scope, anchor, "Script".Tr(TC.Menu), finalError);
+                    return;
+                }
+                inputs = finalSchema != null ? ScriptConfigs.FillDefaults(finalSchema, picked) : picked;
+            }
+            else if (owner != null)
             {
                 var window = new PropertyFormWindow(tool.DisplayName, schema,
-                    vals => ScriptRunner.GetInputConfig(sProject?.Invoke() ?? project, sCurrentPart, sQuantization, Lang, sSelection, sPianoSelection, code, vals, CancellationToken.None),
+                    vals => ScriptRunner.GetInputConfig(projectAccess?.Invoke() ?? project, currentPart, quantization, Lang, selection, pianoSelection, code, vals, CancellationToken.None, objectSelection: scope?.ObjectSelection),
                     initialValues);
                 var picked = await window.ShowDialog<PropertyObject?>(owner);
                 if (picked == null)
                     return;   // 用户取消
                 ScriptInputMemory.Save(scriptId, picked);   // 记住本次输入（稀疏，只存改过的键），下次开窗回填
                 // 供 main 的全量入参：以 picked 现算 schema（条件字段依 picked），补默认；只作用于运行入参、不回存。
-                var (finalSchema, _) = ScriptRunner.GetInputConfig(project, sCurrentPart, sQuantization, Lang, sSelection, sPianoSelection, code, picked, CancellationToken.None);
+                var (finalSchema, _) = ScriptRunner.GetInputConfig(project, currentPart, quantization, Lang, selection, pianoSelection, code, picked, CancellationToken.None, objectSelection: scope?.ObjectSelection);
                 inputs = finalSchema != null ? ScriptConfigs.FillDefaults(finalSchema, picked) : picked;
             }
             else
@@ -265,16 +359,21 @@ internal static class ScriptToolMenu
         }
 
         ScriptRunResult result;
-        try { result = ScriptRunner.Run(project, sCurrentPart, sQuantization, Lang, sSelection, sPianoSelection, ScriptLimits.Interactive, code, CancellationToken.None, inputs, selectionWriter: sSelectionWriter); }
+        try
+        {
+            result = scope != null ? scope.RunScript(code, inputs) :
+                ScriptRunner.Run(project, currentPart, quantization, Lang, selection, pianoSelection,
+                    ScriptLimits.Interactive, code, CancellationToken.None, inputs, selectionWriter: selectionWriter);
+        }
         catch (Exception ex)
         {
-            _ = anchor.ShowMessage("Script".Tr(TC.Menu), "TuneLab internal error:".Tr(TC.Dialog) + " " + ex.Message);
+            ReportFailure(scope, anchor, "Script".Tr(TC.Menu), "TuneLab internal error:".Tr(TC.Dialog) + " " + ex.Message);
             return;
         }
 
         // 出错弹窗告知（菜单工具无可见 console）；成功静默（改动已落地，Ctrl+Z 可撤销）。
         // result.Error 来自脚本引擎（技术性英文，不翻译）；包裹说明走翻译。
         if (!result.Ok)
-            _ = anchor.ShowMessage("Script".Tr(TC.Menu), result.Error + "\n" + "All changes were rolled back; the project is unchanged.".Tr(TC.Dialog));
+            ReportFailure(scope, anchor, "Script".Tr(TC.Menu), result.Error + "\n" + "All changes were rolled back; the project is unchanged.".Tr(TC.Dialog));
     }
 }

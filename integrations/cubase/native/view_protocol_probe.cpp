@@ -8,6 +8,32 @@ int created = 0;
 int removed = 0;
 int documentsReleased = 0;
 bool rejectRemoval = true;
+bool rejectScale = false;
+double appliedScale = 0;
+
+struct Frame final : Steinberg::IPlugFrame
+{
+    bool reject = false;
+    Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID, void **object) override
+    {
+        if (object)
+            *object = nullptr;
+        return Steinberg::kNoInterface;
+    }
+    Steinberg::uint32 PLUGIN_API addRef() override
+    {
+        return 1;
+    }
+    Steinberg::uint32 PLUGIN_API release() override
+    {
+        return 1;
+    }
+    Steinberg::tresult PLUGIN_API resizeView(Steinberg::IPlugView *view,
+                                             Steinberg::ViewRect *size) override
+    {
+        return reject ? Steinberg::kResultFalse : view->onSize(size);
+    }
+};
 
 std::int32_t __cdecl createView(TuneLab::Cubase::DocumentHandle, void *, std::int32_t, std::int32_t,
                                 TuneLab::Cubase::ViewHandle *handle)
@@ -100,8 +126,22 @@ int main()
     document->runtime.destroyDocument = destroyDocument;
     document->runtime.resizeView = [](auto, auto, auto) -> std::int32_t { return 0; };
     document->runtime.focusView = [](auto) -> std::int32_t { return 0; };
+    document->runtime.scaleView = [](auto, double factor) -> std::int32_t {
+        if (rejectScale)
+            return 5;
+        appliedScale = factor;
+        return 0;
+    };
     auto *view = new TuneLab::Cubase::EditorView(document);
     IPlugView *api = view;
+    FUnknownPtr<IPlugViewContentScaleSupport> scaling(api);
+    ViewRect scaledSize;
+    if (!scaling || scaling->setContentScaleFactor(1.5f) != kResultTrue ||
+        api->getSize(&scaledSize) != kResultTrue || scaledSize.getWidth() != 1650 ||
+        scaledSize.getHeight() != 1050 || appliedScale != 0 ||
+        scaling->setContentScaleFactor(0) != kInvalidArgument ||
+        scaling->setContentScaleFactor(std::numeric_limits<float>::quiet_NaN()) != kInvalidArgument)
+        return 21;
     if (api->isPlatformTypeSupported(kPlatformTypeHWND) != kResultTrue ||
         api->isPlatformTypeSupported("unsupported") != kResultFalse ||
         api->attached(nullptr, kPlatformTypeHWND) != kInvalidArgument || created != 0)
@@ -112,6 +152,8 @@ int main()
     {
         return 2;
     }
+    if (appliedScale != 1.5)
+        return 22;
     ViewRect size(0, 0, 900, 600);
     ViewRect invalid(0, 0, 0, 600);
     if (api->onSize(&invalid) != kInvalidArgument || api->onSize(&size) != kResultTrue ||
@@ -119,6 +161,22 @@ int main()
     {
         return 3;
     }
+    Frame frame;
+    api->setFrame(&frame);
+    if (scaling->setContentScaleFactor(2) != kResultTrue || appliedScale != 2 ||
+        api->getSize(&scaledSize) != kResultTrue || scaledSize.getWidth() != 1200 ||
+        scaledSize.getHeight() != 800)
+        return 23;
+    frame.reject = true;
+    if (scaling->setContentScaleFactor(3) != kResultFalse || appliedScale != 2)
+        return 24;
+    frame.reject = false;
+    rejectScale = true;
+    if (scaling->setContentScaleFactor(3) != kResultFalse ||
+        api->getSize(&scaledSize) != kResultTrue || scaledSize.getWidth() != 1200)
+        return 25;
+    rejectScale = false;
+    api->setFrame(nullptr);
     if (api->removed() != kResultFalse || !view->isAttached() || documentsReleased != 0)
     {
         return 4;
@@ -131,6 +189,7 @@ int main()
     next->runtime.destroyDocument = destroyDocument;
     next->runtime.resizeView = document->runtime.resizeView;
     next->runtime.focusView = document->runtime.focusView;
+    next->runtime.scaleView = document->runtime.scaleView;
     next->runtime.createView = [](auto, auto, auto, auto, auto *) -> std::int32_t { return 5; };
     if (view->setDocument(next) != kResultFalse || created != 1 || removed != 0 ||
         !view->isAttached() || api->onFocus(true) != kResultTrue)
@@ -147,6 +206,7 @@ int main()
     {
         return 5;
     }
+    scaling = nullptr;
     api->release();
     if (documentsReleased != 0)
     {
@@ -160,7 +220,7 @@ int main()
     next.reset();
     if (documentsReleased != 2)
         return 11;
-    std::cout
-        << "View protocol ownership, removal retry, resize and focus dispatch passed (no GUI)\n";
+    std::cout << "View protocol ownership, removal retry, resize/focus and content scaling passed "
+                 "(no GUI)\n";
     return 0;
 }

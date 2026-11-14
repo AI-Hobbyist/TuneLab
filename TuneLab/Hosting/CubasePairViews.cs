@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using PairViewProvider = System.Tuple<System.Func<nint, int, int, System.Tuple<int, ulong>>,
-    System.Func<ulong, int>, System.Func<ulong, int, int, int>, System.Func<ulong, int>, System.Action>;
+    System.Func<ulong, int>, System.Func<ulong, int, int, int>, System.Func<ulong, int>, System.Action,
+    System.Func<ulong, double, int>>;
 
 namespace TuneLab.Hosting;
 
@@ -17,7 +18,7 @@ internal static partial class CubasePairRegistry
     {
         lock (string.Intern(RegistryKey))
         {
-            const string key = RegistryKey + ".view-leases.v1";
+            const string key = RegistryKey + ".view-leases.v2";
             if (AppDomain.CurrentDomain.GetData(key) is { } existing)
                 return (Tuple<Dictionary<Guid, PairViewProvider>, Dictionary<Guid, Tuple<object, ulong>>>)existing;
             var store = Tuple.Create(new Dictionary<Guid, PairViewProvider>(),
@@ -28,13 +29,14 @@ internal static partial class CubasePairRegistry
     }
 
     public static void SetViewProvider(Guid bridge, Func<nint, int, int, Tuple<int, ulong>> create,
-        Func<ulong, int> destroy, Func<ulong, int, int, int> resize, Func<ulong, int> focus, Action release)
+        Func<ulong, int> destroy, Func<ulong, int, int, int> resize, Func<ulong, int> focus, Action release,
+        Func<ulong, double, int> scale)
     {
         lock (sEndpoints)
         {
             Require(bridge, CubasePairRole.Bridge);
             RemoveViewProvider(bridge);
-            sPairViews.Item1.Add(bridge, Tuple.Create(create, destroy, resize, focus, release));
+            sPairViews.Item1.Add(bridge, Tuple.Create(create, destroy, resize, focus, release, scale));
         }
     }
 
@@ -104,6 +106,18 @@ internal static partial class CubasePairRegistry
             if (!sPairViews.Item2.TryGetValue(lease, out var entry))
                 return 2;
             return ((PairViewProvider)entry.Item1).Item4(entry.Item2);
+        }
+    }
+
+    public static int ScalePairView(Guid lease, double factor)
+    {
+        if (!double.IsFinite(factor) || factor <= 0)
+            return 1;
+        lock (sEndpoints)
+        {
+            if (!sPairViews.Item2.TryGetValue(lease, out var entry))
+                return 2;
+            return ((PairViewProvider)entry.Item1).Item6(entry.Item2, factor);
         }
     }
 }

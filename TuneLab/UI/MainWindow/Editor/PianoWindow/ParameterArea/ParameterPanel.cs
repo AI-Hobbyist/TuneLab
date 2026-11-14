@@ -239,7 +239,7 @@ internal sealed class ParameterPanel : AutomationRenderer.IDependency, Parameter
         }
         set
         {
-            Part?.DeselectAllAutomationPoints();
+            Part?.DeselectAllAutomationPoints(PianoScrollView.ObjectSelection);
             mActiveAutomation = value;
             if (mActiveAutomation.HasValue)
             {

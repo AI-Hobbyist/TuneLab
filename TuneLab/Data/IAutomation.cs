@@ -17,10 +17,10 @@ internal interface IAutomation : IDataObject<AutomationInfo>
     double[] GetValues(IReadOnlyList<double> ticks);
     void AddLine(IReadOnlyList<AnchorPoint> points, double extend);
     void Clear(double start, double end, double extend);
-    void InsertPoint(AnchorPoint point);
+    void InsertPoint(AnchorPoint point, EditorSelectionState? selection = null);
     void DeletePoints(double start, double end);
     void DeletePoints(IReadOnlyList<AnchorPoint> points);
-    void MoveSelectedPoints(double offsetPos, double offsetValue);
+    void MoveSelectedPoints(double offsetPos, double offsetValue, EditorSelectionState? selection = null);
 }
 
 internal static class IAutomationExtension

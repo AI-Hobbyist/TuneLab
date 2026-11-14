@@ -168,6 +168,32 @@ public static partial class NativeEntry
         }
     }
 
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static int ScaleView(ulong view, double factor)
+    {
+        if (!double.IsFinite(factor) || factor <= 0)
+            return 1;
+        lock (sLifecycleGate)
+        {
+            if (sPairViews.ContainsKey(view))
+                return PairProxyViewOperation(view, lease => CubasePairRegistry.ScalePairView(lease, factor));
+            if (!Dispatcher.UIThread.CheckAccess())
+                return 4;
+            if (!sViews.TryGetValue(view, out var registration))
+                return 2;
+            try
+            {
+                registration.Session.SetScale(factor);
+                return 0;
+            }
+            catch (Exception exception)
+            {
+                Trace.TraceError("Cubase view scaling failed: {0}", exception);
+                return 5;
+            }
+        }
+    }
+
     sealed class EmbeddedPlayhead : IPlayhead
     {
         readonly ActionEvent mChanged = new();

@@ -18,10 +18,10 @@ internal interface IPiecewiseAutomation : IDataObject<IEnumerable<IReadOnlyColle
     void InsertPoint(AnchorPoint point);
     void DeletePoints(double start, double end);
     void DeletePoints(IReadOnlyList<AnchorPoint> points);
-    void DeleteAllSelectedAnchors();
+    void DeleteAllSelectedAnchors(EditorSelectionState? selection = null);
     void DeleteAnchorGroupAt(int index);
     void ConnectAnchorGroup(int leftIndex);
-    void MoveSelectedPoints(double offsetPos, double offsetValue);
+    void MoveSelectedPoints(double offsetPos, double offsetValue, EditorSelectionState? selection = null);
 
     new List<List<Point>> GetInfo();
 
@@ -103,19 +103,19 @@ internal static class IPiecewiseAutomationExtension
         return result;
     }
 
-    public static void SelectAllAnchors(this IPiecewiseAutomation piecewiseAutomation)
+    public static void SelectAllAnchors(this IPiecewiseAutomation piecewiseAutomation, EditorSelectionState? selection = null)
     {
         foreach (var anchorGroup in piecewiseAutomation.AnchorGroups)
         {
-            anchorGroup.SelectAllItems();
+            anchorGroup.SelectAllItems(selection);
         }
     }
 
-    public static void DeselectAllAnchors(this IPiecewiseAutomation piecewiseAutomation)
+    public static void DeselectAllAnchors(this IPiecewiseAutomation piecewiseAutomation, EditorSelectionState? selection = null)
     {
         foreach (var anchorGroup in piecewiseAutomation.AnchorGroups)
         {
-            anchorGroup.DeselectAllItems();
+            anchorGroup.DeselectAllItems(selection);
         }
     }
 

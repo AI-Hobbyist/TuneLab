@@ -13,6 +13,7 @@ struct ViewProbeState
 {
     int created = 0, destroyed = 0, documentsReleased = 0, resized = 0, focused = 0;
     bool rejectDestroy = true;
+    double scale = 0;
     TuneLab::Cubase::DocumentHandle document = 0;
 } viewProbe;
 
@@ -105,6 +106,10 @@ bool testPairViewLeases(TuneLab::Cubase::ManagedRuntime &runtime,
         ++viewProbe.focused;
         return 0;
     };
+    document->runtime.scaleView = [](ViewHandle, double factor) -> std::int32_t {
+        viewProbe.scale = factor;
+        return 0;
+    };
     document->runtime.destroyDocument = [](DocumentHandle) -> std::int32_t {
         ++viewProbe.documentsReleased;
         return 0;
@@ -142,6 +147,11 @@ bool testPairViewLeases(TuneLab::Cubase::ManagedRuntime &runtime,
         controller->notify(binding) != Steinberg::kResultOk || viewProbe.created != 3)
         return false;
     Steinberg::ViewRect size(0, 0, 1000, 700);
+    Steinberg::FUnknownPtr<Steinberg::IPlugViewContentScaleSupport> scaling(view);
+    if (!scaling || scaling->setContentScaleFactor(1.5f) != Steinberg::kResultOk ||
+        viewProbe.scale != 1.5 || runtime.scaleView(first, 1.25) != 0 || viewProbe.scale != 1.25 ||
+        peer.scalePairView(second.data(), 2) != 0 || viewProbe.scale != 2)
+        return false;
     if (view->onSize(&size) != Steinberg::kResultOk || view->onFocus(true) != Steinberg::kResultOk)
         return false;
     bridge.reset();
@@ -150,7 +160,8 @@ bool testPairViewLeases(TuneLab::Cubase::ManagedRuntime &runtime,
         runtime.createPairView(instrument.id().data(), reinterpret_cast<void *>(1), 900, 600,
                                rejected.data()) != 2 ||
         runtime.resizeView(first, 1000, 700) != 0 || runtime.focusView(first) != 0 ||
-        viewProbe.resized != 2 || viewProbe.focused != 2 || runtime.destroyView(first) != 4)
+        runtime.scaleView(first, 1.75) != 0 || viewProbe.scale != 1.75 || viewProbe.resized != 2 ||
+        viewProbe.focused != 2 || runtime.destroyView(first) != 4)
         return false;
     binding->getAttributes()->setInt("status", 2);
     // Missing-peer recovery now shows real pairing controls. Detach the fake

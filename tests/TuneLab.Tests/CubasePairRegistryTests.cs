@@ -179,6 +179,7 @@ public class CubasePairRegistryTests
         int references = 1, creates = 0, destroys = 0;
         bool rejectDestroy = true;
         var resized = new List<ulong>();
+        var scaled = new List<(ulong View, double Factor)>();
         try
         {
             CubasePairRegistry.SetViewProvider(bridge, (parent, width, height) =>
@@ -192,7 +193,8 @@ public class CubasePairRegistryTests
                 references--;
                 destroys++;
                 return 0;
-            }, (view, width, height) => { resized.Add(view); return 0; }, view => 0, () => references--);
+            }, (view, width, height) => { resized.Add(view); return 0; }, view => 0, () => references--,
+                (view, factor) => { scaled.Add((view, factor)); return 0; });
             CubasePairRegistry.Pair(instrument, bridge);
             var first = CubasePairRegistry.CreatePairView(instrument, 1, 900, 600);
             var second = CubasePairRegistry.CreatePairView(bridge, 1, 900, 600);
@@ -206,6 +208,11 @@ public class CubasePairRegistryTests
             Assert.Equal(0, CubasePairRegistry.ResizePairView(first.Item2, 1000, 700));
             Assert.Equal(new ulong[] { 1 }, resized);
             Assert.Equal(0, CubasePairRegistry.FocusPairView(second.Item2));
+            Assert.Equal(1, CubasePairRegistry.ScalePairView(first.Item2, double.NaN));
+            Assert.Equal(1, CubasePairRegistry.ScalePairView(first.Item2, 0));
+            Assert.Equal(0, CubasePairRegistry.ScalePairView(first.Item2, 1.5));
+            Assert.Equal(0, CubasePairRegistry.ScalePairView(second.Item2, 2));
+            Assert.Equal(new[] { (1UL, 1.5), (2UL, 2d) }, scaled);
             Assert.Equal(4, CubasePairRegistry.DestroyPairView(first.Item2));
             Assert.Equal(2, references);
             rejectDestroy = false;
@@ -214,6 +221,7 @@ public class CubasePairRegistryTests
             Assert.Equal(0, references);
             Assert.Equal(2, destroys);
             Assert.Equal(2, CubasePairRegistry.DestroyPairView(first.Item2));
+            Assert.Equal(2, CubasePairRegistry.ScalePairView(first.Item2, 1));
         }
         finally
         {

@@ -388,10 +388,10 @@ internal static class IMidiPartExtension
         return result;
     }
 
-    public static NoteClipboard CopyNotes(this IMidiPart part)
+    public static NoteClipboard CopyNotes(this IMidiPart part, EditorSelectionState? selection = null)
     {
         var clipboard = new NoteClipboard();
-        var selectedNotes = part.Notes.AllSelectedItems();
+        var selectedNotes = part.Notes.AllSelectedItems(selection);
         if (selectedNotes.IsEmpty())
             return clipboard;
 
@@ -417,10 +417,10 @@ internal static class IMidiPartExtension
         return clipboard;
     }
 
-    public static VibratoClipboard CopyVibratos(this IMidiPart part)
+    public static VibratoClipboard CopyVibratos(this IMidiPart part, EditorSelectionState? selection = null)
     {
         var clipboard = new VibratoClipboard();
-        var selectedVibratos = part.Vibratos.AllSelectedItems();
+        var selectedVibratos = part.Vibratos.AllSelectedItems(selection);
         if (selectedVibratos.IsEmpty())
             return clipboard;
 
@@ -459,20 +459,21 @@ internal static class IMidiPartExtension
 
     // select：是否取消当前选中、改选中粘贴出来的对象（默认 true=标准粘贴行为）。
     // 传 false 则完全不动选中态（用于"有范围选区时粘贴不抢选中态、保持选区高亮"）。
-    public static void PasteAt(this IMidiPart part, NoteClipboard clipboard, double pos, bool select = true)
+    public static void PasteAt(this IMidiPart part, NoteClipboard clipboard, double pos, bool select = true,
+        EditorSelectionState? selection = null)
     {
         if (clipboard.IsEmpty())
             return;
 
         if (select)
-            part.Notes.DeselectAllItems();
+            part.Notes.DeselectAllItems(selection);
         part.BeginMergeDirty();
         part.Notes.BeginMergeNotify();
         foreach (var noteInfo in clipboard)
         {
             var note = part.CreateNote(noteInfo);
             if (select)
-                note.Select();
+                note.Select(selection);
             note.Pos.Set(note.Pos.Value + pos);
             part.InsertNote(note);
         }
@@ -480,19 +481,20 @@ internal static class IMidiPartExtension
         part.EndMergeDirty();
     }
 
-    public static void PasteAt(this IMidiPart part, VibratoClipboard clipboard, double pos, bool select = true)
+    public static void PasteAt(this IMidiPart part, VibratoClipboard clipboard, double pos, bool select = true,
+        EditorSelectionState? selection = null)
     {
         if (clipboard.IsEmpty())
             return;
 
         if (select)
-            part.Vibratos.DeselectAllItems();
+            part.Vibratos.DeselectAllItems(selection);
         part.BeginMergeDirty();
         foreach (var vibratoInfo in clipboard)
         {
             var vibrato = part.CreateVibrato(vibratoInfo);
             if (select)
-                vibrato.Select();
+                vibrato.Select(selection);
             vibrato.Pos.Set(vibrato.Pos + pos);
             part.InsertVibrato(vibrato);
         }
@@ -524,11 +526,11 @@ internal static class IMidiPartExtension
         }
     }
 
-    public static void DeleteAllSelectedNotes(this IMidiPart part)
+    public static void DeleteAllSelectedNotes(this IMidiPart part, EditorSelectionState? selection = null)
     {
         part.BeginMergeDirty();
         part.Notes.BeginMergeNotify();
-        foreach (var note in part.Notes.AllSelectedItems())
+        foreach (var note in part.Notes.AllSelectedItems(selection))
         {
             part.RemoveNote(note);
         }
@@ -581,10 +583,10 @@ internal static class IMidiPartExtension
         return true;
     }
 
-    public static void DeleteAllSelectedVibratos(this IMidiPart part)
+    public static void DeleteAllSelectedVibratos(this IMidiPart part, EditorSelectionState? selection = null)
     {
         part.BeginMergeDirty();
-        foreach (var vibrato in part.Vibratos.AllSelectedItems())
+        foreach (var vibrato in part.Vibratos.AllSelectedItems(selection))
         {
             part.RemoveVibrato(vibrato);
         }
@@ -624,15 +626,15 @@ internal static class IMidiPartExtension
 
     // 清 part 级自动化的锚点选中态（连续 + 分段两张 map）：分段轨的选中态同样参与渲染（选中环）与编辑判据
     //（InsertPoint 的并组、MoveSelectedPoints），漏清会留下假的选中态。effect 的轨不在此列（既有口径）。
-    public static void DeselectAllAutomationPoints(this IMidiPart part)
+    public static void DeselectAllAutomationPoints(this IMidiPart part, EditorSelectionState? selection = null)
     {
         foreach (var automation in part.Automations.Values)
         {
-            automation.Points.DeselectAllItems();
+            automation.Points.DeselectAllItems(selection);
         }
         foreach (var piecewise in part.PiecewiseAutomations.Values)
         {
-            piecewise.DeselectAllAnchors();
+            piecewise.DeselectAllAnchors(selection);
         }
     }
 

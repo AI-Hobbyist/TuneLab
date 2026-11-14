@@ -223,7 +223,7 @@ internal class PiecewiseAutomation<T> : DataObject, IPiecewiseAutomation where T
         }
     }
 
-    public void DeleteAllSelectedAnchors()
+    public void DeleteAllSelectedAnchors(EditorSelectionState? selection = null)
     {
         for (int gi = AnchorGroups.Count - 1; gi >= 0; gi--)
         {
@@ -233,7 +233,7 @@ internal class PiecewiseAutomation<T> : DataObject, IPiecewiseAutomation where T
             void NotifyRangeModified() => mRangeModified.Invoke(dirty.Start, dirty.End);
             for (int pi = anchorGroup.Count - 1; pi >= 0; pi--)
             {
-                if (anchorGroup[pi].IsSelected)
+                if (selection?.IsSelected(anchorGroup[pi]) ?? anchorGroup[pi].IsSelected)
                 {
                     if (!hasSelectedAnchor)
                     {
@@ -454,7 +454,7 @@ internal class PiecewiseAutomation<T> : DataObject, IPiecewiseAutomation where T
         Push(new RedoOnlyCommand(NotifyRangeModified));
     }
 
-    public void MoveSelectedPoints(double offsetPos, double offsetValue)
+    public void MoveSelectedPoints(double offsetPos, double offsetValue, EditorSelectionState? selection = null)
     {
         void MoveSelectedPointsFromAnchorGroupTo(int gi, double offsetPos, double offsetValue)
         {
@@ -467,7 +467,7 @@ internal class PiecewiseAutomation<T> : DataObject, IPiecewiseAutomation where T
             void NotifyRangeModified() => mRangeModified.Invoke(dirty.Start, dirty.End);
             for (int pi = anchorGroup.Count - 1; pi >= 0; pi--)
             {
-                if (anchorGroup[pi].IsSelected)
+                if (selection?.IsSelected(anchorGroup[pi]) ?? anchorGroup[pi].IsSelected)
                 {
                     if (!hasSelectedAnchor)
                     {
@@ -531,7 +531,13 @@ internal class PiecewiseAutomation<T> : DataObject, IPiecewiseAutomation where T
                     insertAnchorGroup = new T();
                     mAnchorGroups.Insert(insertIndex, insertAnchorGroup);
                 }
-                InsertPointsToGroup(insertAnchorGroup, selectedAnchors.Select(point => new AnchorPoint(point.Pos + offsetPos, point.Value + offsetValue) { IsSelected = true }).ToList());
+                var moved = selectedAnchors.Select(point =>
+                {
+                    var anchor = new AnchorPoint(point.Pos + offsetPos, point.Value + offsetValue);
+                    anchor.Select(selection);
+                    return anchor;
+                }).ToList();
+                InsertPointsToGroup(insertAnchorGroup, moved);
             }
         }
 
@@ -564,7 +570,7 @@ internal class PiecewiseAutomation<T> : DataObject, IPiecewiseAutomation where T
                 for (int pi = anchorGroup.Count - 1; pi >= 0; pi--)
                 {
                     var anchorPoint = anchorGroup[pi];
-                    if (anchorPoint.IsSelected)
+                    if (selection?.IsSelected(anchorPoint) ?? anchorPoint.IsSelected)
                     {
                         if (!hasSelectedAnchor)
                         {
@@ -572,7 +578,9 @@ internal class PiecewiseAutomation<T> : DataObject, IPiecewiseAutomation where T
                             hasSelectedAnchor = true;
                         }
 
-                        anchorGroup[pi] = new AnchorPoint(anchorPoint.Pos, anchorPoint.Value + offsetValue) { IsSelected = true };
+                        var moved = new AnchorPoint(anchorPoint.Pos, anchorPoint.Value + offsetValue);
+                        moved.Select(selection);
+                        anchorGroup[pi] = moved;
                         dirty.Touch(anchorGroup, pi);
                     }
                 }

@@ -25,6 +25,7 @@ namespace TuneLab.UI;
 internal partial class AutomationRenderer : View
 {
     public TickAxis TickAxis => mDependency.TickAxis;
+    internal EditorSelectionState ObjectSelection => mDependency.PianoScrollView.ObjectSelection;
     public IMidiPart? Part => mDependency.PartHolder.Value;
     public bool IsOperating => mState != State.None;
     // 当前活动（可编辑）轨：范围选区菜单在参数区弹出时据此定位固定目标（见 PianoScrollView.OpenRegionMenu）。
@@ -173,6 +174,8 @@ internal partial class AutomationRenderer : View
         mDependency.TickAxis.AxisChanged += Update;
         mDependency.TickAxis.AxisChanged += UpdateAnchorValueInput;
         mDependency.PianoScrollView.RegionSelectionChanged += InvalidateVisual;   // 范围选区变化（任一区拖/清）→ 参数区重绘同一条 tick 带
+        ObjectSelection.Changed.Subscribe(InvalidateVisual, s);
+        ObjectSelection.Changed.Subscribe(UpdateAnchorValueInput, s);
     }
 
     ~AutomationRenderer() => Detach();
@@ -780,10 +783,10 @@ internal partial class AutomationRenderer : View
     public bool HasSelectedAnchors()
     {
         if (TryGetActiveAutomation(out var automation, out _, false))
-            return automation.Points.HasSelectedItem();
+            return automation.Points.HasSelectedItem(ObjectSelection);
 
         if (TryGetActivePiecewise(out var piecewise, out _, false))
-            return piecewise.AnchorGroups.Any(group => group.HasSelectedItem());
+            return piecewise.AnchorGroups.Any(group => group.HasSelectedItem(ObjectSelection));
 
         return false;
     }
@@ -793,12 +796,12 @@ internal partial class AutomationRenderer : View
         if (Part == null)
             return;
 
-        Part.Pitch.DeselectAllAnchors();
+        Part.Pitch.DeselectAllAnchors(ObjectSelection);
         mDependency.PianoScrollView.InvalidateVisual();
         if (TryGetActiveAutomation(out var automation, out _, false))
-            automation.Points.SelectAllItems();
+            automation.Points.SelectAllItems(ObjectSelection);
         else if (TryGetActivePiecewise(out var piecewise, out _, false))
-            piecewise.SelectAllAnchors();
+            piecewise.SelectAllAnchors(ObjectSelection);
 
         InvalidateVisual();
         UpdateAnchorValueInput();
@@ -811,7 +814,7 @@ internal partial class AutomationRenderer : View
 
         if (TryGetActiveAutomation(out var automation, out _, false))
         {
-            var selectedPoints = automation.Points.AllSelectedItems().ToList();
+            var selectedPoints = automation.Points.AllSelectedItems(ObjectSelection).ToList();
             if (selectedPoints.IsEmpty())
                 return;
 
@@ -819,10 +822,10 @@ internal partial class AutomationRenderer : View
         }
         else if (TryGetActivePiecewise(out var piecewise, out _, false))
         {
-            if (!piecewise.AnchorGroups.Any(group => group.HasSelectedItem()))
+            if (!piecewise.AnchorGroups.Any(group => group.HasSelectedItem(ObjectSelection)))
                 return;
 
-            piecewise.DeleteAllSelectedAnchors();
+            piecewise.DeleteAllSelectedAnchors(ObjectSelection);
         }
         else
         {
@@ -905,7 +908,7 @@ internal partial class AutomationRenderer : View
         }
 
         part.BeginMergeDirty();
-        automation.MoveSelectedPoints(0, valueOffset);
+        automation.MoveSelectedPoints(0, valueOffset, ObjectSelection);
         part.EndMergeDirty();
         part.Commit();
         InvalidateVisual();
@@ -952,7 +955,7 @@ internal partial class AutomationRenderer : View
         if (!TryGetActiveAutomation(out var activeAutomation, out var activeConfig, false))
             return false;
 
-        var selectedAnchor = activeAutomation.Points.AllSelectedItems().OrderBy(point => point.Pos).FirstOrDefault();
+        var selectedAnchor = activeAutomation.Points.AllSelectedItems(ObjectSelection).OrderBy(point => point.Pos).FirstOrDefault();
         if (selectedAnchor == null)
             return false;
 

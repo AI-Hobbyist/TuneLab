@@ -5,7 +5,7 @@
 // Private host integration ABI. This does not change TuneLab.SDK/Foundation.
 namespace TuneLab::Cubase
 {
-inline constexpr std::uint32_t managedAbiVersion = 15;
+inline constexpr std::uint32_t managedAbiVersion = 16;
 
 struct AraTempoInput
 {
@@ -81,11 +81,12 @@ using PairDestroyViewCallback = std::int32_t(__cdecl *)(void *, std::uint64_t);
 using PairResizeViewCallback = std::int32_t(__cdecl *)(void *, std::uint64_t, std::int32_t,
                                                        std::int32_t);
 using PairFocusViewCallback = std::int32_t(__cdecl *)(void *, std::uint64_t);
+using PairScaleViewCallback = std::int32_t(__cdecl *)(void *, std::uint64_t, double);
 using PairReleaseViewProvider = void(__cdecl *)(void *);
 using SetPairViewProvider = std::int32_t(__cdecl *)(const std::uint8_t *, PairCreateViewCallback,
                                                     PairDestroyViewCallback, PairResizeViewCallback,
                                                     PairFocusViewCallback, PairReleaseViewProvider,
-                                                    void *);
+                                                    PairScaleViewCallback, void *);
 using SetDocumentPairEndpoint = std::int32_t(__cdecl *)(DocumentHandle, const std::uint8_t *);
 using CreatePairDocumentProxy = std::int32_t(__cdecl *)(const std::uint8_t *, DocumentHandle *);
 using CreatePairView = std::int32_t(__cdecl *)(const std::uint8_t *, void *, std::int32_t,
@@ -93,6 +94,7 @@ using CreatePairView = std::int32_t(__cdecl *)(const std::uint8_t *, void *, std
 using DestroyPairView = std::int32_t(__cdecl *)(const std::uint8_t *);
 using ResizePairView = std::int32_t(__cdecl *)(const std::uint8_t *, std::int32_t, std::int32_t);
 using FocusPairView = std::int32_t(__cdecl *)(const std::uint8_t *);
+using ScalePairView = std::int32_t(__cdecl *)(const std::uint8_t *, double);
 using PairEndpoints = std::int32_t(__cdecl *)(const std::uint8_t *, const std::uint8_t *);
 using GetPairEndpointState = std::int32_t(__cdecl *)(const std::uint8_t *, std::uint8_t *,
                                                      std::int32_t *, std::int32_t *);
@@ -110,6 +112,7 @@ using CreateView = std::int32_t(__cdecl *)(DocumentHandle, void *, std::int32_t,
 using DestroyView = std::int32_t(__cdecl *)(ViewHandle);
 using ResizeView = std::int32_t(__cdecl *)(ViewHandle, std::int32_t, std::int32_t);
 using FocusView = std::int32_t(__cdecl *)(ViewHandle);
+using ScaleView = std::int32_t(__cdecl *)(ViewHandle, double);
 using DocumentStateCallback = void(__cdecl *)(void *, const std::uint8_t *, std::int32_t);
 using SetDocumentStateCallback = std::int32_t(__cdecl *)(DocumentHandle, DocumentStateCallback,
                                                          void *);

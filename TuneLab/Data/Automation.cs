@@ -116,7 +116,8 @@ internal class Automation : DataObject, IAutomation
 
     // valuesAreRelative：入参已是相对值（不含 DefaultValue），跳过换算——封边点等"取自当前曲线"的
     // 构造走这条，免去一次 +DefaultValue/−DefaultValue 往返（见 AddLine）。
-    void AddPoints(IReadOnlyList<AnchorPoint> points, AnchorDirtyRange dirty, bool valuesAreRelative = false)
+    void AddPoints(IReadOnlyList<AnchorPoint> points, AnchorDirtyRange dirty, bool valuesAreRelative = false,
+        EditorSelectionState? selection = null)
     {
         double defaultValue = valuesAreRelative ? 0 : DefaultValue;
         if (defaultValue != 0)
@@ -124,7 +125,9 @@ internal class Automation : DataObject, IAutomation
             var ps = new AnchorPoint[points.Count];
             for (int i = 0; i < points.Count; i++)
             {
-                ps[i] = new(points[i].Pos, points[i].Value - defaultValue) { IsSelected = points[i].IsSelected };
+                ps[i] = new(points[i].Pos, points[i].Value - defaultValue);
+                if (selection?.IsSelected(points[i]) ?? points[i].IsSelected)
+                    ps[i].Select(selection);
             }
             points = ps;
         }
@@ -152,12 +155,12 @@ internal class Automation : DataObject, IAutomation
         }
     }
 
-    public void InsertPoint(AnchorPoint point)
+    public void InsertPoint(AnchorPoint point, EditorSelectionState? selection = null)
     {
         var dirty = AnchorDirtyRange.ContinuousTrack(mPoints);
         void NotifyRangeModified() => mRangeModified.Invoke(dirty.Start, dirty.End);
         Push(new UndoOnlyCommand(NotifyRangeModified));
-        AddPoints([point], dirty);
+        AddPoints([point], dirty, selection: selection);
         dirty.CloseTails(mPoints);
         NotifyRangeModified();
         Push(new RedoOnlyCommand(NotifyRangeModified));
@@ -231,12 +234,12 @@ internal class Automation : DataObject, IAutomation
         }
     }
 
-    public void MoveSelectedPoints(double offsetPos, double offsetValue)
+    public void MoveSelectedPoints(double offsetPos, double offsetValue, EditorSelectionState? selection = null)
     {
         if (offsetPos == 0 && offsetValue == 0)
             return;
 
-        var selectedPoints = mPoints.AllSelectedItems().OrderBy(point => point.Pos).ToList();
+        var selectedPoints = mPoints.AllSelectedItems(selection).OrderBy(point => point.Pos).ToList();
         if (selectedPoints.IsEmpty())
             return;
 
@@ -255,7 +258,13 @@ internal class Automation : DataObject, IAutomation
             mPoints.RemoveAt(i);
             dirty.TouchGap(mPoints, i - 1);   // 后相位：合拢缝
         }
-        AddPoints(selectedPoints.Select(point => new AnchorPoint(point.Pos + offsetPos, point.Value + offsetValue + defaultValue) { IsSelected = true }).ToList(), dirty);
+        var moved = selectedPoints.Select(point =>
+        {
+            var anchor = new AnchorPoint(point.Pos + offsetPos, point.Value + offsetValue + defaultValue);
+            anchor.Select(selection);
+            return anchor;
+        }).ToList();
+        AddPoints(moved, dirty, selection: selection);
 
         dirty.CloseTails(mPoints);
         NotifyRangeModified();

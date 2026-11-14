@@ -14,6 +14,18 @@ namespace TuneLab.Input;
 //  · 覆盖率扫描能【机械地】看出这个入口有没有对应动作（见 docs/action-coverage.md 与 ActionCoverageTests）。
 internal static class ActionBindings
 {
+    // Transient embedded menus must neither execute global actions nor retain
+    // their document through the process-wide Keymap.Changed event.
+    public static MenuItem SetAction(this MenuItem item, string id, EditorActionCollection actions)
+    {
+        if (ReferenceEquals(actions, ActionRegistry.Default))
+            return item.SetAction(id);
+
+        item.Command = ReactiveUI.ReactiveCommand.Create(() => actions.Execute(id));
+        item.InputGesture = ToKeyGesture(Keymap.Effective(id));
+        return item;
+    }
+
     // 菜单项绑定到动作 id：显示手势实时取 Keymap.Effective（随 Keymap.Changed 刷新），点击触发那条动作。
     // 取代 SetShortcut/SetInputGesture 的手势硬编码——菜单显示与键盘分发共用 Keymap 单一真相源，二者不再漂移。
     // 前提：该动作须已注册（Editor 内 RegisterActions 先于 CreateMenu 调用）。

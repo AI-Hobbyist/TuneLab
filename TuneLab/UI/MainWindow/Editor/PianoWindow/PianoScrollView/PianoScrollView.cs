@@ -26,6 +26,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using TuneLab.Configs;
 using System.IO;
+using TuneLab.Input;
 
 using Point = Avalonia.Point;
 
@@ -54,9 +55,18 @@ internal partial class PianoScrollView : View, IPianoScrollView
     public bool CanPaste => !mNoteClipboard.IsEmpty() || !mVibratoClipboard.IsEmpty() || !mParameterClipboard.IsEmpty;
     public State OperationState => mState;
 
-    public PianoScrollView(IDependency dependency)
+    readonly EditorActionCollection mActions;
+    internal ScriptToolMenu.Scope? ScriptScope { get; set; }
+    internal EditorSelectionState ObjectSelection { get; }
+
+    public PianoScrollView(IDependency dependency, EditorActionCollection? actions = null,
+        EditorSelectionState? objectSelection = null)
     {
         mDependency = dependency;
+        mActions = actions ?? ActionRegistry.Default;
+        ObjectSelection = objectSelection ?? new EditorSelectionState(isLocal: false);
+        ObjectSelection.Changed.Subscribe(InvalidateVisual, s);
+        mDependency.PartHolder.Modified.Subscribe(ObjectSelection.Clear, s);
 
         mMiddleDragOperation = new(this);
         mNoteSelectOperation = new(this);
@@ -584,7 +594,7 @@ internal partial class PianoScrollView : View, IPianoScrollView
                     if (part.EndPos() < minVisibleTick) continue;
                     if (part.StartPos() > maxVisibleTick) continue;
                     if (!(part is MidiPart midiPart)) continue;
-                    foreach(var note in midiPart.Notes)
+                    foreach (var note in midiPart.Notes)
                     {
                         if (note.GlobalEndPos() < minVisibleTick)
                             continue;
@@ -616,8 +626,8 @@ internal partial class PianoScrollView : View, IPianoScrollView
                 break;
 
             var rect = this.NoteRect(note);
-            //context.FillRectangle(getPartColor(Part.Track,note.IsSelected).ToBrush(), rect, (float)round);
-            context.FillRectangle(note.IsSelected ? selectedNoteBrush : noteBrush, rect, (float)round);
+            //context.FillRectangle(getPartColor(Part.Track,ObjectSelection.IsSelected(note)).ToBrush(), rect, (float)round);
+            context.FillRectangle(ObjectSelection.IsSelected(note) ? selectedNoteBrush : noteBrush, rect, (float)round);
 
             // 去重叠暗色盖住：被「后盖前」砍掉的尾段 [有效结束, 画出末] 画暗，亮色才是真正发声段——用户即知此段被重叠覆盖。
             // 仅 voice（单声部去重叠口径）才画；instrument 保留重叠多声部，重叠段真发声、不该提示被盖。
@@ -933,7 +943,7 @@ internal partial class PianoScrollView : View, IPianoScrollView
 
             double x = TickAxis.Tick2X(vibrato.GlobalStartPos());
             double width = TickAxis.PixelsPerTick * vibrato.Dur;
-            context.DrawRectangle(vibratoBrush, vibrato.IsSelected ? vibratoSelectedPen : null, new Rect(x, 0, width, Bounds.Height));
+            context.DrawRectangle(vibratoBrush, ObjectSelection.IsSelected(vibrato) ? vibratoSelectedPen : null, new Rect(x, 0, width, Bounds.Height));
         }
         IBrush frequencyBrush = Colors.White.ToBrush();
         IBrush phaseBrush = Colors.White.ToBrush();
@@ -1408,14 +1418,14 @@ internal partial class PianoScrollView : View, IPianoScrollView
         double e = mSelection.End - pos;
 
         Part.Notes.SelectionChanged.BeginMerge();
-        Part.Notes.DeselectAllItems();
+        Part.Notes.DeselectAllItems(ObjectSelection);
         foreach (var note in Part.AllNotesInSelection(s, e))
-            note.Select();
+            note.Select(ObjectSelection);
         Part.Notes.SelectionChanged.EndMerge();
 
-        Part.Vibratos.DeselectAllItems();
+        Part.Vibratos.DeselectAllItems(ObjectSelection);
         foreach (var vibrato in Part.AllVibratosInSelection(s, e))
-            vibrato.Select();
+            vibrato.Select(ObjectSelection);
     }
 
     // 清空范围选区（主键点击未拖 / 切 part 调用）。无选区则不动。
@@ -1488,11 +1498,11 @@ internal partial class PianoScrollView : View, IPianoScrollView
         {
             case RegionDataKind.Notes:
                 if (mNoteClipboard.IsEmpty()) return;
-                Part.PasteAt(mNoteClipboard, pos, select);
+                Part.PasteAt(mNoteClipboard, pos, select, ObjectSelection);
                 break;
             case RegionDataKind.Vibratos:
                 if (mVibratoClipboard.IsEmpty()) return;
-                Part.PasteAt(mVibratoClipboard, pos, select);
+                Part.PasteAt(mVibratoClipboard, pos, select, ObjectSelection);
                 break;
             case RegionDataKind.Pitch:
                 if (mParameterClipboard.Pitch.IsEmpty()) return;
@@ -1574,10 +1584,10 @@ internal partial class PianoScrollView : View, IPianoScrollView
         switch (mDependency.PianoTool.Value)
         {
             case PianoTool.Note:
-                mNoteClipboard = Part.CopyNotes();
+                mNoteClipboard = Part.CopyNotes(ObjectSelection);
                 break;
             case PianoTool.Vibrato:
-                mVibratoClipboard = Part.CopyVibratos();
+                mVibratoClipboard = Part.CopyVibratos(ObjectSelection);
                 break;
         }
     }
@@ -1602,12 +1612,12 @@ internal partial class PianoScrollView : View, IPianoScrollView
         bool any = false;
         if (!mNoteClipboard.IsEmpty())
         {
-            Part.PasteAt(mNoteClipboard, pos, select);
+            Part.PasteAt(mNoteClipboard, pos, select, ObjectSelection);
             any = true;
         }
         if (!mVibratoClipboard.IsEmpty())
         {
-            Part.PasteAt(mVibratoClipboard, pos, select);
+            Part.PasteAt(mVibratoClipboard, pos, select, ObjectSelection);
             any = true;
         }
         if (!mParameterClipboard.IsEmpty)
@@ -1641,15 +1651,15 @@ internal partial class PianoScrollView : View, IPianoScrollView
         switch (mDependency.PianoTool.Value)
         {
             case PianoTool.Note:
-                Part.DeleteAllSelectedNotes();
+                Part.DeleteAllSelectedNotes(ObjectSelection);
                 Part.Commit();
                 break;
             case PianoTool.Vibrato:
-                Part.DeleteAllSelectedVibratos();
+                Part.DeleteAllSelectedVibratos(ObjectSelection);
                 Part.Commit();
                 break;
             case PianoTool.Anchor:
-                Part.Pitch.DeleteAllSelectedAnchors();
+                Part.Pitch.DeleteAllSelectedAnchors(ObjectSelection);
                 Part.Commit();
                 break;
             default:
@@ -1661,7 +1671,7 @@ internal partial class PianoScrollView : View, IPianoScrollView
     // note.octave*）与 ChangeKey 自己共用这一份判据——外部触发因此拿到的是原因，而不是一个没发生的"已执行"。
     public string? TransposeUnavailable()
         => Part == null ? "no part is open in the piano roll"
-            : Part.Notes.AllSelectedItems().IsEmpty() ? "no notes are selected in the piano roll"
+            : Part.Notes.AllSelectedItems(ObjectSelection).IsEmpty() ? "no notes are selected in the piano roll"
             : null;
 
     // syncParameters = 把音符底下的音高线与自动化曲线一起搬走。**显式收参**而不是自己读设置：
@@ -1675,7 +1685,7 @@ internal partial class PianoScrollView : View, IPianoScrollView
         if (offset == 0)
             return;
 
-        var selectedNotes = Part!.Notes.AllSelectedItems();
+        var selectedNotes = Part!.Notes.AllSelectedItems(ObjectSelection);
 
         Part.BeginMergeDirty();
         // 要搬参数就与拖动音符共用同一份搬运器：音高线覆盖处曲线优先于音符音高，曲线不跟着走的话，

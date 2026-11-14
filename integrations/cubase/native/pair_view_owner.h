@@ -14,8 +14,8 @@ class PairViewOwner
     static int registerWith(PairEndpoint &endpoint, std::shared_ptr<EditorDocument> document)
     {
         auto *owner = new PairViewOwner(std::move(document));
-        const auto result =
-            endpoint.setViewProvider(create, destroy, resize, focus, releaseRegistration, owner);
+        const auto result = endpoint.setViewProvider(create, destroy, resize, focus,
+                                                     releaseRegistration, scale, owner);
         if (result != 0)
             delete owner;
         return result;
@@ -80,6 +80,13 @@ class PairViewOwner
     static void __cdecl releaseRegistration(void *value) noexcept
     {
         static_cast<PairViewOwner *>(value)->release();
+    }
+    static std::int32_t __cdecl scale(void *value, std::uint64_t view, double factor) noexcept
+    {
+        auto &owner = *static_cast<PairViewOwner *>(value);
+        if (GetCurrentThreadId() != owner.hostThread)
+            return static_cast<std::int32_t>(BridgeResult::WrongThread);
+        return owner.document->runtime.scaleView(view, factor);
     }
     std::shared_ptr<EditorDocument> document;
     const DWORD hostThread = GetCurrentThreadId();
