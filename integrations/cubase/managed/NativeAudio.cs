@@ -50,7 +50,7 @@ public static partial class NativeEntry
     }
 
     static unsafe int RenderAudio(byte* state, int length, int outputSampleRate,
-        ulong requestHandle, ulong* audio, int? previewPitch)
+        ulong requestHandle, ulong* audio, int? previewPitch, CubaseRenderSession? session = null)
     {
         if (state == null || length <= 0 || outputSampleRate <= 0 || audio == null)
         {
@@ -79,7 +79,9 @@ public static partial class NativeEntry
             request.Cancellation.Token.ThrowIfCancellationRequested();
             PluginServices.InitializeEngines();
             var snapshot = new ReadOnlySpan<byte>(state, length).ToArray();
-            var rendered = previewPitch.HasValue
+            var rendered = session != null
+                ? session.Render(snapshot, TimeSpan.FromMinutes(5), request.Cancellation.Token)
+                : previewPitch.HasValue
                 ? CubaseSnapshotRenderer.RenderPreview(snapshot, previewPitch.Value,
                     TimeSpan.FromMinutes(5), request.Cancellation.Token)
                 : CubaseSnapshotRenderer.Render(snapshot, TimeSpan.FromMinutes(5), request.Cancellation.Token);

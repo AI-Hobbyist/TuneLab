@@ -25,7 +25,7 @@ function Invoke-Checked {
 }
 
 Set-Content -LiteralPath $logPath -Value 'TuneLab native/managed host verification'
-Invoke-Checked 'dotnet' @('build', $managedProject, '-c', 'Debug')
+Invoke-Checked 'dotnet' @('build', $managedProject, '-c', 'Debug', '-m:1', '/nodeReuse:false')
 Invoke-Checked 'cmake' @(
     '-S', "$PSScriptRoot/native", '-B', $buildRoot,
     '-G', 'Visual Studio 18 2026', '-A', 'x64',
@@ -44,11 +44,16 @@ Invoke-Checked "$buildRoot/Debug/tunelab_state_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_view_protocol_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_audio_cache_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_midi_input_probe.exe" @()
+Invoke-Checked "$buildRoot/Debug/tunelab_note_text_input_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_host_time_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_ara_archive_probe.exe" @()
 if ($AraProjectState) {
     $araStatePath = (Resolve-Path -LiteralPath $AraProjectState).Path
     Invoke-Checked "$buildRoot/Debug/tunelab_ara_state_probe.exe" @($araStatePath)
+    Invoke-Checked "$buildRoot/Debug/tunelab_processor_probe.exe" @(
+        "$buildRoot/VST3/Debug/TuneLabInstrumentProbe.vst3/Contents/x86_64-win/TuneLabInstrumentProbe.vst3",
+        $araStatePath, '--lyrics-only'
+    )
 }
 Invoke-Checked "$buildRoot/Debug/tunelab_instrument_parameters_probe.exe" @()
 Invoke-Checked "$buildRoot/Debug/tunelab_midi_preview_player_probe.exe" @()

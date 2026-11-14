@@ -25,6 +25,9 @@ public static partial class NativeEntry
                 var id = new Guid(new ReadOnlySpan<byte>(endpoint, 16));
                 CubasePairRegistry.GetState(id);
                 sDocumentPairEndpoints[document] = id;
+                if (CubasePairRegistry.GetState(id).LogicalOwner == id &&
+                    sDocumentLyricStatuses.Remove(document, out var lyricStatus))
+                    CubasePairRegistry.SetLyricStatus(id, lyricStatus);
                 return 0;
             }
         }

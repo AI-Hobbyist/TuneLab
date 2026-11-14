@@ -84,6 +84,48 @@ internal sealed class CubaseDocumentContext : IDisposable
         }
     }
 
+    // Called by host ingress on the document thread. Keep existing objects,
+    // selections and undo history; publish one settled snapshot to the normal
+    // native state/render observers, including baseline-only conflict updates.
+    public CubaseAraLyricsResult ApplyHostLyrics(string sourceId, IReadOnlyList<CubaseAraLyricUpdate> updates)
+    {
+        ObjectDisposedException.ThrowIf(mDisposed, this);
+        if (Document.HasUncommittedChanges)
+            throw new InvalidOperationException("A document edit is already active.");
+        var before = SaveState();
+        var result = CubaseAraLyrics.UpdateState(before, sourceId, updates);
+        if (before.AsSpan().SequenceEqual(result.State))
+            return result;
+        var updated = CubaseProjectState.DecodeEnvelope(result.State);
+        var targetNotes = CubaseAraLyrics.SourcePart(updated.Project).Notes;
+        var part = Document.Project!.AllMidiParts().First();
+        var notes = part.Notes.ToArray();
+        var changed = result.ChangedNotes.ToHashSet();
+        mRestoring = true;
+        try
+        {
+            for (int index = 0; index < notes.Length; index++)
+            {
+                if (!mAraNoteIds.TryGetValue(notes[index], out ulong id) || !changed.Contains(id))
+                    continue;
+                notes[index].Lyric.Set(targetNotes[index].Lyric);
+                // Keep an empty explicit override. FinalPronunciation applies
+                // the current G2P setting; generated text is not a user edit.
+                notes[index].Pronunciation.Set(targetNotes[index].Pronunciation);
+            }
+            mAraMetadata = updated.Ara;
+            if (changed.Count != 0)
+                Document.Commit();
+        }
+        finally
+        {
+            mRestoring = false;
+        }
+        var saved = SaveState();
+        StateChanged?.Invoke(saved);
+        return result with { State = saved };
+    }
+
     // Called on the editing/data thread. Reopening a view reuses the same part
     // and history rather than constructing a replacement project.
     public IMidiPart GetOrCreateEditingPart()

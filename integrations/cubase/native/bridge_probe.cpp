@@ -156,7 +156,7 @@ class BridgeProbe final : public AudioEffect,
                                  region->getStartInAudioModificationTime() * scale,
                                  region->getStartInPlaybackTime(),
                                  region->getDurationInPlaybackTime(),
-                                 processSetup.processMode == kOffline);
+                                 processSetup.processMode == kOffline, region->reference().lock());
                 }
             }
             playback.publish();

@@ -40,14 +40,31 @@ class AraPlayback
     }
 
     void add(ManagedRuntime runtime, std::vector<std::uint8_t> state, double sourceStart,
-             double songStart, double duration, bool offline)
+             double songStart, double duration, bool offline, std::shared_ptr<void> region = {})
     {
         Entry entry;
         entry.sourceStart = frame(sourceStart);
         entry.songStart = frame(songStart);
         entry.songEnd = frame(songStart + duration);
-        entry.worker = std::make_unique<RenderWorker>(std::move(runtime));
+        entry.region = std::move(region);
+        if (entry.region)
+        {
+            if (const auto *previous = active.load())
+            {
+                for (const auto &candidate : previous->entries)
+                {
+                    if (candidate.region == entry.region)
+                    {
+                        entry.worker = candidate.worker;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!entry.worker)
+            entry.worker = std::make_shared<RenderWorker>(std::move(runtime));
         const auto generation = entry.worker->submit(std::move(state), sampleRate);
+        entry.generation = generation;
         if (offline && (!entry.worker->wait(generation, std::chrono::minutes(5)) ||
                         entry.worker->result() != 0))
             throw std::runtime_error("ARA offline region synthesis failed");
@@ -61,7 +78,7 @@ class AraPlayback
         const auto *plan = active.load();
         return plan && !plan->entries.empty() &&
                std::all_of(plan->entries.begin(), plan->entries.end(),
-                           [](const auto &entry) { return entry.worker->result() == 0; });
+                           [](const auto &entry) { return entry.worker->ready(entry.generation); });
     }
 
     template <typename Sample>
@@ -111,8 +128,8 @@ class AraPlayback
             if (entry.sourceStart > (std::numeric_limits<std::int64_t>::max)() - delta)
                 continue;
             const auto position = entry.sourceStart + delta;
-            if (!entry.worker->copyStereo(left.data(), right.data(), end - begin, position,
-                                          sampleRate))
+            if (!entry.worker->copyRevision(left.data(), right.data(), end - begin, position,
+                                            sampleRate, entry.generation))
                 continue;
             for (int index = begin; index < end; ++index)
             {
@@ -144,7 +161,10 @@ class AraPlayback
 
     struct Entry
     {
-        std::unique_ptr<RenderWorker> worker;
+        std::shared_ptr<RenderWorker> worker;
+        // Retain the region lifetime token so a recycled object address cannot match.
+        std::shared_ptr<void> region;
+        std::uint64_t generation = 0;
         std::int64_t sourceStart = 0;
         std::int64_t songStart = 0;
         std::int64_t songEnd = 0;

@@ -230,6 +230,22 @@ int wmain(int argc, wchar_t **argv)
         return 3;
     }
     {
+        TuneLab::Cubase::RenderSessionHandle session = 0;
+        if (runtime.createRenderSession(&session) != 0 || session == 0)
+            return 41;
+        std::int32_t wrongThread = 0;
+        std::thread foreign([&] { wrongThread = runtime.destroyRenderSession(session); });
+        foreign.join();
+        TuneLab::Cubase::AudioHandle invalidAudio = 123;
+        if (wrongThread != 4 || runtime.destroyRenderSession(session) != 0 ||
+            runtime.destroyRenderSession(session) != 2 ||
+            runtime.renderSessionSnapshot(session, nullptr, 0, 48000, 0, &invalidAudio) != 2 ||
+            invalidAudio != 0)
+            return 42;
+        std::cout << "Render session owner-thread guard, release, double release and "
+                     "invalid-handle output passed (no GUI)\n";
+    }
+    {
         TuneLab::Cubase::PairEndpoint endpoint;
         std::array<std::uint8_t, 16> missing{};
         if (!endpoint.initialize(runtime, 1) ||
@@ -312,9 +328,23 @@ int wmain(int argc, wchar_t **argv)
             return 0;
         };
         std::int32_t requiredState = 0;
+        auto applySharedLyric = [](void *owner, double quarter, std::int32_t pitch,
+                                   const wchar_t *text, std::int32_t length,
+                                   std::uint64_t *sourceId,
+                                   std::int32_t *disposition) -> std::int32_t {
+            if (quarter != 2.5 || pitch != 60 || length != 1 || text[0] != 0x4F60)
+                return 1;
+            // Dispatch fixture only. The later direct-document test checks
+            // real state mutation; this one proves cross-bundle routing.
+            static_cast<std::vector<std::uint8_t> *>(owner)->assign({6, 5});
+            *sourceId = 123;
+            *disposition = 1;
+            return 0;
+        };
         std::array<std::uint8_t, 3> copied{};
         const std::array<std::uint8_t, 2> replacement{2, 8};
-        if (peer.setPairDocumentAccess(bridge.data(), copyShared, applyShared, &sharedState) != 0 ||
+        if (peer.setPairDocumentAccess(bridge.data(), copyShared, applyShared, &sharedState,
+                                       applySharedLyric) != 0 ||
             runtime.copyPairDocumentState(instrument.data(), copied.data(), 3, &requiredState) !=
                 0 ||
             requiredState != 3 || copied != std::array<std::uint8_t, 3>{4, 7, 9} ||
@@ -322,6 +352,26 @@ int wmain(int argc, wchar_t **argv)
             sharedState != std::vector<std::uint8_t>{2, 8})
             return 19;
         std::cout << "Cross-bundle document read/write delegates passed\n";
+        TuneLab::Cubase::DocumentHandle lyricProxy = 0;
+        std::uint64_t lyricSourceId = 0;
+        std::int32_t lyricDisposition = 3;
+        const wchar_t lyricText[]{0x4F60, 0};
+        if (runtime.createPairDocumentProxy(instrument.data(), &lyricProxy) != 0 ||
+            runtime.applyDocumentLyric(lyricProxy, 2.5, 60, lyricText, 1, &lyricSourceId,
+                                       &lyricDisposition) != 0 ||
+            lyricSourceId != 123 || lyricDisposition != 1 ||
+            sharedState != std::vector<std::uint8_t>{6, 5})
+            return 37;
+        std::int32_t lyricKind = -1;
+        std::uint64_t statusNoteId = 0;
+        TuneLab::Cubase::DocumentHandle peerStatusProxy = 0;
+        if (runtime.getDocumentLyricStatus(lyricProxy, &lyricKind, &statusNoteId) != 0 ||
+            lyricKind != 1 || statusNoteId != 123 ||
+            runtime.reportDocumentLyricStatus(lyricProxy, 4) != 0 ||
+            peer.createPairDocumentProxy(instrument.data(), &peerStatusProxy) != 0 ||
+            peer.getDocumentLyricStatus(peerStatusProxy, &lyricKind, &statusNoteId) != 0 ||
+            lyricKind != 4 || statusNoteId != 0 || peer.destroyDocument(peerStatusProxy) != 0)
+            return 39;
         if (peer.releasePairEndpoint(bridge.data()) != 0 ||
             runtime.getPairEndpointState(instrument.data(), owner.data(), &status, &output) != 0 ||
             status != 2 || output != 0 || allowed.load() ||
@@ -330,6 +380,13 @@ int wmain(int argc, wchar_t **argv)
             runtime.getPairEndpointState(instrument.data(), owner.data(), &status, &output) != 0 ||
             status != 0 || output != 1 || !allowed.load())
             return 17;
+        if (runtime.applyDocumentLyric(lyricProxy, 2.5, 60, lyricText, 1, &lyricSourceId,
+                                       &lyricDisposition) != 2 ||
+            runtime.getDocumentLyricStatus(lyricProxy, &lyricKind, &statusNoteId) != 0 ||
+            lyricKind != -1 || runtime.destroyDocument(lyricProxy) != 0)
+            return 38;
+        std::cout << "Cross-bundle lyric proxy delegates and peer-removal rejection passed "
+                     "(dispatch fixture)\n";
         std::cout << "Cross-bundle explicit pairing, single output owner, missing peer and unlink "
                      "passed\n";
         if (!testPairNotifications(runtime, peer))
@@ -371,9 +428,60 @@ int wmain(int argc, wchar_t **argv)
         if (runtime.buildAraProjectState(nullptr, 0, tempo, 3, nullptr, 0, note, 1, &region,
                                          sourceState.data(), count, &count) != 0 ||
             runtime.restoreDocumentState(document, sourceState.data(), count) != 0 ||
-            runtime.mapDocumentSourcePosition(document, 1.5, &quarter) != 0 || quarter != 2.5 ||
-            runtime.restoreDocumentState(document, state.data(), required) != 0)
+            runtime.mapDocumentSourcePosition(document, 1.5, &quarter) != 0 || quarter != 2.5)
             return 27;
+        struct LyricObservation
+        {
+            int calls = 0;
+            std::vector<std::uint8_t> state;
+        } lyricObservation;
+        if (runtime.setDocumentStateCallback(
+                document,
+                [](void *owner, const std::uint8_t *bytes, std::int32_t length) {
+                    auto &observation = *static_cast<LyricObservation *>(owner);
+                    ++observation.calls;
+                    observation.state.assign(bytes, bytes + length);
+                },
+                &lyricObservation) != 0)
+            return 33;
+        std::uint64_t sourceId = 0;
+        std::int32_t disposition = -1;
+        const wchar_t text[]{0x4F60, 0xD83C, 0xDF38, 0};
+        if (runtime.applyDocumentLyric(document, 2.5, 60, text, 3, &sourceId, &disposition) != 0 ||
+            sourceId != 1 || disposition != 1 || lyricObservation.calls != 1 ||
+            runtime.validateProjectState(
+                lyricObservation.state.data(),
+                static_cast<std::int32_t>(lyricObservation.state.size())) != 0)
+            return 34;
+        const auto lyricState = lyricObservation.state;
+        std::int32_t lyricKind = -1;
+        std::uint64_t statusNoteId = 0;
+        if (runtime.getDocumentLyricStatus(document, &lyricKind, &statusNoteId) != 0 ||
+            lyricKind != 1 || statusNoteId != 1 ||
+            runtime.reportDocumentLyricStatus(document, 4) != 0 ||
+            runtime.reportDocumentLyricStatus(document, 999) != 1 ||
+            runtime.getDocumentLyricStatus(document, &lyricKind, &statusNoteId) != 0 ||
+            lyricKind != 4 || lyricObservation.calls != 1 || lyricObservation.state != lyricState)
+            return 40;
+        if (runtime.applyDocumentLyric(document, 2.5, 60, text, 3, &sourceId, &disposition) != 0 ||
+            disposition != 0 || lyricObservation.calls != 1 ||
+            runtime.applyDocumentLyric(document, 2.5, 61, text, 3, &sourceId, &disposition) != 0 ||
+            sourceId != 0 || disposition != 3 || lyricObservation.calls != 1)
+            return 35;
+        const wchar_t broken[]{0xD800, 0};
+        if (runtime.applyDocumentLyric(document, 2.5, 60, broken, 1, &sourceId, &disposition) !=
+                1 ||
+            lyricObservation.state != lyricState || lyricObservation.calls != 1 ||
+            runtime.applyDocumentLyric(document, 2.5, 60, nullptr, 0, &sourceId, &disposition) !=
+                0 ||
+            disposition != 1 || lyricObservation.calls != 2 ||
+            runtime.setDocumentStateCallback(document, nullptr, nullptr) != 0 ||
+            runtime.restoreDocumentState(document, state.data(), required) != 0)
+            return 36;
+        std::cout
+            << "Private lyric ABI: deferred UTF-16 update, stable source ID, repeated/no-match "
+               "outcomes, diagnostic status without musical-state changes, invalid text "
+               "preservation, clear and settled callbacks (no GUI)\n";
         std::cout << "Deferred segmented source clock uses restored tempo rather than the old live "
                      "project (no GUI)\n";
     }

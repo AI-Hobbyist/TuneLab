@@ -85,6 +85,9 @@ class ManagedRuntime
                resolve(L"InitializeServices", initializeServices) &&
                resolve(L"ValidateVoice", validateVoice) &&
                resolve(L"RenderSnapshot", renderSnapshot) &&
+               resolve(L"CreateRenderSession", createRenderSession) &&
+               resolve(L"DestroyRenderSession", destroyRenderSession) &&
+               resolve(L"RenderSessionSnapshot", renderSessionSnapshot) &&
                resolve(L"RenderPreview", renderPreview) &&
                resolve(L"GetRenderedAudio", getRenderedAudio) &&
                resolve(L"ReleaseRenderedAudio", releaseRenderedAudio) &&
@@ -93,6 +96,11 @@ class ManagedRuntime
                resolve(L"ReleaseRenderRequest", releaseRenderRequest) &&
                resolve(L"ValidateProjectState", validateProjectState) &&
                resolve(L"CopyDocumentState", copyDocumentState) &&
+               resolve(L"ApplyDocumentLyric", applyDocumentLyric) &&
+               resolve(L"ReportDocumentLyricStatus", reportDocumentLyricStatus) &&
+               resolve(L"GetDocumentLyricStatus", getDocumentLyricStatus) &&
+               resolve(L"NotifyPairSourceChange", notifyPairSourceChange) &&
+               resolve(L"InvalidatePairSource", invalidatePairSource) &&
                resolve(L"RestoreDocumentState", restoreDocumentState) &&
                resolve(L"RestoreAraDocumentState", restoreAraDocumentState) &&
                resolve(L"SetDocumentStateCallback", setDocumentStateCallback) &&
@@ -149,6 +157,9 @@ class ManagedRuntime
     InitializeServices initializeServices = nullptr;
     ValidateVoice validateVoice = nullptr;
     RenderSnapshot renderSnapshot = nullptr;
+    CreateRenderSession createRenderSession = nullptr;
+    DestroyRenderSession destroyRenderSession = nullptr;
+    RenderSessionSnapshot renderSessionSnapshot = nullptr;
     RenderPreview renderPreview = nullptr;
     GetRenderedAudio getRenderedAudio = nullptr;
     ReleaseRenderedAudio releaseRenderedAudio = nullptr;
@@ -157,6 +168,11 @@ class ManagedRuntime
     ReleaseRenderRequest releaseRenderRequest = nullptr;
     ValidateProjectState validateProjectState = nullptr;
     CopyDocumentState copyDocumentState = nullptr;
+    ApplyDocumentLyric applyDocumentLyric = nullptr;
+    ReportDocumentLyricStatus reportDocumentLyricStatus = nullptr;
+    GetDocumentLyricStatus getDocumentLyricStatus = nullptr;
+    NotifyPairSourceChange notifyPairSourceChange = nullptr;
+    InvalidatePairSource invalidatePairSource = nullptr;
     RestoreDocumentState restoreDocumentState = nullptr;
     RestoreDocumentState restoreAraDocumentState = nullptr;
     SetDocumentStateCallback setDocumentStateCallback = nullptr;

@@ -2,10 +2,12 @@
 #include "ara_document.h"
 #include "ara_playback.h"
 #include "ara_source_identity.h"
+#include "paired_instrument_fixture.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "public.sdk/source/vst/hosting/connectionproxy.h"
+#include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include <fstream>
 #include <iostream>
@@ -468,6 +470,23 @@ void testRegionSynthesis(ManagedRuntime runtime, const std::vector<std::uint8_t>
     for (int index = 0; index < count; ++index)
         require(std::abs(mono[index] - (expectedLeft[index] + expectedRight[index])) < 1e-6,
                 "ARA mono region output did not average stereo channels");
+    playback.clear();
+    auto regionLifetime = std::make_shared<int>(0);
+    playback.beginUpdate();
+    playback.add(runtime, state, 0.25, 2, 0.5, true, regionLifetime);
+    playback.publish();
+    require(playback.ready(), "Initial retained region did not become ready");
+    playback.beginUpdate();
+    playback.add(runtime, state, 0.25, 3, 0.5, true, regionLifetime);
+    require(!playback.ready(), "Old plan accepted a reused worker's newer revision");
+    left.fill(0);
+    right.fill(0);
+    require(!playback.mix(left.data(), right.data(), count, 2 * rate),
+            "New worker audio leaked into old region timing");
+    playback.publish();
+    require(playback.ready(), "New retained region revision did not become ready");
+    std::cout << "PASS: retained region worker invalidates old plan before publication"
+              << std::endl;
     // One audio reader, as required by the VST3 processor contract, concurrent
     // with host-thread publication/reclamation and worker cancellation.
     std::atomic<bool> stop{false}, invalid{false};
@@ -488,7 +507,7 @@ void testRegionSynthesis(ManagedRuntime runtime, const std::vector<std::uint8_t>
     for (int revision = 0; revision < 12; ++revision)
     {
         playback.beginUpdate();
-        playback.add(runtime, state, 0.25, revision % 2 == 0 ? 2 : 3, 0.5, false);
+        playback.add(runtime, state, 0.25, revision % 2 == 0 ? 2 : 3, 0.5, false, regionLifetime);
         playback.publish();
     }
     stop.store(true);
@@ -818,11 +837,308 @@ void testRoleAudio(Document &document, ARAPlugInInstanceRoleFlags roles,
 }
 } // namespace
 
+void testPairedLyricSynthesis(const std::vector<std::uint8_t> &state, bool checkSourceRevision)
+{
+    using namespace Steinberg;
+    using namespace Steinberg::Vst;
+    Document document("paired-lyrics-source");
+    auto modification = document.add("paired-lyrics");
+    auto clone = document.add("unpaired-copy", modification);
+    editor(modification)->state = state;
+    editor(clone)->state = state;
+    document.api()->beginEditing(document.ref());
+    document.tempoPoints = {{0, 0}, {4, 8}};
+    document.signatures = {{4, 4, 0}};
+    document.sourceNotes = {{261.6256f, 60, 0.8f, 0.5, 0, 1, 1}};
+    document.api()->updateAudioSourceContent(document.ref(), document.source, nullptr, 0);
+    // The supplied associated fixture has this persistent source identity.
+    auto *source = PlugIn::fromRef<BridgeAudioSource>(document.source);
+    source->noteIds = {11};
+    source->nextNoteId = 11;
+    ARAMusicalContextProperties contextProperties{sizeof(contextProperties), "Lyrics", 0};
+    auto musicalContext = document.api()->createMusicalContext(
+        document.ref(), reinterpret_cast<ARAMusicalContextHostRef>(&document.tokens[0]),
+        &contextProperties);
+    ARARegionSequenceProperties sequenceProperties{};
+    sequenceProperties.structSize = sizeof(sequenceProperties);
+    sequenceProperties.musicalContextRef = musicalContext;
+    auto sequence = document.api()->createRegionSequence(
+        document.ref(), reinterpret_cast<ARARegionSequenceHostRef>(&document.tokens[0]),
+        &sequenceProperties);
+    ARAPlaybackRegionProperties regionProperties{};
+    regionProperties.structSize = sizeof(regionProperties);
+    regionProperties.durationInModificationTime = 4;
+    regionProperties.durationInPlaybackTime = 4;
+    regionProperties.regionSequenceRef = sequence;
+    auto region = document.api()->createPlaybackRegion(
+        document.ref(), modification,
+        reinterpret_cast<ARAPlaybackRegionHostRef>(&document.tokens[0]), &regionProperties);
+    document.api()->endEditing(document.ref());
+    auto factory = owned(GetPluginFactory());
+    auto host = owned(new HostApplication());
+    PClassInfo info{};
+    IComponent *raw = nullptr;
+    require(factory->getClassInfo(0, &info) == kResultOk &&
+                factory->createInstance(info.cid, IComponent::iid,
+                                        reinterpret_cast<void **>(&raw)) == kResultOk,
+            "Paired Bridge creation failed");
+    auto bridge = owned(raw);
+    require(bridge->initialize(host) == kResultOk, "Paired Bridge initialization failed");
+    FUnknownPtr<IAudioProcessor> bridgeAudio(bridge);
+    FUnknownPtr<ARA::IPlugInEntryPoint2> entry(bridge);
+    struct BridgeCleanup
+    {
+        IComponent *component;
+        IAudioProcessor *audio;
+        ~BridgeCleanup()
+        {
+            if (audio)
+                audio->setProcessing(false);
+            component->setActive(false);
+            component->terminate();
+        }
+    } cleanup{bridge, bridgeAudio};
+    require(bridgeAudio && entry, "Paired Bridge interfaces unavailable");
+    const auto *bound = entry->bindToDocumentControllerWithRoles(
+        document.ref(), kARAPlaybackRendererRole, kARAPlaybackRendererRole);
+    require(bound && bound->playbackRendererRef, "Paired Bridge playback binding failed");
+    bound->playbackRendererInterface->addPlaybackRegion(bound->playbackRendererRef, region);
+    ProcessSetup setup{kOffline, kSample32, 512, 48000};
+    require(bridgeAudio->setupProcessing(setup) == kResultOk &&
+                bridge->setActive(true) == kResultOk &&
+                bridgeAudio->setProcessing(true) == kResultOk,
+            "Paired Bridge initial synthesis failed");
+    std::array<float, 512> left{}, right{};
+    float *channels[]{left.data(), right.data()};
+    AudioBusBuffers output{};
+    output.numChannels = 2;
+    output.channelBuffers32 = channels;
+    ProcessContext context{};
+    context.sampleRate = 48000;
+    context.state = ProcessContext::kPlaying | ProcessContext::kProjectTimeMusicValid;
+    ProcessData data{};
+    data.processMode = kOffline;
+    data.symbolicSampleSize = kSample32;
+    data.numSamples = 512;
+    data.numOutputs = 1;
+    data.outputs = &output;
+    data.processContext = &context;
+    auto audio = [&] {
+        std::vector<float> samples;
+        for (int offset = 0; offset < 96000; offset += 512)
+        {
+            context.projectTimeSamples = offset;
+            context.projectTimeMusic = offset / 24000.0;
+            require(bridgeAudio->process(data) == kResultOk, "Paired Bridge process failed");
+            for (int index = 0; index < 512; ++index)
+            {
+                require(std::isfinite(left[index]) && std::isfinite(right[index]),
+                        "Paired Bridge nonfinite audio");
+                samples.push_back(left[index]);
+                samples.push_back(right[index]);
+            }
+        }
+        require(std::any_of(samples.begin(), samples.end(),
+                            [](float value) { return std::abs(value) > 1e-6f; }),
+                "Paired Bridge singing output is silent");
+        return samples;
+    };
+    const auto before = audio();
+    const auto originalState = editor(modification)->state;
+    PairedInstrumentFixture instrument;
+    require(instrument.initialize(host), "Actual paired Instrument initialization failed");
+    auto *modificationModel = PlugIn::fromRef<BridgeAudioModification>(modification);
+    auto &endpoint = modificationModel->pairEndpoint();
+    auto bind = owned(Steinberg::Vst::allocateMessage(host));
+    bind->setMessageID("TuneLab.Pairing.Bind");
+    require(bind->getAttributes()->setBinary("bridge", endpoint.id().data(), 16) == kResultOk &&
+                instrument.componentConnection->notify(bind) == kResultOk,
+            "Actual Instrument pairing failed");
+    EventList events;
+    Event on{};
+    on.type = Event::kNoteOnEvent;
+    on.ppqPosition = 1;
+    on.noteOn = {0, 60, 0, 1, 0, 501};
+    events.addEvent(on);
+    TChar lyric[]{0x4F60, 0};
+    Event text = on;
+    text.type = Event::kNoteExpressionTextEvent;
+    text.noteExpressionText = {kTextTypeID, 501, 1, lyric};
+    events.addEvent(text);
+    context.projectTimeSamples = 24000;
+    context.projectTimeMusic = 1;
+    data.inputEvents = &events;
+    require(instrument.processor->process(data) == kResultOk,
+            "Paired Instrument text capture failed");
+    data.inputEvents = nullptr;
+    auto drain = owned(Steinberg::Vst::allocateMessage(host));
+    drain->setMessageID("TuneLab.Lyrics.Request");
+    require(instrument.componentConnection->notify(drain) == kResultOk &&
+                editor(modification)->state != originalState && editor(clone)->state == state,
+            "Paired Instrument lyric missed its Bridge owner or changed another modification");
+    std::int32_t kind = -1;
+    std::uint64_t noteId = 0;
+    auto owner = editor(modification);
+    require(owner->runtime.getDocumentLyricStatus(owner->handle, &kind, &noteId) == 0 &&
+                kind == 1 && noteId == 11,
+            "Paired owner lyric status lost its stable source identity");
+    const auto after = audio();
+    double difference = 0;
+    for (std::size_t index = 0; index < after.size(); ++index)
+        difference += std::abs(static_cast<double>(after[index]) - before[index]);
+    require(difference > 1e-6, "Paired lyric did not refresh actual Bridge audio");
+    document.api()->notifyModelUpdates(document.ref());
+    require(!document.modificationUpdates.empty() && document.regionUpdates > 0,
+            "Paired lyric missed ARA modification or rendered-audio notification");
+    bound->playbackRendererInterface->removePlaybackRegion(bound->playbackRendererRef, region);
+    std::cout
+        << "PASS: actual Instrument SDK text -> paired Bridge owner/stable note/status/ARA "
+           "notifications -> real local SVS Bridge output; clone isolated; mean absolute change="
+        << difference / after.size() << " (no GUI/listening)\n";
+    require(bridge->setActive(false) == kResultOk, "Paired archive fixture deactivation failed");
+    const auto archivedLyrics = owner->state;
+    auto lyricClone = document.add("lyric-copy", modification);
+    require(editor(lyricClone)->state == archivedLyrics,
+            "ARA clone lost updated lyrics or source association");
+    ARAStoreObjectsFilter lyricStore{};
+    lyricStore.structSize = sizeof(lyricStore);
+    lyricStore.audioModificationRefsCount = 1;
+    lyricStore.audioModificationRefs = &modification;
+    Archive lyricArchive;
+    require(
+        document.api()->storeObjectsToArchive(
+            document.ref(), reinterpret_cast<ARAArchiveWriterHostRef>(&lyricArchive), &lyricStore),
+        "ARA lyric partial store failed");
+    const wchar_t changedLyric[]{0x597D, 0};
+    std::int32_t archiveDisposition = 3;
+    require(owner->runtime.applyDocumentLyric(owner->handle, 1, 60, changedLyric, 1, &noteId,
+                                              &archiveDisposition) == 0 &&
+                archiveDisposition == 1 && owner->state != archivedLyrics,
+            "ARA lyric archive fixture mutation failed");
+    const ARAPersistentID lyricIds[]{"paired-lyrics"};
+    ARARestoreObjectsFilter lyricRestore{};
+    lyricRestore.structSize = sizeof(lyricRestore);
+    lyricRestore.audioModificationIDsCount = 1;
+    lyricRestore.audioModificationArchiveIDs = lyricIds;
+    lyricRestore.audioModificationCurrentIDs = lyricIds;
+    require(document.restore(lyricArchive, lyricRestore) && owner->state == archivedLyrics &&
+                editor(lyricClone)->state == archivedLyrics && editor(clone)->state == state,
+            "ARA lyric partial restore lost lyrics or changed unrelated modifications");
+    const wchar_t restoredLyric[]{0x4F60, 0};
+    require(owner->runtime.applyDocumentLyric(owner->handle, 1, 60, restoredLyric, 1, &noteId,
+                                              &archiveDisposition) == 0 &&
+                noteId == 11 && archiveDisposition == 0,
+            "Restored managed lyric baseline differs from native archive");
+    std::cout << "PASS: lyric-bearing ARA clone and partial archive restore preserve managed "
+                 "baseline and isolate unrelated modifications\n";
+    if (checkSourceRevision)
+    {
+        require(bridge->setActive(false) == kResultOk,
+                "Paired revision fixture deactivation failed");
+        events.clear();
+        on.noteOn.noteId = 502;
+        events.addEvent(on);
+        lyric[0] = 0x597D;
+        text.noteExpressionText.noteId = 502;
+        events.addEvent(text);
+        context.projectTimeSamples = 24000;
+        data.inputEvents = &events;
+        require(instrument.processor->process(data) == kResultOk,
+                "Queued revision text capture failed");
+        data.inputEvents = nullptr;
+        document.api()->beginEditing(document.ref());
+        document.sourceNotes = {{261.6256f, 60, 0.8f, 0.5, 0, 0.25, 0.25},
+                                {261.6256f, 60, 0.8f, 0.75, 0, 1, 1}};
+        document.api()->updateAudioSourceContent(document.ref(), document.source, nullptr, 0);
+        // Explicit stable identities model a new note at the old onset and a
+        // moved original; this checks the adapter, not the identity heuristic.
+        source->noteIds = {12, 11};
+        source->nextNoteId = 12;
+        document.api()->endEditing(document.ref());
+        require(PlugIn::fromRef<BridgePlaybackRegion>(region)->synchronizeScore(),
+                "Paired revision fixture source synchronization failed");
+        const auto revised = owner->state;
+        require(instrument.componentConnection->notify(drain) == kResultOk &&
+                    owner->state == revised,
+                "Stale queued lyric was applied to the replacement source note");
+        events.clear();
+        on.noteOn.noteId = 503;
+        events.addEvent(on);
+        text.noteExpressionText.noteId = 503;
+        events.addEvent(text);
+        context.projectTimeSamples = 24000;
+        data.inputEvents = &events;
+        require(instrument.processor->process(data) == kResultOk,
+                "Fresh post-revision text capture failed");
+        data.inputEvents = nullptr;
+        require(instrument.componentConnection->notify(drain) == kResultOk &&
+                    owner->state != revised &&
+                    owner->runtime.getDocumentLyricStatus(owner->handle, &kind, &noteId) == 0 &&
+                    kind == 1 && noteId == 12,
+                "Source revision disabled valid fresh lyrics instead of rebinding them");
+        const wchar_t originalLyric[]{0x4F60, 0};
+        std::int32_t disposition = 3;
+        require(owner->runtime.applyDocumentLyric(owner->handle, 1.5, 60, originalLyric, 1, &noteId,
+                                                  &disposition) == 0 &&
+                    noteId == 11 && disposition == 0,
+                "Fresh replacement lyric overwrote the moved original note");
+        std::cout << "PASS: paired source revision rejects queued text for a replaced onset\n";
+        events.clear();
+        on.noteOn.noteId = 504;
+        events.addEvent(on);
+        text.noteExpressionText.noteId = 504;
+        lyric[0] = 0x518D;
+        events.addEvent(text);
+        data.inputEvents = &events;
+        require(instrument.processor->process(data) == kResultOk,
+                "Source-only archive queued text capture failed");
+        data.inputEvents = nullptr;
+        Archive sourceArchive{encodeAraArchiveBundle(
+            {{},
+             {{"paired-lyrics-source", encodeAraSourceIdentity({99, source->notes, {99, 11}})}}})};
+        const ARAPersistentID sourceIds[]{"paired-lyrics-source"};
+        ARARestoreObjectsFilter sourceRestore{};
+        sourceRestore.structSize = sizeof(sourceRestore);
+        sourceRestore.audioSourceIDsCount = 1;
+        sourceRestore.audioSourceArchiveIDs = sourceIds;
+        sourceRestore.audioSourceCurrentIDs = sourceIds;
+        const auto beforeSourceRestore = owner->state;
+        require(document.restore(sourceArchive, sourceRestore) &&
+                    source->noteIds == std::vector<std::uint64_t>{99, 11},
+                "Source-only identity archive restore failed");
+        require(instrument.componentConnection->notify(drain) == kResultOk &&
+                    owner->state == beforeSourceRestore,
+                "Source-only identity restore accepted a queued lyric from the old revision");
+        require(PlugIn::fromRef<BridgePlaybackRegion>(region)->synchronizeScore(),
+                "Source-only restored score synchronization failed");
+        events.clear();
+        on.noteOn.noteId = 505;
+        events.addEvent(on);
+        text.noteExpressionText.noteId = 505;
+        events.addEvent(text);
+        data.inputEvents = &events;
+        require(instrument.processor->process(data) == kResultOk,
+                "Fresh source-only restored lyric capture failed");
+        data.inputEvents = nullptr;
+        require(instrument.componentConnection->notify(drain) == kResultOk &&
+                    owner->runtime.getDocumentLyricStatus(owner->handle, &kind, &noteId) == 0 &&
+                    kind == 1 && noteId == 99,
+                "Source-only restored identity rejected valid fresh lyrics");
+
+        std::cout << "PASS: source-only identity archive rejects old queued lyrics before score "
+                     "refresh\n";
+    }
+}
+
 int wmain(int argc, wchar_t **argv)
 {
     try
     {
-        require(argc == 2 || (argc == 3 && std::wstring(argv[2]) == L"--synthesis"),
+        const bool pairedRevision =
+            argc == 3 && std::wstring(argv[2]) == L"--paired-lyrics-revision";
+        const bool pairedLyrics =
+            pairedRevision || (argc == 3 && std::wstring(argv[2]) == L"--paired-lyrics");
+        require(argc == 2 || pairedLyrics || (argc == 3 && std::wstring(argv[2]) == L"--synthesis"),
                 "Expected a TuneLab project state file and optional --synthesis");
         std::ifstream input(std::filesystem::path(argv[1]), std::ios::binary);
         std::vector<std::uint8_t> state((std::istreambuf_iterator<char>(input)), {});
@@ -905,6 +1221,11 @@ int wmain(int argc, wchar_t **argv)
                 getProbeFactory()->uninitializeARA();
             }
         } factoryScope;
+        if (pairedLyrics)
+        {
+            testPairedLyricSynthesis(state, pairedRevision);
+            return 0;
+        }
         {
             Document first;
             for (auto roles : std::array<ARAPlugInInstanceRoleFlags, 3>{
@@ -1014,6 +1335,59 @@ int wmain(int argc, wchar_t **argv)
                 };
                 require(readShared() == state && document->initialize(),
                         "Shared project did not read the actual modification");
+                {
+                    // SDK-generated source state, not captured Cubase lyrics.
+                    const AraTempoInput tempo[]{{0, 0}, {4, 8}};
+                    const AraNoteInput sourceNotes[]{{91, 0.5, 0.5, 60}};
+                    const AraRegionInput region{0, 4, 0, 4};
+                    std::int32_t size = 0;
+                    require(document->runtime.buildAraProjectState(nullptr, 0, tempo, 2, nullptr, 0,
+                                                                   sourceNotes, 1, &region, nullptr,
+                                                                   0, &size) == 0,
+                            "Lyric source fixture sizing failed");
+                    std::vector<std::uint8_t> sourceState(size);
+                    require(document->runtime.buildAraProjectState(
+                                nullptr, 0, tempo, 2, nullptr, 0, sourceNotes, 1, &region,
+                                sourceState.data(), size, &size) == 0 &&
+                                consumer.applyDocumentState(sourceState.data(), size) == 0,
+                            "Lyric source fixture restore failed");
+                    DocumentHandle proxy = 0;
+                    std::uint64_t sourceId = 0;
+                    std::int32_t disposition = 3;
+                    const wchar_t text[]{0x4F60, 0};
+                    first.api()->notifyModelUpdates(first.ref());
+                    const auto beforeNotifications = first.modificationUpdates.size();
+                    require(document->runtime.createPairDocumentProxy(consumer.id().data(),
+                                                                      &proxy) == 0 &&
+                                document->runtime.applyDocumentLyric(
+                                    proxy, 1, 60, text, 1, &sourceId, &disposition) == 0 &&
+                                sourceId == 91 && disposition == 1 && readShared() != sourceState,
+                            "Paired lyric did not reach the modification document");
+                    const auto withLyrics = readShared();
+                    first.api()->notifyModelUpdates(first.ref());
+                    require(first.modificationUpdates.size() == beforeNotifications + 1 &&
+                                first.modificationUpdates.back().modification ==
+                                    originalModel->getHostRef(),
+                            "Lyric edit missed its ARA host notification");
+                    std::int32_t lyricWrongThread = 0;
+                    std::thread lyricThread([&] {
+                        std::uint64_t ignoredId = 0;
+                        std::int32_t ignoredDisposition = 3;
+                        lyricWrongThread = document->runtime.applyDocumentLyric(
+                            proxy, 1, 60, text, 1, &ignoredId, &ignoredDisposition);
+                    });
+                    lyricThread.join();
+                    require(lyricWrongThread == 4 && readShared() == withLyrics &&
+                                document->runtime.applyDocumentLyric(
+                                    proxy, 1, 60, text, 1, &sourceId, &disposition) == 0 &&
+                                disposition == 0 && document->runtime.destroyDocument(proxy) == 0 &&
+                                consumer.applyDocumentState(
+                                    state.data(), static_cast<std::int32_t>(state.size())) == 0,
+                            "Lyric repeat, thread guard or cleanup failed");
+                    std::cout << "PASS: actual ARA modification lyric callback, state, host "
+                                 "notification, "
+                                 "repeat and wrong-thread guard (SDK fixture, no GUI)\n";
+                }
                 std::int32_t wrongThread = 0;
                 std::thread foreignThread([&] {
                     std::int32_t required = 0;

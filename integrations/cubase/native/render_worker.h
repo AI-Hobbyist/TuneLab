@@ -78,6 +78,20 @@ class RenderWorker
         return cache.copyStereo(left, right, count, position, generation.load(), sampleRate);
     }
 
+    template <typename Sample>
+    bool copyRevision(Sample *left, Sample *right, int count, std::int64_t position,
+                      std::int32_t sampleRate, std::uint64_t revision) const noexcept
+    {
+        if (generation.load() != revision)
+            return false;
+        return cache.copyStereo(left, right, count, position, revision, sampleRate);
+    }
+
+    bool ready(std::uint64_t revision) const noexcept
+    {
+        return generation.load() == revision && lastResult.load() == 0;
+    }
+
     // Non-audio wait, for offline rendering and command-line validation.
     bool wait(std::uint64_t requested, std::chrono::milliseconds timeout)
     {
@@ -117,12 +131,19 @@ class RenderWorker
         RenderRequestHandle request;
     };
 
-    std::unique_ptr<AudioSnapshot> render(const Job &job, std::int32_t &result)
+    std::unique_ptr<AudioSnapshot> render(const Job &job, std::int32_t &result,
+                                          RenderSessionHandle &session)
     {
+        if (session == 0)
+        {
+            result = runtime.createRenderSession(&session);
+            if (result != 0)
+                return nullptr;
+        }
         AudioHandle audio = 0;
-        result =
-            runtime.renderSnapshot(job.state.data(), static_cast<std::int32_t>(job.state.size()),
-                                   job.sampleRate, job.request, &audio);
+        result = runtime.renderSessionSnapshot(session, job.state.data(),
+                                               static_cast<std::int32_t>(job.state.size()),
+                                               job.sampleRate, job.request, &audio);
         if (result != 0)
         {
             return nullptr;
@@ -153,6 +174,17 @@ class RenderWorker
 
     void run()
     {
+        RenderSessionHandle session = 0;
+        struct SessionCleanup
+        {
+            ManagedRuntime &runtime;
+            RenderSessionHandle &session;
+            ~SessionCleanup()
+            {
+                if (session != 0 && runtime.destroyRenderSession(session) != 0)
+                    OutputDebugStringA("TuneLab: render session destruction failed\n");
+            }
+        } cleanup{runtime, session};
         while (true)
         {
             std::unique_lock<std::mutex> lock(mutex);
@@ -169,7 +201,7 @@ class RenderWorker
             std::int32_t renderResult = static_cast<std::int32_t>(BridgeResult::Failed);
             try
             {
-                snapshot = render(job, renderResult);
+                snapshot = render(job, renderResult, session);
             }
             catch (const std::exception &exception)
             {

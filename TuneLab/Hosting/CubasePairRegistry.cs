@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
-using PairDocumentAccess = System.Tuple<System.Func<System.Tuple<int, byte[]>>, System.Func<byte[], int>>;
+using PairDocumentAccess = System.Tuple<
+    System.Func<System.Tuple<int, byte[]>>,
+    System.Func<byte[], int>,
+    System.Func<double, int, string, System.Tuple<int, ulong, int>>?>;
 
 namespace TuneLab.Hosting;
 
@@ -34,7 +37,7 @@ internal static partial class CubasePairRegistry
     {
         lock (string.Intern(RegistryKey))
         {
-            const string key = RegistryKey + ".document-access.v1";
+            const string key = RegistryKey + ".document-access.v2";
             if (AppDomain.CurrentDomain.GetData(key) is { } existing)
                 return (Dictionary<Guid, PairDocumentAccess>)existing;
             var access = new Dictionary<Guid, PairDocumentAccess>();
@@ -43,7 +46,8 @@ internal static partial class CubasePairRegistry
         }
     }
 
-    public static void SetDocumentAccess(Guid bridge, Func<Tuple<int, byte[]>>? read, Func<byte[], int>? apply)
+    public static void SetDocumentAccess(Guid bridge, Func<Tuple<int, byte[]>>? read, Func<byte[], int>? apply,
+        Func<double, int, string, Tuple<int, ulong, int>>? lyrics = null)
     {
         lock (sEndpoints)
         {
@@ -51,7 +55,7 @@ internal static partial class CubasePairRegistry
             if (read == null && apply == null)
                 sDocumentAccess.Remove(bridge);
             else if (read != null && apply != null)
-                sDocumentAccess[bridge] = Tuple.Create(read, apply);
+                sDocumentAccess[bridge] = new(read, apply, lyrics);
             else
                 throw new ArgumentException("Document access requires both callbacks.");
         }
@@ -79,6 +83,17 @@ internal static partial class CubasePairRegistry
             if (owner == null || !sDocumentAccess.TryGetValue(owner.Value, out var access))
                 return 2;
             return access.Item2((byte[])state.Clone());
+        }
+    }
+
+    public static Tuple<int, ulong, int> ApplyDocumentLyric(Guid endpoint, double quarter, int pitch, string text)
+    {
+        lock (sEndpoints)
+        {
+            var owner = GetState(endpoint).LogicalOwner;
+            if (owner == null || !sDocumentAccess.TryGetValue(owner.Value, out var access) || access.Item3 == null)
+                return Tuple.Create(2, 0UL, 3);
+            return access.Item3(quarter, pitch, text);
         }
     }
 
@@ -116,6 +131,20 @@ internal static partial class CubasePairRegistry
     {
         if (sOutputCallbacks.TryGetValue(id, out var callback))
             callback(GetState(id).OwnsProjectOutput);
+    }
+
+    public static void NotifySourceAssociationChanged(Guid bridge)
+    {
+        lock (sEndpoints)
+        {
+            Require(bridge, CubasePairRole.Bridge);
+            // Output ownership is unchanged. Native ingress advances the
+            // revision through the existing synchronous notification channel.
+            PublishOutput(bridge);
+            var peer = sEndpoints[bridge].Item2;
+            if (sEndpoints.ContainsKey(peer))
+                PublishOutput(peer);
+        }
     }
 
 
@@ -242,6 +271,7 @@ internal static partial class CubasePairRegistry
                 return;
             sOutputCallbacks.Remove(id);
             sDocumentAccess.Remove(id);
+            sLyricStatuses.Remove(id);
             RemoveViewProvider(id);
             if (sEndpoints.ContainsKey(entry.Item2))
                 PublishOutput(entry.Item2);

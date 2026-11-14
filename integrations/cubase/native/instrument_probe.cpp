@@ -2,6 +2,7 @@
 #include "host_time.h"
 #include "instrument_parameters.h"
 #include "midi_preview_player.h"
+#include "note_text_ingress.h"
 #include "pair_endpoint.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "probe_state.h"
@@ -13,6 +14,7 @@
 #include "render_worker.h"
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -49,6 +51,7 @@ class InstrumentProbe final : public AudioEffect
         }
         addAudioOutput(STR16("Stereo Output"), SpeakerArr::kStereo);
         addEventInput(STR16("MIDI Input"), 16);
+        controlThread = GetCurrentThreadId();
         return kResultOk;
     }
 
@@ -84,6 +87,7 @@ class InstrumentProbe final : public AudioEffect
                 pairing.pairWith(static_cast<const std::uint8_t *>(peer)) != 0)
                 return kResultFalse;
             pairing.publishPendingState();
+            ++textRevision;
             return kResultOk;
         }
         if (std::strcmp(message->getMessageID(), "TuneLab.Pairing.Unlink") == 0)
@@ -91,8 +95,11 @@ class InstrumentProbe final : public AudioEffect
             if (!enablePairingNotifications() || pairing.unpair() != 0)
                 return kResultFalse;
             pairing.publishPendingState();
+            ++textRevision;
             return kResultOk;
         }
+        if (std::strcmp(message->getMessageID(), "TuneLab.Lyrics.Request") == 0)
+            return drainNoteText();
         if (std::strcmp(message->getMessageID(), "TuneLab.Transport.Request") == 0)
         {
             if (runtimeReady)
@@ -178,6 +185,11 @@ class InstrumentProbe final : public AudioEffect
                 (!ensureRuntime() || pairing.restoreIntent(requiresPair) != 0))
                 return kResultFalse;
             state = std::move(candidate);
+            // A host reload changes the ingress document. Local editor
+            // commits retain its host baseline and must not erase queued
+            // lyrics waiting for that edit to settle.
+            if (restoreParameters)
+                ++textRevision;
             if (restoreParameters)
                 parameters.restore(bypass);
             return kResultOk;
@@ -248,6 +260,8 @@ class InstrumentProbe final : public AudioEffect
         // Only publish a lock-free timing observation here. Messages and UI work run on
         // the editor's polling thread, never on the audio callback.
         hostTime.publish(data.processContext);
+        noteText.capture(data.inputEvents, data.numSamples, data.processContext,
+                         textRevision.load() + pairing.notificationRevision());
         const bool ownsProjectOutput = pairing.allowsProjectOutput();
         for (int32 bus = 0; bus < data.numOutputs; ++bus)
         {
@@ -329,6 +343,84 @@ class InstrumentProbe final : public AudioEffect
     }
 
   private:
+    tresult sendLyricStatus(std::int32_t kind)
+    {
+        auto message = owned(allocateMessage());
+        if (!message)
+            return kResultFalse;
+        message->setMessageID("TuneLab.Lyrics.Status");
+        if (message->getAttributes()->setInt("kind", kind) != kResultOk)
+            return kResultFalse;
+        return sendMessage(message);
+    }
+
+    tresult drainNoteText()
+    {
+        if (GetCurrentThreadId() != controlThread || deliveringText)
+            return kResultFalse;
+        if (runtimeReady)
+            pairing.publishPendingState();
+        const auto lost = noteText.input.lostEvents();
+        if (lost != lostTextEvents)
+        {
+            noteText.input.discardPending();
+            pendingText.reset();
+            if (sendLyricStatus(4) != kResultOk)
+                return kResultFalse;
+            lostTextEvents = lost;
+            OutputDebugStringA("TuneLab: lyric ingress overflow; incomplete batch discarded\n");
+        }
+        const auto rejected = noteText.input.rejectedEvents();
+        if (rejected != rejectedTextEvents)
+        {
+            if (sendLyricStatus(7) != kResultOk)
+                return kResultFalse;
+            rejectedTextEvents = rejected;
+        }
+        for (int count = 0; count < 64; ++count)
+        {
+            if (!pendingText)
+            {
+                TuneLab::Cubase::NoteTextIngress::Record record;
+                if (!noteText.input.pop(record))
+                    break;
+                pendingText = record;
+            }
+            const auto &record = *pendingText;
+            if (record.revision != textRevision.load() + pairing.notificationRevision())
+            {
+                pendingText.reset();
+                continue;
+            }
+            if (record.pitch < 0)
+            {
+                if (sendLyricStatus(3) != kResultOk)
+                    return kResultFalse;
+                pendingText.reset();
+                continue;
+            }
+            auto message = owned(allocateMessage());
+            if (!message)
+                return kResultFalse;
+            message->setMessageID("TuneLab.Lyrics.Event");
+            auto *attributes = message->getAttributes();
+            if (attributes->setFloat("onsetQuarter", record.onsetQuarter) != kResultOk ||
+                attributes->setInt("pitch", record.pitch) != kResultOk ||
+                attributes->setBinary("text", record.text.data(), record.length * sizeof(TChar)) !=
+                    kResultOk)
+                return kResultFalse;
+            // A synchronous editor callback must not recursively drain the
+            // same pending record before the outer delivery completes.
+            deliveringText = true;
+            const auto result = sendMessage(message);
+            deliveringText = false;
+            if (result != kResultOk)
+                return result;
+            pendingText.reset();
+        }
+        return kResultOk;
+    }
+
     tresult sendPairingState()
     {
         if (!ensureRuntime())
@@ -338,6 +430,10 @@ class InstrumentProbe final : public AudioEffect
         std::int32_t status = 0, output = 0;
         if (!response || pairing.state(owner, status, output) != 0)
             return kResultFalse;
+        if (textPairStatus >= 0 && (textPairStatus != status || textPairOwner != owner))
+            ++textRevision;
+        textPairStatus = status;
+        textPairOwner = owner;
         response->setMessageID("TuneLab.Pairing.State");
         response->getAttributes()->setBinary("endpoint", pairing.id().data(), 16);
         response->getAttributes()->setBinary("owner", owner.data(), 16);
@@ -411,6 +507,15 @@ class InstrumentProbe final : public AudioEffect
     std::atomic<bool> processingEnabled{false};
     TuneLab::Cubase::HostTimeMailbox hostTime;
     TuneLab::Cubase::InstrumentParameters parameters;
+    TuneLab::Cubase::NoteTextIngress noteText;
+    std::optional<TuneLab::Cubase::NoteTextIngress::Record> pendingText;
+    std::atomic<std::uint64_t> textRevision{1};
+    std::uint64_t lostTextEvents = 0;
+    std::uint64_t rejectedTextEvents = 0;
+    DWORD controlThread = 0;
+    bool deliveringText = false;
+    std::array<std::uint8_t, 16> textPairOwner{};
+    std::int32_t textPairStatus = -1;
 };
 
 FUnknown *createController(void *)

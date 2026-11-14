@@ -25,6 +25,7 @@ internal sealed class PianoEditorSession : IDisposable
     readonly DispatcherTimer mTransportTimer;
     readonly Action mPollTransport;
     readonly Func<CubaseRenderStatus?> mGetRenderStatus;
+    readonly Func<CubaseLyricStatus> mGetLyricStatus;
     readonly LayoutTransformControl mScaledContent;
     readonly EmbeddedScriptInputs mInputs = new();
     readonly DockPanel mEditorContent;
@@ -48,7 +49,8 @@ internal sealed class PianoEditorSession : IDisposable
     bool mClosing;
 
     internal PianoEditorSession(ProjectDocument document, IPlayhead playhead, Action pollTransport,
-        Func<CubaseRenderStatus?> getRenderStatus, Action<int> previewKey, Action stopPreview, Func<Guid?> pairEndpoint)
+        Func<CubaseRenderStatus?> getRenderStatus, Action<int> previewKey, Action stopPreview,
+        Func<Guid?> pairEndpoint, Func<CubaseLyricStatus> getLyricStatus)
     {
         Dispatcher.UIThread.VerifyAccess();
         mView = new CubasePianoView(document, playhead, previewKey, stopPreview);
@@ -57,6 +59,7 @@ internal sealed class PianoEditorSession : IDisposable
         mToolbar = new EditorToolbar(mView);
         mPollTransport = pollTransport;
         mGetRenderStatus = getRenderStatus;
+        mGetLyricStatus = getLyricStatus;
         mTransportTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         mTransportTimer.Tick += OnTransportTick;
         var container = mEditorContent = new DockPanel();
@@ -159,7 +162,8 @@ internal sealed class PianoEditorSession : IDisposable
         RefreshPairing();
         mPollTransport();
         mToolbar.Refresh();
-        mRenderStatus.Text = mGetRenderStatus()?.DisplayText() ?? "宿主状态未连接";
+        string render = mGetRenderStatus()?.DisplayText() ?? "宿主状态未连接";
+        mRenderStatus.Text = render + "    " + mGetLyricStatus().DisplayText();
     }
 
     void RefreshPairing()

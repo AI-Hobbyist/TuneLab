@@ -60,7 +60,7 @@ public static partial class NativeEntry
             }, () => PollDocumentStatus(document),
                 pitch => RequestDocumentKeyPreview(document, pitch, true),
                 () => RequestDocumentKeyPreview(document, -1, false),
-                () => DocumentPairEndpoint(document));
+                () => DocumentPairEndpoint(document), () => ReadDocumentLyricStatus(document));
             session.SetPart(context.GetOrCreateEditingPart());
             session.Attach(parent, width, height);
             ulong id = checked((ulong)Interlocked.Increment(ref sNextView));

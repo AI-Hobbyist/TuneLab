@@ -5,7 +5,7 @@
 // Private host integration ABI. This does not change TuneLab.SDK/Foundation.
 namespace TuneLab::Cubase
 {
-inline constexpr std::uint32_t managedAbiVersion = 16;
+inline constexpr std::uint32_t managedAbiVersion = 21;
 
 struct AraTempoInput
 {
@@ -68,9 +68,13 @@ using PairCopyDocumentCallback = std::int32_t(__cdecl *)(void *, std::uint8_t *,
                                                          std::int32_t *);
 using PairApplyDocumentCallback = std::int32_t(__cdecl *)(void *, const std::uint8_t *,
                                                           std::int32_t);
+using PairApplyLyricCallback = std::int32_t(__cdecl *)(void *, double, std::int32_t,
+                                                       const wchar_t *, std::int32_t,
+                                                       std::uint64_t *, std::int32_t *);
 using SetPairDocumentAccess = std::int32_t(__cdecl *)(const std::uint8_t *,
                                                       PairCopyDocumentCallback,
-                                                      PairApplyDocumentCallback, void *);
+                                                      PairApplyDocumentCallback, void *,
+                                                      PairApplyLyricCallback);
 using CopyPairDocumentState = std::int32_t(__cdecl *)(const std::uint8_t *, std::uint8_t *,
                                                       std::int32_t, std::int32_t *);
 using ApplyPairDocumentState = std::int32_t(__cdecl *)(const std::uint8_t *, const std::uint8_t *,
@@ -130,9 +134,26 @@ using MapDocumentSourcePosition = std::int32_t(__cdecl *)(DocumentHandle, double
 using ValidateProjectState = std::int32_t(__cdecl *)(const std::uint8_t *, std::int32_t);
 using CopyDocumentState = std::int32_t(__cdecl *)(DocumentHandle, std::uint8_t *, std::int32_t,
                                                   std::int32_t *);
+// disposition: 0 unchanged, 1 applied, 2 local conflict, 3 unmapped/ambiguous.
+using ApplyDocumentLyric = std::int32_t(__cdecl *)(DocumentHandle, double, std::int32_t,
+                                                   const wchar_t *, std::int32_t, std::uint64_t *,
+                                                   std::int32_t *);
+using ReportDocumentLyricStatus = std::int32_t(__cdecl *)(DocumentHandle, std::int32_t);
+using InvalidatePairSource = std::int32_t(__cdecl *)(const std::uint8_t *);
+using NotifyPairSourceChange = std::int32_t(__cdecl *)(const std::uint8_t *, const std::uint8_t *,
+                                                       std::int32_t, const std::uint8_t *,
+                                                       std::int32_t);
+using GetDocumentLyricStatus = std::int32_t(__cdecl *)(DocumentHandle, std::int32_t *,
+                                                       std::uint64_t *);
 using RestoreDocumentState = std::int32_t(__cdecl *)(DocumentHandle, const std::uint8_t *,
                                                      std::int32_t);
 using AudioHandle = std::uint64_t;
+using RenderSessionHandle = std::uint64_t;
+using CreateRenderSession = std::int32_t(__cdecl *)(RenderSessionHandle *);
+using DestroyRenderSession = std::int32_t(__cdecl *)(RenderSessionHandle);
+using RenderSessionSnapshot = std::int32_t(__cdecl *)(RenderSessionHandle, const std::uint8_t *,
+                                                      std::int32_t, std::int32_t, std::uint64_t,
+                                                      AudioHandle *);
 using RenderRequestHandle = std::uint64_t;
 using CreateRenderRequest = std::int32_t(__cdecl *)(RenderRequestHandle *);
 using CancelRenderRequest = std::int32_t(__cdecl *)(RenderRequestHandle);

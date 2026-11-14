@@ -108,11 +108,298 @@ struct PluginInstance
     }
 };
 
+int testLyricIngress(PluginInstance &plugin, IConnectionPoint *connection, HostApplication *host,
+                     const wchar_t *binary)
+{
+    using namespace TuneLab::Cubase;
+    FUnknownPtr<INoteExpressionController> expressions(plugin.controller);
+    if (!expressions || expressions->getNoteExpressionCount(1, 0) != 0 ||
+        expressions->getNoteExpressionCount(0, -1) != 0 ||
+        expressions->getNoteExpressionCount(0, 16) != 0)
+        return 91;
+    for (int16 channel = 0; channel < 16; ++channel)
+    {
+        NoteExpressionTypeInfo info{};
+        if (expressions->getNoteExpressionCount(0, channel) != 1 ||
+            expressions->getNoteExpressionInfo(0, channel, 0, info) != kResultOk ||
+            info.typeId != kTextTypeID || info.unitId != -1 ||
+            expressions->getNoteExpressionInfo(0, channel, 1, info) == kResultOk)
+            return 92;
+    }
+    String128 numericText{};
+    NoteExpressionValue numericValue = 0;
+    if (expressions->getNoteExpressionStringByValue(0, 0, kTextTypeID, 0.5, numericText) ==
+            kResultOk ||
+        expressions->getNoteExpressionValueByString(0, 0, kTextTypeID, STR16("lyric"),
+                                                    numericValue) == kResultOk)
+        return 93;
+    ManagedRuntime runtime;
+    const auto managed =
+        std::filesystem::path(binary).parent_path().parent_path() / L"Resources" / L"managed";
+    if (!runtime.initialize(managed))
+        return 81;
+    const AraTempoInput tempo[]{{0, 0}, {4, 8}};
+    const AraNoteInput notes[]{{11, 0.5, 0.25, 60}, {22, 0.50025, 0.25, 62}};
+    const AraRegionInput region{0, 4, 0, 4};
+    std::int32_t size = 0;
+    if (runtime.buildAraProjectState(nullptr, 0, tempo, 2, nullptr, 0, notes, 2, &region, nullptr,
+                                     0, &size) != 0)
+        return 82;
+    std::vector<std::uint8_t> source(size);
+    if (runtime.buildAraProjectState(nullptr, 0, tempo, 2, nullptr, 0, notes, 2, &region,
+                                     source.data(), size, &size) != 0)
+        return 83;
+    MemoryStream controllerState(source.data(), size), processorState(source.data(), size);
+    if (plugin.controller->setComponentState(&controllerState) != kResultOk ||
+        plugin.component->setState(&processorState) != kResultOk)
+        return 84;
+    struct ExpectedDocument
+    {
+        ManagedRuntime &runtime;
+        DocumentHandle handle = 0;
+        ~ExpectedDocument()
+        {
+            if (handle)
+                runtime.destroyDocument(handle);
+        }
+    } expected{runtime};
+    if (runtime.createDocument(&expected.handle) != 0 ||
+        runtime.restoreDocumentState(expected.handle, source.data(), size) != 0)
+        return 85;
+    const wchar_t first[]{0x4F60, 0}, second[]{0x597D, 0};
+    std::uint64_t sourceId = 0;
+    std::int32_t disposition = 3;
+    if (runtime.applyDocumentLyric(expected.handle, 1, 60, first, 1, &sourceId, &disposition) !=
+            0 ||
+        disposition != 1 || sourceId != 11 ||
+        runtime.applyDocumentLyric(expected.handle, 1.0005, 62, second, 1, &sourceId,
+                                   &disposition) != 0 ||
+        disposition != 1 || sourceId != 22 ||
+        runtime.copyDocumentState(expected.handle, nullptr, 0, &size) != 0)
+        return 86;
+    std::vector<std::uint8_t> expectedState(size);
+    if (runtime.copyDocumentState(expected.handle, expectedState.data(), size, &size) != 0)
+        return 87;
+    EventList events;
+    TChar words[]{0x4F60, 0x597D};
+    for (int index = 0; index < 2; ++index)
+    {
+        Event on{};
+        on.type = Event::kNoteOnEvent;
+        on.sampleOffset = index * 12;
+        on.ppqPosition = 1 + index * 0.0005;
+        on.noteOn = {0, static_cast<int16>(60 + index * 2), 0, 1, 0, 101 + index};
+        events.addEvent(on);
+        Event text = on;
+        text.type = Event::kNoteExpressionTextEvent;
+        text.noteExpressionText = {kTextTypeID, 101 + index, 1, &words[index]};
+        events.addEvent(text);
+    }
+    ProcessContext context{};
+    context.sampleRate = 48000;
+    context.projectTimeSamples = 24000;
+    context.projectTimeMusic = 1;
+    context.state = ProcessContext::kPlaying | ProcessContext::kProjectTimeMusicValid;
+    ProcessData data{};
+    data.numSamples = 64;
+    data.inputEvents = &events;
+    data.processContext = &context;
+    if (plugin.processor->process(data) != kResultOk)
+        return 88;
+    words[0] = words[1] = '!';
+    // A settled local editor snapshot can arrive while lyrics are queued or
+    // waiting for an active edit. It must not masquerade as a host reload.
+    auto localEcho = owned(Steinberg::Vst::allocateMessage(host));
+    localEcho->setMessageID("TuneLab.ProjectState");
+    if (localEcho->getAttributes()->setBinary("state", source.data(), static_cast<uint32>(source.size())) != kResultOk ||
+        connection->notify(localEcho) != kResultOk)
+        return 111;
+    auto request = owned(Steinberg::Vst::allocateMessage(host));
+    request->setMessageID("TuneLab.Lyrics.Request");
+    if (connection->notify(request) != kResultOk)
+        return 89;
+    auto read = [&] {
+        MemoryStream stream;
+        std::vector<std::uint8_t> bytes;
+        if (plugin.component->getState(&stream) != kResultOk)
+            return bytes;
+        stream.seek(0, IBStream::kIBSeekSet, nullptr);
+        readProjectState(&stream, bytes);
+        return bytes;
+    };
+    if (read() != expectedState || connection->notify(request) != kResultOk ||
+        read() != expectedState)
+        return 90;
+    // Exercise the real SDK main-thread timer without creating a window.
+    context.projectTimeSamples += 64;
+    events.clear();
+    TChar next[]{0x65B0, 0};
+    Event update{};
+    update.type = Event::kNoteExpressionTextEvent;
+    update.ppqPosition = 1.01;
+    update.noteExpressionText = {kTextTypeID, 101, 1, next};
+    events.addEvent(update);
+    if (runtime.applyDocumentLyric(expected.handle, 1, 60, reinterpret_cast<const wchar_t *>(next),
+                                   1, &sourceId, &disposition) != 0 ||
+        disposition != 1 || runtime.copyDocumentState(expected.handle, nullptr, 0, &size) != 0)
+        return 94;
+    expectedState.resize(size);
+    if (runtime.copyDocumentState(expected.handle, expectedState.data(), size, &size) != 0 ||
+        plugin.processor->process(data) != kResultOk)
+        return 95;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (read() != expectedState && std::chrono::steady_clock::now() < deadline)
+    {
+        MSG message{};
+        while (PeekMessageW(&message, nullptr, WM_TIMER, WM_TIMER, PM_REMOVE))
+            DispatchMessageW(&message);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    if (read() != expectedState)
+        return 96;
+    // Replacing the document invalidates already queued input. Seeking also
+    // clears the active noteId binding before accepting any subsequent text.
+    next[0] = 0x574F;
+    context.projectTimeSamples += 64;
+    if (plugin.processor->process(data) != kResultOk)
+        return 97;
+    MemoryStream replacement(expectedState.data(), static_cast<TSize>(expectedState.size()));
+    if (plugin.component->setState(&replacement) != kResultOk ||
+        connection->notify(request) != kResultOk || read() != expectedState)
+        return 98;
+    context.projectTimeSamples = 0;
+    if (plugin.processor->process(data) != kResultOk || connection->notify(request) != kResultOk ||
+        read() != expectedState)
+        return 99;
+    std::cout << "Actual Instrument process -> owned text -> main-thread messages -> controller -> "
+                 "CLR state: SDK text declaration, two lyrics, runtime/source ID separation, "
+                 "buffer ownership, "
+                 "empty drain, real main-thread timer, document replacement and seek rejection "
+                 "passed (SDK fixture, no GUI)\n";
+    return 0;
+}
+
+int testLyricSynthesis(PluginInstance &plugin, IConnectionPoint *connection, HostApplication *host,
+                       const std::vector<std::uint8_t> &source)
+{
+    MemoryStream controllerState(const_cast<std::uint8_t *>(source.data()),
+                                 static_cast<TSize>(source.size()));
+    MemoryStream processorState(const_cast<std::uint8_t *>(source.data()),
+                                static_cast<TSize>(source.size()));
+    ProcessSetup setup{kOffline, kSample32, 512, 48000};
+    if (plugin.controller->setComponentState(&controllerState) != kResultOk ||
+        plugin.component->setState(&processorState) != kResultOk ||
+        plugin.processor->setupProcessing(setup) != kResultOk ||
+        plugin.component->setActive(true) != kResultOk)
+        return 100;
+    plugin.active = true;
+    if (plugin.processor->setProcessing(true) != kResultOk)
+        return 100;
+    plugin.processing = true;
+    std::array<float, 512> left{}, right{};
+    float *channels[]{left.data(), right.data()};
+    AudioBusBuffers output{};
+    output.numChannels = 2;
+    output.channelBuffers32 = channels;
+    ProcessContext context{};
+    context.sampleRate = 48000;
+    context.state = ProcessContext::kPlaying | ProcessContext::kProjectTimeMusicValid;
+    ProcessData data{};
+    data.processMode = kOffline;
+    data.symbolicSampleSize = kSample32;
+    data.numSamples = 512;
+    data.numOutputs = 1;
+    data.outputs = &output;
+    data.processContext = &context;
+    auto audio = [&] {
+        std::vector<float> samples;
+        for (int position = 0; position < 96000; position += 512)
+        {
+            context.projectTimeSamples = position;
+            context.projectTimeMusic = position / 24000.0;
+            if (plugin.processor->process(data) != kResultOk)
+                return std::vector<float>{};
+            for (int index = 0; index < 512; ++index)
+            {
+                if (!std::isfinite(left[index]) || !std::isfinite(right[index]))
+                    return std::vector<float>{};
+                samples.push_back(left[index]);
+                samples.push_back(right[index]);
+            }
+        }
+        return samples;
+    };
+    const auto before = audio();
+    const auto audible = [](const auto &samples) {
+        return std::any_of(samples.begin(), samples.end(),
+                           [](float sample) { return std::abs(sample) > 1e-6f; });
+    };
+    if (before.empty() || !audible(before) || plugin.processor->setProcessing(false) != kResultOk)
+        return 101;
+    plugin.processing = false;
+    EventList events;
+    Event on{};
+    on.type = Event::kNoteOnEvent;
+    on.ppqPosition = 1;
+    on.noteOn = {0, 60, 0, 1, 0, 501};
+    events.addEvent(on);
+    TChar lyric[]{0x4F60, 0};
+    Event text = on;
+    text.type = Event::kNoteExpressionTextEvent;
+    text.noteExpressionText = {kTextTypeID, 501, 1, lyric};
+    events.addEvent(text);
+    context.projectTimeSamples = 24000;
+    context.projectTimeMusic = 1;
+    data.inputEvents = &events;
+    if (plugin.processor->process(data) != kResultOk)
+        return 102;
+    auto request = owned(Steinberg::Vst::allocateMessage(host));
+    request->setMessageID("TuneLab.Lyrics.Request");
+    if (connection->notify(request) != kResultOk)
+        return 103;
+    MemoryStream saved;
+    std::vector<std::uint8_t> afterState;
+    if (plugin.component->getState(&saved) != kResultOk)
+        return 104;
+    saved.seek(0, IBStream::kIBSeekSet, nullptr);
+    if (TuneLab::Cubase::readProjectState(&saved, afterState) != kResultOk || afterState == source)
+        return 105;
+    data.inputEvents = nullptr;
+    if (plugin.processor->setProcessing(true) != kResultOk)
+        return 106;
+    plugin.processing = true;
+    if (plugin.processor->process(data) != kResultOk ||
+        std::any_of(left.begin(), left.end(), [](float sample) { return sample != 0; }) ||
+        std::any_of(right.begin(), right.end(), [](float sample) { return sample != 0; }))
+        return 107;
+    // Offline activation waits on the current render generation, never on
+    // process(). The stale generation was already observed silent above.
+    if (plugin.component->setActive(true) != kResultOk)
+        return 108;
+    const auto after = audio();
+    if (after.size() != before.size() || !audible(after))
+        return 109;
+    double difference = 0;
+    for (std::size_t index = 0; index < after.size(); ++index)
+        difference += std::abs(static_cast<double>(after[index]) - before[index]);
+    if (difference <= 1e-6)
+        return 110;
+    std::cout << "Actual Instrument/local SVS: SDK lyric event changed saved state; old cache "
+                 "immediately silent; current generation completed; finite audible new output, "
+                 "mean absolute change="
+              << difference / after.size()
+              << " (no GUI/listening; pronunciation listening remains skipped)\n";
+    return 0;
+}
+
 int wmain(int argc, wchar_t **argv)
 {
-    if (argc != 3)
+    const bool lyricsOnly = argc == 4 && std::wcscmp(argv[3], L"--lyrics-only") == 0;
+    const bool lyricsSynthesis = argc == 4 && std::wcscmp(argv[3], L"--lyrics-synthesis") == 0;
+    if (argc != 3 && !lyricsOnly && !lyricsSynthesis)
     {
-        std::cerr << "Usage: tunelab_processor_probe <plugin-binary> <project-state>\n";
+        std::cerr << "Usage: tunelab_processor_probe <plugin-binary> <project-state> "
+                     "[--lyrics-only | --lyrics-synthesis]\n";
         return 1;
     }
     std::ifstream input(std::filesystem::path(argv[2]), std::ios::binary);
@@ -170,7 +457,7 @@ int wmain(int argc, wchar_t **argv)
         !(bypassInfo.flags & ParameterInfo::kIsBypass))
         return 54;
     ProcessSetup setup{kOffline, kSample32, 512, 48000};
-    if (plugin.processor->setupProcessing(setup) != kResultOk)
+    if (!lyricsOnly && !lyricsSynthesis && plugin.processor->setupProcessing(setup) != kResultOk)
         return 6;
     MemoryStream source(state.data(), static_cast<TSize>(state.size()));
     // Load before connecting: connect must deliver the controller's latest snapshot.
@@ -196,6 +483,10 @@ int wmain(int argc, wchar_t **argv)
     {
         return 23;
     }
+    if (lyricsOnly)
+        return testLyricIngress(plugin, connection, host, argv[1]);
+    if (lyricsSynthesis)
+        return testLyricSynthesis(plugin, connection, host, state);
     MemoryStream saved;
     if (plugin.component->getState(&saved) != kResultOk ||
         saved.getSize() != expectedState.getSize() ||

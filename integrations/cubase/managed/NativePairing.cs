@@ -53,7 +53,7 @@ public static partial class NativeEntry
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int SetPairDocumentAccess(byte* endpoint, nint copy, nint apply, nint owner)
+    public static unsafe int SetPairDocumentAccess(byte* endpoint, nint copy, nint apply, nint owner, nint lyrics)
     {
         if (endpoint == null || ((copy == 0) != (apply == 0)))
             return 1;
@@ -75,7 +75,17 @@ public static partial class NativeEntry
                 fixed (byte* source = bytes)
                     return ((delegate* unmanaged[Cdecl]<nint, byte*, int, int>)apply)(owner, source, bytes.Length);
             };
-            CubasePairRegistry.SetDocumentAccess(new Guid(new ReadOnlySpan<byte>(endpoint, 16)), read, write);
+            Func<double, int, string, Tuple<int, ulong, int>>? applyLyric = lyrics == 0 ? null : (quarter, pitch, text) =>
+            {
+                ulong sourceId = 0;
+                int disposition = 3;
+                int result;
+                fixed (char* characters = text)
+                    result = ((delegate* unmanaged[Cdecl]<nint, double, int, char*, int, ulong*, int*, int>)lyrics)(
+                        owner, quarter, pitch, characters, text.Length, &sourceId, &disposition);
+                return Tuple.Create(result, sourceId, disposition);
+            };
+            CubasePairRegistry.SetDocumentAccess(new Guid(new ReadOnlySpan<byte>(endpoint, 16)), read, write, applyLyric);
             return 0;
         }
         catch (KeyNotFoundException) { return 2; }

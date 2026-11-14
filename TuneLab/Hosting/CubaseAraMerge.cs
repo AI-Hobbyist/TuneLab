@@ -20,6 +20,17 @@ internal static class CubaseAraMerge
         {
             var baseline = new CubaseAraScoreProjection(CubaseProjectState.Decode(association.BaselineState),
                 association.BaselineNoteIds, association.SourceZeroSongSeconds, association.SourceZeroSongQuarter);
+            // ARA note content has no lyric field. Carry the separately received
+            // host text into the new baseline instead of clearing it on every
+            // timing/content refresh. Clone because incoming belongs to its caller.
+            var sourceLyrics = SourceNotes(baseline);
+            incoming = incoming with { File = CubaseProjectState.Decode(CubaseProjectState.Encode(incoming.File)) };
+            var incomingNotes = CubaseAraLyrics.SourcePart(incoming.File).Notes;
+            for (int index = 0; index < incomingNotes.Count; index++)
+            {
+                if (sourceLyrics.TryGetValue(incoming.NoteIds[index], out var previous))
+                    incomingNotes[index].Lyric = previous.Lyric;
+            }
             var edited = new CubaseAraScoreProjection(current!.Project, association.CurrentNoteIds,
                 association.SourceZeroSongSeconds, association.SourceZeroSongQuarter);
             merged = Merge(baseline, edited, incoming);

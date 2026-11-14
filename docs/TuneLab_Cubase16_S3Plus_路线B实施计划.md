@@ -1,6 +1,6 @@
 # TuneLab 深度集成 Cubase 16 的 S3+ 路线 B 实施计划
 
-日期：2026-11-15。状态：实施中，M0–M4已完成自主实施、非GUI验收及推送检查点；M5–M6未开始，完整S3+目标仍ACTIVE。
+日期：2026-11-15。状态：实施中，M0–M4已完成自主实施、非GUI验收及推送检查点；M5自主实施与非GUI验收完成、待提交推送检查点，M6未开始，完整S3+目标仍ACTIVE。
 
 本计划交付两个插件：**TuneLab VST3 Instrument（VSTi3）**和 **TuneLab ARA Bridge**。采用路线 B，在 Cubase 进程内通过原生 C++ 插件壳加载 .NET 与 Avalonia，复用 TuneLab 钢琴窗，使其既能嵌入 VST3 插件界面，也能通过 ARA 工作流进入 Cubase Extension 编辑器。最终目标是 S3+，包括 Cubase Key Editor 歌词输入同步、合成播放、编辑和工程恢复。
 
@@ -289,7 +289,8 @@ GUI 验证当前默认跳过。只有用户后续明确要求执行时，才采�
 | M2 VSTi3完整闭环 | 自主实施与本阶段非GUI自动验收完成；9b1ec329已推送且HEAD/上游一致，见 [M2验收记录](cubase-m2-validation.md) |
 | M3 ARA Bridge闭环 | 自主实施/非GUI验收及推送检查点完成，功能提交32433224；见 [M3验收记录](cubase-m3-validation.md)；GUI SKIPPED |
 | M4 双容器钢琴窗 | 自主实施/非GUI验收及推送检查点完成，功能提交78c7f251；见 [M4验收记录](cubase-m4-validation.md) |
-| M5–M6 | NOT STARTED，M4检查点已确认，按原顺序推进 |
+| M5 S3+宿主歌词 | 自主实施与非GUI验收完成，待提交/推送检查点：标准文本入口、稳定ID/事务/冲突、真实SVS及缓存、版本/归档；Cubase实机供给SKIPPED，见 [M5证据](cubase-m5-validation.md) |
+| M6 发布候选 | NOT STARTED，按原顺序推进 |
 
 M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy歌声引擎复用、完整版本化component state和Bypass参数状态、controller文档快照消息/恢复、异步代次缓存、整曲宿主播放和离线process、MIDI短音歌声缓存试听、样本级NoteOff/Bypass、float/double、状态反馈，以及当前块时间信息接收。
 
@@ -396,3 +397,29 @@ M4仍 IN PROGRESS。静态已确认音符/颤音选择旗标位于共享模型�
 ### M4 Git检查点（2026-11-15）
 
 功能提交 78c7f251deb71e3b6cc1e2d413dd6fd57d724f2a 已独立提交并推送 origin/cubase_16_full_ara，ls-remote 已返回相同 SHA，上游同名。M4 阶段完成；本次仅补记检查点文档，没有新增实施变化。保留用户原有 .gitignore、.codegraph、out 和三份参考文档。确认本次文档推送后进入 M5，完整 S3+ 仍未完成，人工项继续 SKIPPED。
+
+### M5 标准文本事件接收基础（2026-11-15）
+
+M4文档检查点f3c38723已推送并确认后进入M5。基于本地VST3公开kTextTypeID/NoteExpressionTextEvent契约，实现固定分配SPSC队列，复制UTF-16及关联/时间/修订信息，拒绝非法/超长载荷并统计溢出；Windows原生构建和含100000并发传递的SDK合成夹具通过（m5-text-input-build.log、m5-text-input-probe.log）。尚未接入真实插件process、控制器声明、稳定音符关联或文档更新，不称已同步歌词。真实宿主供给/GUI采集仍SKIPPED，候选通道不能证明Cubase Key Editor歌词事务。M5继续实施，未提交推送，详见[cubase-m5-validation.md](cubase-m5-validation.md)。
+
+M5文档事务补记（2026-11-15）：新增内部CubaseAraLyrics.UpdateState，以持久source ID和来源校验更新歌词baseline；保留用户歌词/发音/固定音素覆盖并报告冲突，不复活删除音符。ARA纯音符刷新继承宿主歌词，输入投影保持不变。相关18/18非GUI测试通过（m5-lyrics-state-tests.log）。尚未连接原生事件消费者、活动文档或重合成；M5仍IN PROGRESS、未提交推送。
+
+M5活动文档补记（2026-11-15）：已实现基于宿主baseline起点/pitch的持久ID定位（歧义拒绝）及实际CubaseDocumentContext歌词事务，保留音符对象、选择与撤销历史，单次settled通知、Busy保护及冲突baseline推进。相关28/28非GUI测试通过（m5-live-lyrics-tests.log）。仍未接入原生事件消费者/私有ABI或验证本轮歌声重渲染，阶段未完成未提交。
+
+M5私有ABI补记（2026-11-15）：ABI17新增ApplyDocumentLyric，真实CLR状态更新与回调、实际双包分离ALC歌词代理转发、所属BridgeAudioModification状态/宿主通知/重复/WrongThread通过；相关36/36回归，双validator各47/0。数据仍为SDK夹具，未接process捕获、runtime noteId关联及控制器声明，未验证本轮SVS重渲染，不称Cubase歌词闭环；M5继续实施、未提交。见cubase-m5-validation.md及交接。
+
+M5标准事件补记（2026-11-15）：已接实际Instrument process、运行时NoteOn起点/pitch关联、主线程Timer消费、标准kTextTypeID声明及ABI17写文档。实际插件SDK夹具验证两音符/复制所有权/真实无窗口Timer/文档替换/seek失效；完整verify-host退出0、双validator各47/0。证据m5-instrument-lyrics-final.log和m5-ingress-host-verification.log。仍需真实SVS重合成、状态展示及实际配对输入/剩余事务审计；未完成M5、未提交，不称Cubase供给或S3+实机通过。
+
+M5真实声库补记（2026-11-15）：实际Instrument的标准歌词事件触发fu2_ning2_na4完整source重合成，保存状态变化、旧缓存立即静音、新generation完成后process非零有限输出，平均绝对波形变化0.0337584（m5-real-lyrics-synthesis.log）。临时夹具/状态仅在out，不分发模型；输入为SDK构造、试听SKIPPED。此证据不等于按音符范围增量渲染完成。下一步状态展示、配对整体验证与M5剩余事务/增量审计；阶段仍未完成未提交。
+
+M5状态与生命周期补记（2026-11-15）：ABI18加入歌词结果诊断，状态行显示冲突/未关联/溢出/重试/拒绝；配对owner共享、实例隔离、端点移除清理及文档本地诊断。相关38/38，完整verify-host退出0、双validator各47/0；修复过期端点诊断影响写入（原退出34），并实际Instrument复现修复editor提交误清排队歌词（RED90→GREEN，宿主restore/seek仍拒绝旧事件）。仍须配对输入/音频整体、baseline换版、剩余事务及增量重合成审计；GUI状态视觉SKIPPED，M5未完成未提交。详见cubase-m5-validation.md。
+
+M5配对与来源修订补记（2026-11-15）：实际Instrument→Bridge文档/稳定ID/通知→fu2_ning2_na4音频链路及clone隔离通过；来源换版导致旧文本写新音符的夹具RED退出1，ABI19语义比较baseline/端点修订保护后GREEN，并验证新事件可更新source ID12、移动ID11保留歌词。相关52/52、完整verify-host退出0、双validator各47/0。证据m5-paired-source-revision-green.log、m5-source-revision-host.log。仍需增量合成与剩余事务/版本/归档组合审计，M5未完成未提交，人工项SKIPPED。
+
+M5持久渲染补记（2026-11-15）：新增数据线程内CubaseRenderSession，歌词/发音更新保留工程/音符/引擎管线，其余结构变化重建；ABI20持久会话已接原生RenderWorker。相关10/10、完整verify-host退出0/双validator各47/0、CLR线程与释放协议及实际fu2_ning2_na4单音符重合成通过。Bridge播放计划仍新建worker，下一步安全跨计划复用和旧generation隔离，并取得真实未修改片段缓存保留证据；不称完整增量已完成，M5未提交未完成。
+
+M5增量合成补记（2026-11-15）：Bridge已按region生命周期复用worker并固定计划generation，真实声库探针验证改词后未修改乐句的AudioSegment/CommitVersion/样本及波形引用保留；保留会话输出与冷启动最大采样误差0。正式探针integrations/cubase/probes/RenderCacheProbe，日志m5-real-cache-retention.log；原生复用/并发/实际Bridge回归m5-retained-region-synthesis.log通过。仍须剩余事务、语言/延音、版本与归档组合审计和阶段全量回归，M5未完成未提交，M6未开始。
+
+M5事务回归补记（2026-11-15）：新增复制不继承source ID、删除撤销后更新、保存重开、未知版本不破坏当前状态及宿主复制/删除/撤销快照关联验证。定向37/37、全主测试890/890、legacy13/13、完整verify-host/ABI20/双validator47/0通过。仍需带歌词的实际ARA归档组合及source-only恢复对排队文本修订影响的定向审计，M5未提交未完成，M6未开始。
+
+M5归档补记（2026-11-15）：带歌词的实际ARA克隆/部分归档恢复及managed baseline一致性通过。source-only身份恢复接纳旧排队歌词已实际RED复现并以私有ABI21 InvalidatePairSource修复，GREEN同时验证新事件更新新ID99；完整verify-host/双validator47/0通过。下一步为M5既定DoD最终审计和独立提交推送检查点，尚未进入M6；不称Cubase实机S3+通过。

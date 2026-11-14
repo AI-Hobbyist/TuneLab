@@ -74,6 +74,10 @@ class PairEndpoint
     {
         return projectOutput.load();
     }
+    std::uint64_t notificationRevision() const noexcept
+    {
+        return notifications.load();
+    }
     int setViewProvider(PairCreateViewCallback create, PairDestroyViewCallback destroy,
                         PairResizeViewCallback resize, PairFocusViewCallback focus,
                         PairReleaseViewProvider release, PairScaleViewCallback scale, void *owner)
@@ -82,9 +86,9 @@ class PairEndpoint
                                            scale, owner);
     }
     int setDocumentAccess(PairCopyDocumentCallback copy, PairApplyDocumentCallback apply,
-                          void *owner)
+                          void *owner, PairApplyLyricCallback lyrics = nullptr)
     {
-        return runtime.setPairDocumentAccess(endpoint.data(), copy, apply, owner);
+        return runtime.setPairDocumentAccess(endpoint.data(), copy, apply, owner, lyrics);
     }
     int copyDocumentState(std::uint8_t *destination, std::int32_t capacity, std::int32_t *required)
     {
@@ -115,6 +119,7 @@ class PairEndpoint
     static void __cdecl onOutputChanged(void *owner, std::int32_t output) noexcept
     {
         auto &endpoint = *static_cast<PairEndpoint *>(owner);
+        ++endpoint.notifications;
         endpoint.projectOutput.store(output != 0);
         endpoint.statePending.store(true);
         endpoint.publishPendingState();
@@ -122,6 +127,7 @@ class PairEndpoint
     ManagedRuntime runtime;
     std::array<std::uint8_t, 16> endpoint{};
     std::atomic<bool> projectOutput{true};
+    std::atomic<std::uint64_t> notifications{0};
     std::atomic<bool> statePending{false};
     std::atomic<DWORD> controlThread{0};
     StateChanged stateChanged = nullptr;

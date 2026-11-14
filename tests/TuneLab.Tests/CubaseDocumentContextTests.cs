@@ -13,6 +13,107 @@ namespace TuneLab.Tests;
 public class CubaseDocumentContextTests
 {
     [Fact]
+    public void CopiedNoteDoesNotInheritSourceIdentityAndDeletionUndoRestoresAssociation()
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DataThreadContext());
+        try
+        {
+            TestVoices.EnsureBuiltIn();
+            var projection = CubaseAraScore.Create([new(0, 0), new(4, 8)],
+                [new(9, 0.5, 0.5, 60)], new(0, 4, 0, 4), new SoundSourceInfo());
+            using var context = new CubaseDocumentContext();
+            context.RestoreState(CubaseAraMerge.UpdateState([], projection));
+            context.ApplyHostLyrics("", [new(9, "你")]);
+            var part = context.GetOrCreateEditingPart();
+            var original = part.Notes.First!;
+            var copyInfo = ((Note)original).GetInfo();
+            copyInfo.Pos += 960;
+            var copy = part.CreateNote(copyInfo);
+            part.InsertNote(copy);
+            context.Document.Commit();
+            Assert.Equal(new ulong[] { 9, 0 }, CubaseProjectState.DecodeEnvelope(context.SaveState()).Ara!.CurrentNoteIds);
+            context.ApplyHostLyrics("", [new(9, "好")]);
+            Assert.Equal("好", original.Lyric.Value);
+            Assert.Equal("你", copy.Lyric.Value);
+            part.RemoveNote(original);
+            context.Document.Commit();
+            Assert.True(context.Document.Undo());
+            Assert.Same(original, part.Notes.First);
+            Assert.Equal(new ulong[] { 9 }, context.ApplyHostLyrics("", [new(9, "再")]).ChangedNotes);
+            Assert.Equal("再", original.Lyric.Value);
+            Assert.Equal("你", copy.Lyric.Value);
+            using var reopened = new CubaseDocumentContext();
+            reopened.RestoreState(context.SaveState());
+            reopened.ApplyHostLyrics("", [new(9, "见")]);
+            Assert.Equal(new[] { "见", "你" }, reopened.GetOrCreateEditingPart().Notes.Select(note => note.Lyric.Value));
+            var before = reopened.SaveState();
+            var invalid = before.ToArray();
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(invalid.AsSpan(8), 999);
+            Assert.Throws<NotSupportedException>(() => reopened.RestoreState(invalid));
+            Assert.Equal(before, reopened.SaveState());
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    [Fact]
+    public void HostLyricsKeepLiveObjectsAndUndoAndPublishOneSettledUpdate()
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DataThreadContext());
+        try
+        {
+            TestVoices.EnsureBuiltIn();
+            var projection = CubaseAraScore.Create([new(0, 0), new(2, 4)],
+                [new(9, 0.5, 0.5, 60)], new(0, 2, 0, 2), new SoundSourceInfo());
+            using var context = new CubaseDocumentContext();
+            context.RestoreState(CubaseAraMerge.UpdateState([], projection));
+            var part = context.GetOrCreateEditingPart();
+            var note = part.Notes.First!;
+            note.IsSelected = true;
+            var snapshots = new System.Collections.Generic.List<byte[]>();
+            context.StateChanged += snapshots.Add;
+            var result = context.ApplyHostLyrics("", [new(9, "你")]);
+            Assert.Equal(new ulong[] { 9 }, result.ChangedNotes);
+            Assert.Same(part, context.GetOrCreateEditingPart());
+            Assert.Same(note, part.Notes.First);
+            Assert.True(note.IsSelected);
+            Assert.Equal("你", note.Lyric.Value);
+            Assert.Single(snapshots);
+            Assert.Equal(result.State, snapshots[0]);
+            context.ApplyHostLyrics("", [new(9, "你")]);
+            Assert.Single(snapshots);
+            context.ApplyHostLyrics("", [new(9, "好")]);
+            Assert.Equal("好", note.Lyric.Value);
+            Assert.Equal(2, snapshots.Count);
+            Assert.True(context.Document.Undo());
+            Assert.Equal("你", note.Lyric.Value);
+            Assert.True(context.Document.Redo());
+            Assert.Equal("好", note.Lyric.Value);
+            note.Lyric.Set("local");
+            Assert.Throws<InvalidOperationException>(() => context.ApplyHostLyrics("", [new(9, "host")]));
+            Assert.Equal("local", note.Lyric.Value);
+            context.Document.Commit();
+            int notifications = snapshots.Count;
+            var conflict = context.ApplyHostLyrics("", [new(9, "host")]);
+            Assert.Equal(new ulong[] { 9 }, conflict.Conflicts);
+            Assert.Equal("local", note.Lyric.Value);
+            Assert.Equal(notifications + 1, snapshots.Count);
+            using var reopened = new CubaseDocumentContext();
+            reopened.RestoreState(context.SaveState());
+            Assert.Equal("local", reopened.GetOrCreateEditingPart().Notes.First!.Lyric.Value);
+            Assert.Empty(reopened.ApplyHostLyrics("", [new(9, "host")]).ChangedNotes);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    [Fact]
     public void AraAssociationSurvivesEditsDeletionUndoAndDocumentReopen()
     {
         var previous = SynchronizationContext.Current;

@@ -139,7 +139,8 @@ class BridgeAudioModification final : public ARA::PlugIn::AudioModification
             throw std::runtime_error("ARA pairing endpoint registration failed");
         if (!documentAccessRegistered)
         {
-            if (pairing.setDocumentAccess(copyPairDocument, applyPairDocument, this) != 0)
+            if (pairing.setDocumentAccess(copyPairDocument, applyPairDocument, this,
+                                          applyPairLyric) != 0)
                 throw std::runtime_error("ARA shared document registration failed");
             documentAccessRegistered = true;
         }
@@ -159,7 +160,48 @@ class BridgeAudioModification final : public ARA::PlugIn::AudioModification
         return editor;
     }
 
+    void sourceIdentityInvalidated()
+    {
+        if (pairing.id() == std::array<std::uint8_t, 16>{})
+            return;
+        if (editor->runtime.invalidatePairSource(pairing.id().data()) != 0)
+            throw std::runtime_error("ARA source identity invalidation failed");
+    }
+
+    void sourceAssociationChanged(const std::vector<std::uint8_t> &before,
+                                  const std::vector<std::uint8_t> &after)
+    {
+        if (pairing.id() == std::array<std::uint8_t, 16>{})
+            return;
+        if (editor->runtime.notifyPairSourceChange(
+                pairing.id().data(), before.data(), static_cast<std::int32_t>(before.size()),
+                after.data(), static_cast<std::int32_t>(after.size())) != 0)
+            throw std::runtime_error("ARA source association notification failed");
+    }
+
   private:
+    static std::int32_t __cdecl applyPairLyric(void *owner, double quarter, std::int32_t pitch,
+                                               const wchar_t *text, std::int32_t length,
+                                               std::uint64_t *sourceId,
+                                               std::int32_t *disposition) noexcept
+    {
+        try
+        {
+            auto &modification = *static_cast<BridgeAudioModification *>(owner);
+            if (GetCurrentThreadId() != modification.hostThread)
+                return static_cast<std::int32_t>(BridgeResult::WrongThread);
+            auto &document = *modification.editor;
+            if (!document.initialize())
+                return static_cast<std::int32_t>(BridgeResult::Failed);
+            return document.runtime.applyDocumentLyric(document.handle, quarter, pitch, text,
+                                                       length, sourceId, disposition);
+        }
+        catch (const std::exception &exception)
+        {
+            OutputDebugStringA(exception.what());
+            return static_cast<std::int32_t>(BridgeResult::Failed);
+        }
+    }
     static std::int32_t __cdecl copyPairDocument(void *owner, std::uint8_t *destination,
                                                  std::int32_t capacity,
                                                  std::int32_t *required) noexcept
@@ -198,6 +240,8 @@ class BridgeAudioModification final : public ARA::PlugIn::AudioModification
                 if (result != 0)
                     return result;
             }
+            const std::vector<std::uint8_t> next(bytes, bytes + length);
+            modification.sourceAssociationChanged(document.state, next);
             EditorDocument::onStateChanged(&document, bytes, length);
             return 0;
         }
@@ -324,7 +368,10 @@ class BridgePlaybackRegion final : public ARA::PlugIn::PlaybackRegion
             if (result != 0)
                 return false;
         }
+        auto previous = std::move(editor->state);
         editor->state = std::move(state);
+        getAudioModification<BridgeAudioModification>()->sourceAssociationChanged(previous,
+                                                                                  editor->state);
         return true;
     }
 
@@ -665,6 +712,7 @@ class ProbeDocumentController final : public ARA::PlugIn::DocumentController
             }
             struct PendingRestore
             {
+                BridgeAudioModification *modification;
                 std::shared_ptr<EditorDocument> editor;
                 std::vector<std::uint8_t> state;
                 std::vector<std::uint8_t> previous;
@@ -699,8 +747,8 @@ class ProbeDocumentController final : public ARA::PlugIn::DocumentController
                                                           &required) != 0)
                         return false;
                 }
-                pending.push_back(
-                    {std::move(editor), std::move(record.state), std::move(previous)});
+                pending.push_back({modification, std::move(editor), std::move(record.state),
+                                   std::move(previous)});
             }
             // Validate and capture every document before replacing any live
             // project. The managed restore detaches/rebinds existing views and
@@ -729,14 +777,27 @@ class ProbeDocumentController final : public ARA::PlugIn::DocumentController
                 }
             }
             for (auto &entry : pending)
+            {
+                auto previous = std::move(entry.editor->state);
                 entry.editor->state = std::move(entry.state);
+                entry.modification->sourceAssociationChanged(previous, entry.editor->state);
+            }
             for (auto &entry : pendingSources)
             {
                 // Host content remains authoritative. Only its association to
                 // saved identities changes; do not restore old source events.
+                const bool changed = entry.source->noteIds != entry.ids;
                 entry.source->noteIds = std::move(entry.ids);
                 entry.source->nextNoteId = entry.counter;
                 ++entry.source->contentRevision;
+                if (changed)
+                {
+                    // Source-only restores can precede the next score refresh.
+                    // Reject old runtime text immediately on all affected owners.
+                    for (auto *modification : entry.source->getAudioModifications())
+                        static_cast<BridgeAudioModification *>(modification)
+                            ->sourceIdentityInvalidated();
+                }
             }
             return true;
         }

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- Reuse the existing test friend assembly; do not expand production API. -->
+    <AssemblyName>TuneLab.Tests</AssemblyName>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../managed/TuneLab.Cubase.Managed.csproj" />
+  </ItemGroup>
+</Project>

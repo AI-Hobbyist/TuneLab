@@ -19,7 +19,7 @@ public static partial class NativeEntry
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static int GetAbiVersion()
     {
-        return 16;
+        return 21;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -135,6 +135,7 @@ public static partial class NativeEntry
         try
         {
             sPendingDocumentStates.Remove(handle);
+            sDocumentLyricStatuses.Remove(handle);
             sDocumentPairEndpoints.Remove(handle);
             sPositionCallbacks.Remove(handle);
             sKeyPreviewCallbacks.Remove(handle);
