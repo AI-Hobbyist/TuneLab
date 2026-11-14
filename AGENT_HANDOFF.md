@@ -6,7 +6,7 @@
 
 - M0完成并已推送：f2f51b2a；契约/基线见 docs/cubase-m0-baseline.md。
 - M1完成并已推送：1cb004e144e435b7f915f6110c877cb36c2d7873。
-- M2自主实施与非GUI验收完成，本文件随M2检查点提交；当前尚待提交/推送确认，确认后才进入M3。
+- M2自主实施与非GUI验收完成，功能检查点9b1ec32917c89f659ac4dbfd621fd56ebe5b8886已推送origin/cubase_16_full_ara，HEAD/上游一致已实际确认。本次文档提交补记结果，随后可进入M3。
 - M3–M6未开始。完整目标仍为路线B S3+，不得标记目标完成。
 - 正式计划：docs/TuneLab_Cubase16_S3Plus_路线B实施计划.md。
 - M2逐项验收与命令/证据：docs/cubase-m2-validation.md。
@@ -45,20 +45,19 @@ M2包括：
 
 ## Git与工作区
 
-M2文件已实现，等待本轮专属提交/推送确认。不得把用户预先存在的以下内容stage：.gitignore、.codegraph/、out/、三份未跟踪参考文档（Cubase16_SVS_接入静态分析.md、S3+_交付与接口清单分析.md、TuneLab_接入Cubase16_方案分析.md）。所有模型、测试生成工程/音频、日志均不分发。没有改动third_party源码或冻结公共API文件。
+M2功能代码与验收记录已提交并确认推送；本次仅补记检查点状态。不得把用户预先存在的以下内容stage：.gitignore、.codegraph/、out/、三份未跟踪参考文档（Cubase16_SVS_接入静态分析.md、S3+_交付与接口清单分析.md、TuneLab_接入Cubase16_方案分析.md）。所有模型、测试生成工程/音频、日志均不分发。没有改动third_party源码或冻结公共API文件。
 
 ## 下一步顺序
 
-1. 检查M2 diff/暂存清单，提交M2，推送同名分支并确认HEAD/上游一致。
-2. 更新检查点推送状态。完成前不启动M3实现。
-3. 用主仓及third_party/ARA_SDK各自CodeGraph核对ara_document.h/bridge_probe.cpp与当前ARA生命周期契约，按原计划开始M3文档/对象模型与归档。
-4. 每阶段完成所需自动验证后更新记录、检查diff、独立提交推送确认，再进入下一阶段；不积压已完成阶段。
+1. M2功能检查点提交/推送已确认；先确认本次文档补记也推送成功。
+2. 用主仓及third_party/ARA_SDK各自CodeGraph核对ara_document.h/bridge_probe.cpp与当前ARA生命周期契约，按原计划开始M3文档/对象模型与归档。
+3. 每阶段完成所需自动验证后更新记录、检查diff、独立提交推送确认，再进入下一阶段；不积压已完成阶段。
 
 ## 环境与约束
 
 VS18/2026 MSVC19.51，WindowsSDK10.0.26100；.NET8，hostpack8.0.6/hostfxr8.0.26，Avalonia11.3.15。Cubase16.0.5.174与V7仅静态读取；不启动。third_party SDK索引/链接保留。
 
-所有build/test/package前台PowerShell经Tee-Object写build.log并立即检查LASTEXITCODE；CMake --parallel1 -- /nodeReuse:false。正常Qt真实窗口才可作为GUI证据，禁止offscreen。现阶段GUI默认SKIPPED，不以headless截图冒充。
+所有build/test/package前台PowerShell经Tee-Object写build.log并立即检查LASTEXITCODE；CMake --parallel 1 -- /nodeReuse:false。正常Qt真实窗口才可作为GUI证据，禁止offscreen。现阶段GUI默认SKIPPED，不以headless截图冒充。
 
 本机声库fu2_ning2_na4仅测试，不随插件分发；隔离数据out/cubase/m2/data、基线state为out/cubase/m2/fu2_ning2_na4.state。不改变用户设备/CUDA/引擎配置。新增TuneLab引擎API必须可选，现有引擎保留行为。
 

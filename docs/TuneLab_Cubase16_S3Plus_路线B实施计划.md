@@ -286,7 +286,7 @@ GUI 验证当前默认跳过。只有用户后续明确要求执行时，才采�
 |---|---|
 | M0 契约与可行性 | 自主实施/自动验证完成，f2f51b2a已推送；见 cubase-m0-baseline.md |
 | M1 共享运行层与嵌入骨架 | 自主实施/自动验证完成，1cb004e1已推送；真实GUI SKIPPED |
-| M2 VSTi3完整闭环 | 自主实施与本阶段非GUI自动验收完成；等待本轮检查点提交/推送，见 [M2验收记录](cubase-m2-validation.md) |
+| M2 VSTi3完整闭环 | 自主实施与本阶段非GUI自动验收完成；9b1ec329已推送且HEAD/上游一致，见 [M2验收记录](cubase-m2-validation.md) |
 | M3 ARA Bridge闭环 | NOT STARTED；M2检查点确认推送后开始 |
 | M4–M6 | NOT STARTED，按原顺序推进 |
 
@@ -296,4 +296,4 @@ M2交付包括：插件内引擎/歌手选择与实例隔离、既有及legacy�
 
 所有真实Cubase/V7、GUI、实机、硬件MIDI、安装及试听继续 **SKIPPED（用户决定，未执行，需人工验证）**。一秒音符加尾音的缓存试听不等于无限延音或实时连续演唱；当前块tempo不等于完整速度表。完整tempo/ARA对象映射归M3，双容器完整工具归M4，已证实宿主歌词链路归M5，发布与最终性能回归归M6。S3+目标保持未完成，不以M2通过冒充最终交付。
 
-下一步：完成M2专属提交、推送并核对远端，然后开始M3。继续优先使用主仓和third_party各自CodeGraph；不得把原有.gitignore改动、.codegraph、三份参考文档或out测试产物纳入阶段提交。
+下一步：M2功能检查点已实际提交、推送并确认远端一致，补记完成后开始M3。继续优先使用主仓和third_party各自CodeGraph；不得把原有.gitignore改动、.codegraph、三份参考文档或out测试产物纳入阶段提交。
